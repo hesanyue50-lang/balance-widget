@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 余额 · 应用图标（新拟物风格，手写矢量）
+     底板：左上亮影 + 右下暗影做出浮雕；
+     主体：三根递增余额柱（左侧带高光）+ 上升折线。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ===== 底板：新拟物凸起 ===== -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,2 L84,2 A22,22 0 0 1 106,24 L106,84 A22,22 0 0 1 84,106 L24,106 A22,22 0 0 1 2,84 L2,24 A22,22 0 0 1 24,2 Z" />
+    <path
+        android:fillColor="#BAC4D4"
+        android:pathData="M27,5 L84,5 A22,22 0 0 1 106,27 L106,84 A22,22 0 0 1 84,106 L27,106 A22,22 0 0 1 5,84 L5,27 A22,22 0 0 1 27,5 Z" />
+    <path
+        android:fillColor="#E7ECF4"
+        android:pathData="M25,5 L83,5 A20,20 0 0 1 103,25 L103,83 A20,20 0 0 1 83,103 L25,103 A20,20 0 0 1 5,83 L5,25 A20,20 0 0 1 25,5 Z" />
+
+    <!-- ===== 三根递增的余额柱 ===== -->
+    <path
+        android:fillAlpha="0.38"
+        android:fillColor="#3D6FD6"
+        android:pathData="M33,66 L39,66 A3,3 0 0 1 42,69 L42,79 A3,3 0 0 1 39,82 L33,82 A3,3 0 0 1 30,79 L30,69 A3,3 0 0 1 33,66 Z" />
+    <path
+        android:fillAlpha="0.68"
+        android:fillColor="#3D6FD6"
+        android:pathData="M51,56 L57,56 A3,3 0 0 1 60,59 L60,79 A3,3 0 0 1 57,82 L51,82 A3,3 0 0 1 48,79 L48,59 A3,3 0 0 1 51,56 Z" />
+    <path
+        android:fillColor="#3D6FD6"
+        android:pathData="M69,44 L75,44 A3,3 0 0 1 78,47 L78,79 A3,3 0 0 1 75,82 L69,82 A3,3 0 0 1 66,79 L66,47 A3,3 0 0 1 69,44 Z" />
+
+    <!-- 柱身高光（新拟物细节） -->
+    <path android:fillAlpha="0.45" android:fillColor="#FFFFFF"
+        android:pathData="M31.5,69 L33.5,69 L33.5,79.5 L31.5,79.5 Z" />
+    <path android:fillAlpha="0.45" android:fillColor="#FFFFFF"
+        android:pathData="M49.5,59 L51.5,59 L51.5,79.5 L49.5,79.5 Z" />
+    <path android:fillAlpha="0.45" android:fillColor="#FFFFFF"
+        android:pathData="M67.5,47 L69.5,47 L69.5,79.5 L67.5,79.5 Z" />
+
+    <!-- ===== 上升折线 ===== -->
+    <path
+        android:pathData="M36,66 L54,54 L72,38"
+        android:strokeColor="#3AAE84"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillAlpha="0.26"
+        android:fillColor="#3AAE84"
+        android:pathData="M72,38 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <path
+        android:fillColor="#3AAE84"
+        android:pathData="M72,38 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+</vector>

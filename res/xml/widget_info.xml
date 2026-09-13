@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2 列 × 3 行 = 每页 6 个平台，所需高度约 205dp，故为 3 行格子高 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="200dp"
+    android:minHeight="200dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="3"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_balance2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

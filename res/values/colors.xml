@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#E6EAF1</color>
+    <color name="neu_surface">#E7ECF4</color>
+    <color name="neu_light">#FFFFFF</color>
+    <color name="neu_dark">#BAC4D4</color>
+    <color name="neu_sunken">#DCE1E9</color>
+
+    <color name="line">#00000000</color>
+    <color name="card_c">#E7ECF4</color>
+    <color name="btn_c">#E7ECF4</color>
+    <color name="input_c">#DCE1E9</color>
+    <color name="total_start">#E7ECF4</color>
+    <color name="total_end">#E7ECF4</color>
+
+    <color name="tx">#39424F</color>
+    <color name="tx2">#5E6878</color>
+    <color name="tx3">#8A94A3</color>
+    <color name="tx_conv">#99A3B2</color>
+    <color name="tx_detail">#525C6B</color>
+    <color name="hint_c">#A2ABB9</color>
+
+    <color name="accent">#3D6FD6</color>
+    <color name="accent_tx">#FFFFFF</color>
+    <color name="danger">#C93B3B</color>
+    <color name="warn">#A8730F</color>
+
+    <color name="widget_bg_c">#E7ECF4</color>
+    <color name="widget_line">#00000000</color>
+
+    <!-- 玻璃风格专用：面板恒为深色半透明，故文字恒用浅色，
+         不随系统深浅色切换（否则浅色模式下深字压深底，看不见） -->
+    <color name="glass_tx">#1A1F28</color>
+    <color name="glass_tx2">#3D4653</color>
+    <color name="glass_tx3">#69738A</color>
+    <color name="glass_tx_conv">#7C8698</color>
+    <color name="glass_danger">#C0392B</color>
+    <color name="glass_icon">#1A1F28</color>
+    <color name="header_bg">#F0F4F7FB</color>
+    <color name="header_line">#14000000</color>
+
+    <!-- 制式分档之间的分隔线（浅色主题 / 玻璃主题） -->
+    <color name="div_line">#26A8B4C6</color>
+    <color name="glass_div_line">#3DFFFFFF</color>
+
+    <!-- ===== 小组件 v2（重写版）配色 ===== -->
+    <color name="w2_card">#F3F5F9</color>      <!-- 卡片底色 -->
+    <color name="w2_tx">#2B3442</color>        <!-- 主文字 -->
+    <color name="w2_tx2">#5A6472</color>       <!-- 次文字 -->
+    <color name="w2_tx3">#8C96A4</color>       <!-- 弱化文字 -->
+    <color name="w2_div">#2E9AA6B2</color>     <!-- 制式分档线 -->
+    <color name="w2_accent">#4D6BFE</color>    <!-- 平台圆点 -->
+    <color name="w2_danger">#C93B3B</color>    <!-- 低余额预警 -->
+</resources>

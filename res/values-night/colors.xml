@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#22272F</color>
+    <color name="neu_surface">#232931</color>
+    <color name="neu_light">#39424F</color>
+    <color name="neu_dark">#111419</color>
+    <color name="neu_sunken">#1A1E24</color>
+
+    <color name="line">#00000000</color>
+    <color name="card_c">#232931</color>
+    <color name="btn_c">#232931</color>
+    <color name="input_c">#1A1E24</color>
+    <color name="total_start">#232931</color>
+    <color name="total_end">#232931</color>
+
+    <color name="tx">#D8DFE9</color>
+    <color name="tx2">#98A2B0</color>
+    <color name="tx3">#6C7684</color>
+    <color name="tx_conv">#5F6875</color>
+    <color name="tx_detail">#AEB8C6</color>
+    <color name="hint_c">#4E5765</color>
+
+    <color name="accent">#5B95FF</color>
+    <color name="accent_tx">#FFFFFF</color>
+    <color name="danger">#FF7A7A</color>
+    <color name="warn">#FFC857</color>
+
+    <color name="widget_bg_c">#232931</color>
+    <color name="widget_line">#00000000</color>
+
+    <!-- 玻璃风格专用：面板恒为深色半透明，故文字恒用浅色，
+         不随系统深浅色切换（否则浅色模式下深字压深底，看不见） -->
+    <color name="glass_tx">#F2F6FC</color>
+    <color name="glass_tx2">#B6BFCC</color>
+    <color name="glass_tx3">#8B95A5</color>
+    <color name="glass_tx_conv">#7C8694</color>
+    <color name="glass_danger">#FF8A8A</color>
+    <color name="glass_icon">#F2F6FC</color>
+    <color name="header_bg">#F01E232A</color>
+    <color name="header_line">#14000000</color>
+</resources>

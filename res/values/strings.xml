@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">API 管理助手</string>
+    <string name="widget_title">💰 API 管理助手</string>
+    <string name="hint_no_key">未配置 Key\n点开应用填入</string>
+    <string name="refresh">点击刷新</string>
+
+    <string name="main_title">API 管理助手</string>
+    <string name="main_total_label">总资产（折合人民币）</string>
+    <string name="settings">设置</string>
+    <string name="not_configured">还没有配置任何平台的 Key\n点右上角「设置」填入，填哪个显示哪个</string>
+    <string name="refreshing">正在查询…</string>
+    <string name="tap_refresh">点「点击刷新」或任意卡片获取最新余额</string>
+
+    <string name="cfg_title">设置 · API Key</string>
+    <string name="cfg_save">保存并刷新</string>
+    <string name="cfg_note">Key 只存在本机应用私有目录，仅发往对应平台官方接口。留空表示不显示该平台。</string>
+    <string name="cfg_pin">添加到桌面</string>
+
+    <string name="custom_title">自定义平台（OpenAI 兼容接口）</string>
+    <string name="custom_add">＋ 添加自定义平台</string>
+    <string name="custom_delete">删除此平台</string>
+    <string name="custom_name_ph">平台名称</string>
+    <string name="custom_url_ph">余额查询 URL（https://…）</string>
+    <string name="custom_key_ph">API Key</string>
+    <string name="custom_path_ph">取值路径（可空，如 data.balance）</string>
+    <string name="custom_note">上面 6 家之外的平台用这里。取值路径留空会自动识别余额字段；识别不出来时，卡片上会直接显示接口原始返回，照着填路径即可。</string>
+
+    <string name="pin_title">添加到桌面</string>
+    <string name="pin_manual">当前桌面（vivo 桌面）不支持一键添加小组件。\n\n请手动添加：\n\n1. 回到桌面，长按空白处\n2. 选择「小组件」\n3. 在列表里找到「API 管理助手」\n4. 按住拖到桌面合适位置\n\n添加后点一下即可刷新余额。</string>
+    <string name="pin_ok">知道了</string>
+
+    <string name="style_title">小组件外观</string>
+    <string name="style_note">选一个和桌面其他组件搭调的风格。玻璃（半透明）最适合搭配系统桌面组件；新拟物偏立体浮雕；简约最清晰。改完点下方「保存并刷新」生效。</string>
+    <string name="style_glass">玻璃</string>
+    <string name="style_neu">新拟物</string>
+    <string name="style_flat">简约</string>
+
+    <string name="ph_deepseek">sk-...</string>
+    <string name="ph_openrouter">sk-or-v1-...</string>
+    <string name="ph_siliconflow">sk-...</string>
+    <string name="ph_moonshot">sk-...</string>
+    <string name="ph_novita">sk_...</string>
+    <string name="ph_fireworks">fw_...</string>
+
+    <string name="notify_title">开启余额预警通知</string>
+    <string name="notify_why">你设置了余额预警阈值。开启通知后，某个平台余额跌破阈值时会主动提醒你。\n\n提醒只在余额**跌破**时发一次，不会反复打扰。</string>
+    <string name="notify_closed_why">你设置了余额预警阈值，但系统通知当前被关闭了，预警无法送达。\n\n请在系统设置里为本应用打开通知。</string>
+    <string name="notify_allow">允许通知</string>
+    <string name="notify_goto">去设置</string>
+    <string name="notify_later">暂不</string>
+    <string name="notify_denied_title">通知被拒绝</string>
+    <string name="notify_denied_msg">系统不会再自动弹出授权窗口了。\n\n如需余额预警，请到「设置 → 应用 → API 管理助手 → 通知」中手动开启。</string>
+    <string name="notify_off_hint">通知已关闭，预警无法送达 · 点此开启</string>
+
+    <string name="sec_refresh">刷新频率</string>
+    <string name="refresh_foreground">前台刷新间隔</string>
+    <string name="refresh_background">后台刷新间隔</string>
+    <string name="unit_minute">分钟</string>
+    <string name="hint_refresh_fg">最小 1 分钟。设得过短会频繁请求，可能被平台限流。</string>
+    <string name="hint_refresh_bg">最小 2 分钟。应用退到后台后按此间隔唤醒刷新，用于及时推送余额预警（需允许自启动）。</string>
+    <string name="sec_keys">API 密钥与平台</string>
+
+    <!-- 自启动引导 -->
+    <string name="autostart_title">允许后台运行</string>
+    <string name="autostart_msg">余额预警依赖后台定时刷新（当前每 %1$d 分钟）。\n\n系统会限制后台应用，请把本应用加入「自启动」白名单，否则预警可能延迟或收不到。\n\n自启动仅用于刷新 API 余额，不做其他任何事。</string>
+    <string name="autostart_go">去设置</string>
+    <string name="autostart_later">暂不</string>
+    <string name="autostart_entry">设置后台运行权限（自启动）›</string>
+
+    <!-- 自定义平台字段标签 -->
+    <string name="custom_item_title">自定义平台</string>
+    <string name="custom_lbl_name">名称</string>
+    <string name="custom_lbl_url">余额接口 URL</string>
+    <string name="custom_lbl_key">API Key（仅用于此请求）</string>
+    <string name="custom_lbl_path">余额字段路径（JSON 路径，如 data.balance）</string>
+    <string name="custom_lbl_thr">低于此余额时预警</string>
+
+    <!-- 自定义平台弹窗 -->
+    <string name="custom_empty">还没有自定义平台</string>
+    <string name="custom_unnamed">未命名</string>
+    <string name="custom_add_title">添加自定义平台</string>
+    <string name="custom_edit_title">编辑自定义平台</string>
+    <string name="custom_save">保存</string>
+    <string name="custom_cancel">取消</string>
+    <string name="custom_need_url_key">余额接口 URL 和 API Key 为必填</string>
+</resources>

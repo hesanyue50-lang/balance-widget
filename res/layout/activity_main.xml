@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 结构：FrameLayout + 浮动顶部栏
+     —— ScrollView 铺满全屏，顶部栏浮在其上且半透明，
+        内容滚过时从顶部栏下方透出，形成毛玻璃层次。
+     —— 顶部栏的 paddingTop 由代码按状态栏/刘海高度设置（见 MainActivity）。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <ScrollView
+        android:id="@+id/main_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingLeft="14dp"
+        android:paddingRight="14dp"
+        android:paddingBottom="20dp"
+        android:scrollbars="none"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 总资产 -->
+            <LinearLayout
+                android:id="@+id/total_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/total_bg"
+                android:padding="31dp"
+                android:layout_marginBottom="13dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/main_total_label"
+                    android:textColor="@color/tx2"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/t_total"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="—"
+                    android:textColor="@color/tx"
+                    android:textSize="32sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/t_sub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="@string/tap_refresh"
+                    android:textColor="@color/tx3"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- 平台卡片容器（动态填充） -->
+            <LinearLayout
+                android:id="@+id/cards"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 顶部栏 -->
+    <LinearLayout
+        android:id="@+id/app_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/header_bg"
+        android:paddingLeft="18dp"
+        android:paddingRight="12dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="10dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/main_title"
+            android:textColor="@color/tx"
+            android:textSize="19sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/btn_bg"
+            android:paddingLeft="22dp"
+            android:paddingRight="22dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
+            android:text="@string/refresh"
+            android:textColor="@color/tx"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/btn_settings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp"
+            android:background="@drawable/btn_bg"
+            android:paddingLeft="22dp"
+            android:paddingRight="22dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
+            android:text="@string/settings"
+            android:textColor="@color/tx2"
+            android:textSize="13sp" />
+    </LinearLayout>
+</FrameLayout>

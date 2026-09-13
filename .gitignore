@@ -1,0 +1,19 @@
+# 编译产物
+build/
+*.apk
+*.idsig
+*.apk.idsig
+
+# 本地探测 jar（含运行时环境，不入库）
+tools/probe.jar
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# 密钥 / 诊断（万一落到工程目录）
+diag.log
+*.keystore
+*.jks

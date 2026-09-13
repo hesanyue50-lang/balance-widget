@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.minis.balancewidget"
+    android:versionCode="148"
+    android:versionName="26.9.148">
+
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 后台定时刷新（用于余额预警及时送达）：开机后重新注册闹钟 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:name=".App"
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:theme="@style/AppTheme"
+        android:allowBackup="true"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:label="@string/cfg_title"
+            android:exported="false" />
+
+        <receiver
+            android:name=".BalanceWidgetProvider"
+            android:label="@string/app_name"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
+        <!-- 对照实验用：往旧布局里塞一行字，用来判断空白出在布局还是代码 -->
+
+        <!-- 后台定时刷新：唯一用途是按间隔拉取余额并做预警判断 -->
+        <receiver
+            android:name=".RefreshReceiver"
+            android:label="@string/app_name"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.minis.balancewidget.ACTION_BG_REFRESH" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- App 更新后系统会发给自己：靠它把桌面小组件从「更新后不刷新」的状态里救出来 -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

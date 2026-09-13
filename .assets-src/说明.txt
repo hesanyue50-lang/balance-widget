@@ -1,0 +1,2 @@
+这里是 tools/gen_assets.py 画出来的 9-patch 备份。
+dist/ 里的才是能装的 APK；res/ 下的是编译用的素材，别手动改。

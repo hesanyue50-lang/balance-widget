@@ -1,0 +1,494 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  小组件布局（重写版）
+
+  设计约束（都是踩坑换来的）：
+    1. 只用 RemoteViews 支持的控件：LinearLayout / TextView / ImageView / View / Space
+    2. 内边距写在布局里，**不在代码里用 setViewPadding** —— 那是反射调用，
+       桌面进程解析失败会把整份 RemoteViews 丢掉，表现就是"对象收到了但界面不动"
+    3. 图标用 android:tint 在布局里着色，**不用 setColorFilter** 反射
+    4. 背景用最简单的 shape drawable，不依赖 9-patch 的自带留白
+    5. 层级尽量浅 —— RemoteViews 每次刷新都要压扁序列化走 Binder
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w2_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="@drawable/wg_glass_l">
+
+    <!-- 毛玻璃图层：铺满整个卡片，显示「壁纸缩小再放大」得到的模糊图。
+         拿不到壁纸时保持 GONE，退回底下的 9-patch 半透明背景。 -->
+    <ImageView
+        android:id="@+id/w2_frost"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:visibility="gone" />
+
+
+    <!-- 内容层：所有文字都包在这里。
+         ⚠️ FrameLayout 的子元素是**全部叠加**的，不包一层的话，
+         标题、总额、每一行数据会全部叠在一起（踩过）。 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+    <!-- ===== 标题行 ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/w2_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:singleLine="true"
+            android:includeFontPadding="false"
+            android:textColor="@color/w2_tx2"
+            android:textSize="12sp"
+            android:text="API 余额" />
+
+        <TextView
+            android:id="@+id/w2_page"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:textColor="@color/w2_tx3"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/w2_prev"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="6dp"
+            android:src="@drawable/ic_chevron_left"
+            android:contentDescription="上一页" />
+
+        <ImageView
+            android:id="@+id/w2_next"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="2dp"
+            android:src="@drawable/ic_chevron_right"
+            android:contentDescription="下一页" />
+
+        <ImageView
+            android:id="@+id/w2_refresh"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="2dp"
+            android:src="@drawable/ic_refresh"
+            android:contentDescription="刷新" />
+    </LinearLayout>
+
+    <!-- ===== 总额 ===== -->
+    <TextView
+        android:id="@+id/w2_total"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:singleLine="true"
+        android:includeFontPadding="false"
+        android:textColor="@color/w2_tx"
+        android:textSize="26sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/w2_sub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:textColor="@color/w2_tx3"
+        android:textSize="10sp" />
+
+    <!-- ===== 数据区：4 行 × 2 列，行间可插分档线 ===== -->
+
+    <!-- 第 1 行 -->
+    <LinearLayout
+        android:id="@+id/w2_row1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:id="@+id/w2_slot1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot1"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/w2_slot2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot2"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 分档线 1 -->
+    <TextView
+        android:id="@+id/w2_div1"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="9dp"
+        android:background="@color/w2_div"
+        android:visibility="gone" />
+
+    <!-- 第 2 行 -->
+    <LinearLayout
+        android:id="@+id/w2_row2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:id="@+id/w2_slot3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot3"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/w2_slot4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot4"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 分档线 2 -->
+    <TextView
+        android:id="@+id/w2_div2"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="9dp"
+        android:background="@color/w2_div"
+        android:visibility="gone" />
+
+    <!-- 第 3 行 -->
+    <LinearLayout
+        android:id="@+id/w2_row3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:id="@+id/w2_slot5"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot5"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/w2_slot6"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot6"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 分档线 3 -->
+    <TextView
+        android:id="@+id/w2_div3"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="9dp"
+        android:background="@color/w2_div"
+        android:visibility="gone" />
+
+    <!-- 第 4 行 -->
+    <LinearLayout
+        android:id="@+id/w2_row4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:id="@+id/w2_slot7"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot7"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name7"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val7"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/w2_slot8"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/w2_dot8"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp"
+                android:background="@color/w2_accent" />
+
+            <TextView
+                android:id="@+id/w2_name8"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="108dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx2"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/w2_val8"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:singleLine="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/w2_tx"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
