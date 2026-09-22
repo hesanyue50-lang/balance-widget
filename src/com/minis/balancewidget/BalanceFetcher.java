@@ -377,6 +377,17 @@ public class BalanceFetcher {
             } catch (StatusException se) {
                 Log.w(TAG, "  ⚠️ " + ip + " 服务端应答 " + (System.currentTimeMillis() - t0) + "ms: " + se.getMessage());
                 throw se;                                  // 服务器已应答，换地址没意义
+            } catch (java.net.SocketTimeoutException ste) {
+                /* 间歇性慢接口（七牛账单实测 0.2s~9s 随机抖动）：同地址立即重试一次，
+                   重试大概率命中快的那次；仍慢才换下一个地址。 */
+                Log.w(TAG, "  ⏳ " + ip + " 超时 " + (System.currentTimeMillis() - t0) + "ms，重试一次");
+                try {
+                    String r2 = getViaIp(ordered.get(i), host, port, https, path, bearer, per);
+                    Log.i(TAG, "  ✅(重试) " + ip + " " + (System.currentTimeMillis() - t0) + "ms");
+                    return r2;
+                } catch (Exception e2) {
+                    tried.append(ip).append('=').append(e2.getClass().getSimpleName()).append("+retry; ");
+                }
             } catch (Exception e) {
                 Log.w(TAG, "  ❌ " + ip + " " + (System.currentTimeMillis() - t0) + "ms: " + e);
                 /* 把每个地址的失败原因攒进异常消息 —— logcat 在很多 ROM 上读不到（本机就是），
@@ -637,14 +648,25 @@ public class BalanceFetcher {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         diag(ctx, "fetch 开始，预算 " + timeoutMs + "ms");
 
-        /* 汇率：各平台共用，先拿（很快，通常 200~800ms）。拿不到就沿用内置默认值。 */
+        /* 汇率：各平台共用，先拿（很快，通常 200~800ms）。
+           拿不到就沿用上次成功的缓存值，再退到内置默认 7.1 —— 硬编码会偏离真实汇率。 */
+        try {
+            res.rate = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getFloat("last_rate", 7.1f);
+        } catch (Throwable ig) { }
         try {
             String j = get(RATE_URL,
                            null, Math.min(timeoutMs, 3000));
             JSONObject r = new JSONObject(j).optJSONObject("rates");
             if (r != null) {
                 double v = num(r, "CNY");
-                if (!Double.isNaN(v) && v > 0) res.rate = v;
+                if (!Double.isNaN(v) && v > 0) {
+                    res.rate = v;
+                    try {
+                        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                                .edit().putFloat("last_rate", (float) v).apply();
+                    } catch (Throwable ig) { }
+                }
             }
             diag(ctx, "汇率 " + res.rate + " (" + (System.currentTimeMillis() - t0) + "ms)");
         } catch (Exception e) {
@@ -875,8 +897,12 @@ public class BalanceFetcher {
         it.platform = ak.platform;
         it.threshold = ak.threshold;
 
-        // 汇率（USD 项换算要用）
+        // 汇率（USD 项换算要用）：优先上次成功的缓存，避免硬编码偏离真实汇率
         double rate = 7.1;
+        try {
+            rate = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getFloat("last_rate", 7.1f);
+        } catch (Throwable ig) { }
         try {
             String j2 = get(RATE_URL, null, Math.min(timeoutMs, 3000));
             JSONObject r0 = new JSONObject(j2).optJSONObject("rates");
@@ -1161,7 +1187,8 @@ public class BalanceFetcher {
             String td = todayStr();
             String url = "https://api.qnaigc.com/v3/stat/usage/apikey/cost-detail"
                     + "?start_date=" + td.substring(0, 8) + "01&end_date=" + td;
-            JSONObject root = new JSONObject(get(url, key, t));
+            // 七牛账单接口间歇性慢（实测 0.2s~9s 抖动），给足预算 + get() 内超时重试兜底
+            JSONObject root = new JSONObject(get(url, key, Math.max(t, 9000)));
             if (!root.optBoolean("status", true)) {
                 JSONObject err = root.optJSONObject("error");
                 throw new Exception(err != null ? err.optString("message", "查询失败") : "查询失败");
