@@ -25,12 +25,8 @@ public final class WallpaperTint {
         long now = System.currentTimeMillis();
         if (cachedDark != null && now - cachedAt < TTL_MS) return cachedDark;
 
+        // 自定义背景功能已移除：底色固定为我们自己画的浅色半透明，用浅色文字方案
         boolean dark = false;
-        try {
-            if (BackgroundStore.isEnabled(ctx)) {
-                dark = BackgroundStore.luminance(ctx) < 0.5;
-            }
-        } catch (Throwable ignored) { }
 
         cachedDark = dark;
         cachedAt = now;

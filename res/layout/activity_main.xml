@@ -114,6 +114,37 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
+                <!-- 统计范围选择 + 清理旧数据 -->
+                <LinearLayout
+                    android:id="@+id/stats_range_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView android:id="@+id/range_7" android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:gravity="center"
+                        android:background="@drawable/btn_bg" android:paddingTop="8dp" android:paddingBottom="8dp"
+                        android:text="7天" android:textColor="@color/tx" android:textSize="12sp" />
+                    <TextView android:id="@+id/range_30" android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
+                        android:background="@drawable/btn_bg" android:paddingTop="8dp" android:paddingBottom="8dp"
+                        android:text="30天" android:textColor="@color/tx2" android:textSize="12sp" />
+                    <TextView android:id="@+id/range_90" android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
+                        android:background="@drawable/btn_bg" android:paddingTop="8dp" android:paddingBottom="8dp"
+                        android:text="90天" android:textColor="@color/tx2" android:textSize="12sp" />
+                    <TextView android:id="@+id/range_180" android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
+                        android:background="@drawable/btn_bg" android:paddingTop="8dp" android:paddingBottom="8dp"
+                        android:text="180天" android:textColor="@color/tx2" android:textSize="12sp" />
+                    <TextView android:id="@+id/stats_clean" android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
+                        android:background="@drawable/btn_bg" android:paddingLeft="12dp" android:paddingRight="12dp"
+                        android:paddingTop="8dp" android:paddingBottom="8dp"
+                        android:text="清理" android:textColor="@color/tx3" android:textSize="12sp" />
+                </LinearLayout>
+
                 <com.minis.balancewidget.UsageChartView
                     android:id="@+id/usage_chart"
                     android:layout_width="match_parent"
