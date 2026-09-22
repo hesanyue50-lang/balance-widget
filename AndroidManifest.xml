@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="164"
-    android:versionName="26.9.164">
+    android:versionCode="168"
+    android:versionName="26.9.168">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 

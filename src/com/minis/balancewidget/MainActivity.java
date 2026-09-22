@@ -85,11 +85,27 @@ public class MainActivity extends Activity {
         }
         findViewById(R.id.stats_clean).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                // 删除超出当前范围的旧快照/充值记录，释放空间
-                Ledger.get(MainActivity.this).prune(MainActivity.this, statsDays);
-                buildStats();
-                android.widget.Toast.makeText(MainActivity.this,
-                        "已清理 " + statsDays + " 天前的数据", android.widget.Toast.LENGTH_SHORT).show();
+                final int[] keep = { 7, 30, 90, 180 };
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setTitle("清理数据 · 选择保留范围")
+                        .setSingleChoiceItems(
+                                new String[] { "保留近 7 天", "保留近 30 天",
+                                        "保留近 3 个月", "保留近半年" },
+                                0,
+                                new android.content.DialogInterface.OnClickListener() {
+                                    public void onClick(android.content.DialogInterface d, int which) {
+                                        int days = keep[which];
+                                        Ledger.get(MainActivity.this)
+                                                .prune(MainActivity.this, days);
+                                        buildStats();
+                                        d.dismiss();
+                                        android.widget.Toast.makeText(MainActivity.this,
+                                                "已删除 " + days + " 天前的记录",
+                                                android.widget.Toast.LENGTH_SHORT).show();
+                                    }
+                                })
+                        .setNegativeButton("取消", null)
+                        .show();
             }
         });
     }
@@ -162,8 +178,10 @@ public class MainActivity extends Activity {
             if (!"balance".equals(kind)) continue;              // 非余额类不进图表
             boolean usd = p != null && "USD".equals(p.unit);
             double mul = usd ? rate : 1.0;
-            String name = (ak.label != null && ak.label.length() > 0)
-                    ? ak.label : (p == null ? ak.platform : p.name);
+            String pname = p == null ? ak.platform : p.name;
+            String lb0 = ak.label == null ? "" : ak.label.trim();
+            String name = (lb0.length() > 0 && !"默认".equals(lb0))
+                    ? pname + " · " + lb0 : pname;
 
             java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
             double[] own = new double[DAYS];
@@ -185,13 +203,13 @@ public class MainActivity extends Activity {
 
             if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
                 series.add(new UsageChartView.Series(
-                        BalanceFetcher.colorOf(ak.platform), own, name));
+                        BalanceFetcher.colorOf(ak.platform), own, name, false));
                 for (int d = 0; d < DAYS; d++) { totalBal[d] += own[d]; totalCnt[d]++; }
             }
         }
-        // 总计线（独立开关）
-        if (showTotal && totalCnt[0] >= 0 && series.size() > 0) {
-            series.add(new UsageChartView.Series(0xFFFF9800, totalBal, "总计"));
+        // 总计线（独立开关，带渐变面积填充）
+        if (showTotal && series.size() > 0) {
+            series.add(new UsageChartView.Series(0xFFFF9800, totalBal, "总计", true));
         }
 
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
@@ -232,8 +250,10 @@ public class MainActivity extends Activity {
             if (!ak.isConfigured()) continue;
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
             if (p == null || !"balance".equals(p.kind)) continue;
-            String name = (ak.label != null && ak.label.length() > 0)
-                    ? ak.label : p.name;
+            String pname = p == null ? ak.platform : p.name;
+            String lb1 = ak.label == null ? "" : ak.label.trim();
+            String name = (lb1.length() > 0 && !"默认".equals(lb1))
+                    ? pname + " · " + lb1 : pname;
             android.widget.Switch sw = new android.widget.Switch(this);
             sw.setText(name);
             sw.setTextColor(getColor(R.color.tx2));

@@ -142,14 +142,15 @@
                         android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
                         android:background="@drawable/btn_bg" android:paddingLeft="12dp" android:paddingRight="12dp"
                         android:paddingTop="8dp" android:paddingBottom="8dp"
-                        android:text="清理" android:textColor="@color/tx3" android:textSize="12sp" />
+                        android:text="清理数据" android:textColor="@color/danger" android:textSize="12sp" />
                 </LinearLayout>
 
                 <com.minis.balancewidget.UsageChartView
                     android:id="@+id/usage_chart"
                     android:layout_width="match_parent"
-                    android:layout_height="220dp"
-                    android:background="@drawable/total_bg" />
+                    android:layout_height="240dp"
+                    android:background="@drawable/stats_card_bg"
+                    android:padding="10dp" />
 
                 <TextView
                     android:id="@+id/stats_summary"
