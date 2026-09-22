@@ -1045,16 +1045,19 @@ public class SettingsActivity extends Activity {
             }
         });
         final EditText searchBox = (EditText) findViewById(R.id.search_box);
-        searchBox.addTextChangedListener(new android.text.TextWatcher() {
-            public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
-            public void onTextChanged(CharSequence s, int a, int b, int c) {
-                // 防抖：每敲一字就全量重建 15 个平台块会卡死输入法，
-                // 改成停止输入 250ms 后才过滤一次。
-                searchHandler.removeCallbacks(searchFilterTask);
-                searchQuery = s == null ? "" : s.toString();
-                searchHandler.postDelayed(searchFilterTask, 250);
+        // 只在用户按回车（或输入法「搜索」键）时才过滤 —— 边打字边全量重建列表会卡死输入法
+        searchBox.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            public boolean onEditorAction(TextView v, int actionId, android.view.KeyEvent ev) {
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                        || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+                        || (ev != null && ev.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER
+                            && ev.getAction() == android.view.KeyEvent.ACTION_UP)) {
+                    searchQuery = v.getText() == null ? "" : v.getText().toString();
+                    renderKeyList();
+                    return true;
+                }
+                return false;
             }
-            public void afterTextChanged(android.text.Editable s) { }
         });
 
         findViewById(R.id.btn_add_custom).setOnClickListener(new View.OnClickListener() {

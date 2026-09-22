@@ -211,7 +211,7 @@ public final class KeyStore {
             k.label = "默认";
             k.key = KeyVault.dec(raw);
             k.threshold = p.getFloat("thr_" + id, 0f);
-            k.draw = !"free".equals(BalanceFetcher.KINDS[i]);
+            k.draw = true;   // 默认所有 API 都显示（用户可在统计页逐个关）
             out.add(k);
             ed.remove(id);
             any = true;
