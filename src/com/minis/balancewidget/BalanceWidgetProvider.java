@@ -208,7 +208,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                             Ledger lg = Ledger.get(ctx);
                             for (int i = 0; i < r.items.size(); i++) {
                                 BalanceFetcher.Item it = r.items.get(i);
-                                if (it.ok && it.bal >= 0) {
+                                if (it.ok && it.bal >= 0 && "balance".equals(it.kind)) {
                                     lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag));
                                 }
                             }

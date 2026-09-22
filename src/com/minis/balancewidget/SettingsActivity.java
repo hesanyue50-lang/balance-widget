@@ -1040,6 +1040,20 @@ public class SettingsActivity extends Activity {
                         getPackageManager().getPackageInfo(getPackageName(), 0);
                 ver.setText("版本 " + pi.versionName + " (" + pi.versionCode + ")");
             }
+            if (ver != null && ver.getParent() instanceof android.view.ViewGroup) {
+                TextView gh = new TextView(this);
+                gh.setText("GitHub：github.com/hesanyue50-lang/balance-widget");
+                gh.setTextSize(11);
+                gh.setTextColor(getColor(R.color.accent));
+                gh.setPadding(0, dp(8), 0, 0);
+                gh.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        openUrl("https://github.com/hesanyue50-lang/balance-widget");
+                    }
+                });
+                android.view.ViewGroup gp = (android.view.ViewGroup) ver.getParent();
+                gp.addView(gh, Math.min(gp.indexOfChild(ver) + 1, gp.getChildCount()));
+            }
         } catch (Throwable ignored) { }
 
         final SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
