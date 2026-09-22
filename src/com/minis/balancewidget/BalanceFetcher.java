@@ -305,6 +305,9 @@ public class BalanceFetcher {
         public String alertKey = "";    // 告警幂等键（内置用 id，自定义用名称——索引会变）
         public boolean low = false;     // 是否低于预警阈值
         public boolean ok = false;
+        public long subEndMs = 0;       // 订阅制最近到期时间戳（按到期天数报警用）
+        public double usageTokens = -1; // usage 平台 token 用量（千token，-1=无数据）
+        public String debug = "";       // 诊断：原始应答截断（仅排查用）
     }
 
     public static class Result {
@@ -1036,6 +1039,7 @@ public class BalanceFetcher {
                         /* 订阅制（Token Plan）：无公开余量 API，查实例列表拿状态与到期时间 */
                         String json = AliyunSigner.queryAvailableInstances(
                             apiKey.accessKeyId, apiKey.accessKeySecret);
+                        it.debug = json.length() > 400 ? json.substring(0, 400) : json;
                         JSONObject root = new JSONObject(json);
                         String code = root.optString("Code", "");
                         boolean okCode = code.length() == 0
@@ -1075,8 +1079,15 @@ public class BalanceFetcher {
                             StringBuilder sb = new StringBuilder("订阅套餐 · 实例 ")
                                     .append(Math.max(total, list == null ? 0 : list.length())).append(" 个");
                             if (active > 0) sb.append(" · 活跃 ").append(active);
-                            if (earliestEnd != null)
+                            if (earliestEnd != null) {
                                 sb.append("\n最近到期  ").append(earliestEnd);
+                                try {
+                                    java.text.SimpleDateFormat iso =
+                                            new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+                                    iso.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                                    it.subEndMs = iso.parse(earliestEnd).getTime();
+                                } catch (Exception ig) { }
+                            }
                             sb.append("\n套餐余量请在百炼控制台查看");
                             it.rows = sb.toString();
                         } else {
@@ -1209,6 +1220,32 @@ public class BalanceFetcher {
             if (period.length() > 0) sb.append("\n计费周期  ").append(period);
             JSONArray bills = d.optJSONArray("bills");
             sb.append("\n账单项数  ").append(bills == null ? 0 : bills.length());
+            // 汇总 token 用量（usage.count 单位 k/tokens）
+            double tokK = 0;
+            if (bills != null) {
+                for (int bi = 0; bi < bills.length(); bi++) {
+                    JSONObject bill = bills.optJSONObject(bi);
+                    if (bill == null) continue;
+                    JSONArray models = bill.optJSONArray("models");
+                    if (models == null) continue;
+                    for (int mi = 0; mi < models.length(); mi++) {
+                        JSONObject mo = models.optJSONObject(mi);
+                        if (mo == null) continue;
+                        JSONArray items2 = mo.optJSONArray("items");
+                        if (items2 == null) continue;
+                        for (int ii = 0; ii < items2.length(); ii++) {
+                            JSONObject it2 = items2.optJSONObject(ii);
+                            if (it2 == null) continue;
+                            JSONObject usage = it2.optJSONObject("usage");
+                            if (usage != null) tokK += usage.optDouble("count", 0);
+                        }
+                    }
+                }
+            }
+            if (tokK > 0) {
+                it.usageTokens = tokK;
+                sb.append("\nToken 用量  ").append(String.format("%.1f", tokK)).append(" K");
+            }
             it.rows = sb.toString();
             return;
         }

@@ -58,9 +58,18 @@ public class Alert {
         for (int i = 0; i < r.items.size(); i++) {
             BalanceFetcher.Item it = r.items.get(i);
             double thr = it.threshold > 0 ? it.threshold : threshold(c, it.id);
-            it.low = it.ok && thr > 0 && it.bal < thr
-                    && !"消费".equals(it.tag)      // 后付费平台（如七牛云）没有余额概念，不参与低余额预警
-                    && !"sub".equals(it.kind);     // 订阅制（Token Plan）bal 是占位值，不参与低余额预警
+            if ("sub".equals(it.kind)) {
+                // 订阅制没有余额概念：按「距到期天数」报警，阈值含义=提前 N 天提醒
+                if (it.ok && it.subEndMs > 0 && thr > 0) {
+                    long days = (it.subEndMs - System.currentTimeMillis()) / 86400000L;
+                    it.low = days < thr;
+                } else {
+                    it.low = false;
+                }
+            } else {
+                it.low = it.ok && thr > 0 && it.bal < thr
+                        && !"消费".equals(it.tag);   // 后付费平台（如七牛云）没有余额概念，不参与低余额预警
+            }
             if (it.low) lows.add(it);
         }
         return lows;

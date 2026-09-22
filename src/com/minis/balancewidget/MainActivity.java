@@ -61,6 +61,51 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
             }
         });
+        findViewById(R.id.btn_usage).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showUsageDialog();
+            }
+        });
+    }
+
+    /**
+     * 用量统计：聚合各平台消耗。
+     * 余额类平台用 Ledger 快照差值（期间消耗）；usage 平台用实时消费额+token；
+     * 订阅制显示实例/到期（无公开余量接口）。
+     */
+    private void showUsageDialog() {
+        StringBuilder sb = new StringBuilder();
+        long now = System.currentTimeMillis();
+        long from = now - 30L * 86400000L;   // 近 30 天
+        Ledger lg = Ledger.get(this);
+        java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
+        boolean any = false;
+        for (int i = 0; i < aks.size(); i++) {
+            KeyStore.ApiKey ak = aks.get(i);
+            if (!ak.isConfigured()) continue;
+            String plat = ak.platform == null ? "" : ak.platform;
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
+            String name = p != null ? p.name : plat;
+            if ("sub".equals(p == null ? "" : p.kind)) {
+                sb.append(name).append("：订阅制（Token Plan）\n  余量见控制台，按到期天数预警\n\n");
+                any = true;
+                continue;
+            }
+            java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
+            double consumed = 0;
+            for (int j = 1; j < pts.size(); j++) consumed += pts.get(j).consumed;
+            if (pts.size() >= 2 || consumed > 0) {
+                sb.append(name).append("  近30天消耗 ")
+                  .append(String.format("%.2f", consumed)).append("\n\n");
+                any = true;
+            }
+        }
+        if (!any) sb.append("暂无用量数据。\n余额类平台需积累快照（每次刷新自动记录）后才有消耗统计。");
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("用量统计（近 30 天）")
+                .setMessage(sb.toString())
+                .setPositiveButton("关闭", null)
+                .show();
     }
 
     /** 刘海 / 状态栏 / 手势条适配（与设置界面共用同一套逻辑） */
