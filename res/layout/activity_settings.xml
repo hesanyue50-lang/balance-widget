@@ -132,7 +132,7 @@
                         android:paddingTop="8dp"
                         android:paddingBottom="8dp"
                         android:text="🔍 搜索平台 / Key"
-                        android:textColor="@color/tx2"
+                        android:textColor="@color/tx"
                         android:textSize="12sp" />
 
                     <EditText
@@ -216,7 +216,7 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:text="显示每日消耗柱状"
-                    android:textColor="@color/tx2"
+                    android:textColor="@color/tx"
                     android:textSize="13sp" />
 
                 <Switch
@@ -226,7 +226,7 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:text="显示背景网格"
-                    android:textColor="@color/tx2"
+                    android:textColor="@color/tx"
                     android:textSize="13sp" />
 
                 <Switch
@@ -236,7 +236,7 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:text="显示图例（各 API 颜色说明）"
-                    android:textColor="@color/tx2"
+                    android:textColor="@color/tx"
                     android:textSize="13sp" />
             </LinearLayout>
 

@@ -1062,7 +1062,18 @@ public class SettingsActivity extends Activity {
         } catch (Throwable ignored) { }
 
         final SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
-        renderKeyList();
+        // 进入设置先出骨架，密钥列表延迟 300ms 再构建 ——
+        // 全量 inflate 15 个平台块会卡一下，放在用户不会高频操作的空档里做。
+        LinearLayout kf = (LinearLayout) findViewById(R.id.key_fields);
+        if (kf != null) {
+            TextView loading = new TextView(this);
+            loading.setText("加载平台列表…");
+            loading.setTextColor(getColor(R.color.tx3));
+            loading.setTextSize(12);
+            loading.setPadding(0, dp(8), 0, dp(8));
+            kf.addView(loading);
+        }
+        searchHandler.postDelayed(new Runnable() { public void run() { renderKeyList(); } }, 300);
         setupCollapsibleKeys();
         buildSecuritySection();
 
