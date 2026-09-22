@@ -793,6 +793,8 @@ public class BalanceFetcher {
                         it.ok = true;
                         Log.i(TAG, "平台 " + it.id + " 成功: " + it.amount);
                         diag(ctx, "  OK  " + it.id + " = " + it.amount
+                                + ("dashscope".equals(it.platform) && it.rows != null && it.rows.length() > 0
+                                        ? " | " + it.rows.replace('\n', ' ') : "")
                                 + "   (" + (System.currentTimeMillis() - ts0) + "ms)");
                     } catch (Exception e) {
                         it.ok = false;
