@@ -34,6 +34,7 @@ public class UsageChartView extends View {
     private String[] labels;
     private boolean showBars = true, showGrid = true, showLegend = true;
     private double maxLine = 1, maxBar = 1;
+    private float progress = 1f;   // 渐进揭示进度 0→1
 
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pFill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -80,6 +81,17 @@ public class UsageChartView extends View {
         if (series != null) for (Series s : series)
             if (s.vals != null) for (double v : s.vals) if (v > maxLine) maxLine = v;
         if (bars != null) for (double v : bars) if (v > maxBar) maxBar = v;
+        // 渐进揭示动画：从左到右画出数据层
+        progress = 0f;
+        android.animation.ValueAnimator va = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        va.setDuration(650);
+        va.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            public void onAnimationUpdate(android.animation.ValueAnimator a) {
+                progress = (Float) a.getAnimatedValue();
+                invalidate();
+            }
+        });
+        va.start();
         invalidate();
     }
 
@@ -103,6 +115,10 @@ public class UsageChartView extends View {
         }
 
         float slot = cw / n;
+
+        // 数据层（柱+折线）按 progress 从左到右揭示
+        cv.save();
+        cv.clipRect(0, 0, padL + cw * progress + slot, h);
 
         // 消耗柱（中性石板色，宽而淡，不抢折线）
         if (showBars && bars != null) {
@@ -179,6 +195,8 @@ public class UsageChartView extends View {
                 }
             }
         }
+
+        cv.restore();   // 结束数据层裁剪
 
         // X 轴标签：只显 首/中/末 三个，大字
         int[] xi = { 0, n / 2, n - 1 };

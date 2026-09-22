@@ -24,6 +24,9 @@ import java.util.UUID;
  */
 public final class KeyStore {
 
+    /** 数据版本号：add/update/remove/save 时递增，供 UI 判断缓存是否失效 */
+    public static long dataVersion = 0;
+
     private static final String K_KEYS = "keys_json_v2";
     /** 单平台 Key 数量的上限：太多了统计页会糊成一片，也没实际意义 */
     public static final int MAX_PER_PLATFORM = 8;
@@ -92,6 +95,7 @@ public final class KeyStore {
     // ---------- 写 ----------
 
     public static void add(Context c, String platform, ApiKey k) {
+        dataVersion++;
         List<ApiKey> all = load(c);
         if (k.id == null || k.id.length() == 0) {
             k.id = UUID.randomUUID().toString().substring(0, 8);
@@ -102,6 +106,7 @@ public final class KeyStore {
     }
 
     public static void update(Context c, ApiKey k) {
+        dataVersion++;
         List<ApiKey> all = load(c);
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i).id.equals(k.id)) {
@@ -114,6 +119,7 @@ public final class KeyStore {
     }
 
     public static void remove(Context c, String id) {
+        dataVersion++;
         List<ApiKey> all = load(c);
         for (int i = all.size() - 1; i >= 0; i--) {
             if (all.get(i).id.equals(id)) all.remove(i);
@@ -170,6 +176,7 @@ public final class KeyStore {
     }
 
     private static void save(Context c, List<ApiKey> list) {
+        dataVersion++;
         try {
             JSONArray arr = new JSONArray();
             for (int i = 0; i < list.size(); i++) {

@@ -100,7 +100,7 @@ public final class LockDialog {
         b.setTextColor(ctx.getColor(primary ? R.color.accent_tx : R.color.tx2));
         b.setTextSize(14);
         b.setGravity(Gravity.CENTER);
-        b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.btn_bg);
+        b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.neu_btn);
         b.setPadding(0, dp(ctx, 22), 0, dp(ctx, 22));
         b.setOnClickListener(l);
         return b;
