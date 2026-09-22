@@ -27,6 +27,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -1044,6 +1045,23 @@ public class SettingsActivity extends Activity {
         findViewById(R.id.btn_add_custom).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCustomDialog(-1, null); }
         });
+
+        // 统计图表显示开关（存 prefs，统计页读取）
+        final SharedPreferences chartSp =
+                getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+        int[] chartIds = { R.id.chart_show_bars, R.id.chart_show_grid, R.id.chart_show_legend };
+        final String[] chartKeys = { "chart_show_bars", "chart_show_grid", "chart_show_legend" };
+        for (int i = 0; i < chartIds.length; i++) {
+            Switch sw = (Switch) findViewById(chartIds[i]);
+            if (sw == null) continue;
+            final String key = chartKeys[i];
+            sw.setChecked(chartSp.getBoolean(key, true));
+            sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+                public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
+                    chartSp.edit().putBoolean(key, on).apply();
+                }
+            });
+        }
 
         findViewById(R.id.btn_save).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { doSave(); }
