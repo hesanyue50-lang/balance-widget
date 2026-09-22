@@ -206,18 +206,6 @@ public final class WidgetRenderer {
             v.setInt(R.id.w2_root, "setBackgroundResource",
                      WallpaperTint.bgRes(WallpaperTint.useDark(ctx)));
         } catch (Throwable ignored) { }
-
-        /* 自定义背景层：用户自己传的图，模糊后盖在纯色底之上。
-           没开启自定义背景就保持隐藏，退回纯色半透明。 */
-        try {
-            android.graphics.Bitmap frost = BackgroundStore.build(ctx);
-            if (frost != null) {
-                v.setImageViewBitmap(R.id.w2_frost, frost);
-                v.setViewVisibility(R.id.w2_frost, View.VISIBLE);
-            } else {
-                v.setViewVisibility(R.id.w2_frost, View.GONE);
-            }
-        } catch (Throwable ignored) { }
         v.setOnClickPendingIntent(R.id.w2_root,
                 pi(ctx, BalanceWidgetProvider.ACTION_REFRESH, 0));
         v.setOnClickPendingIntent(R.id.w2_refresh,

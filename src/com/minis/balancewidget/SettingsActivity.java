@@ -209,74 +209,6 @@ public class SettingsActivity extends Activity {
         t.setText(opened ? "收起" : "展开");
     }
 
-    // ---------- 自定义背景 ----------
-
-    private void setupBackgroundSection() {
-        View pick = findViewById(R.id.bg_pick);
-        View clear = findViewById(R.id.bg_clear);
-        if (pick != null) {
-            pick.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { pickBackground(); }
-            });
-        }
-        if (clear != null) {
-            clear.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    BackgroundStore.clear(SettingsActivity.this);
-                    WallpaperTint.invalidate();
-                    refreshBgState();
-                    kickWidget();
-                    android.widget.Toast.makeText(SettingsActivity.this, "已恢复默认背景",
-                            android.widget.Toast.LENGTH_SHORT).show();
-                }
-            });
-        }
-        refreshBgState();
-    }
-
-    private void pickBackground() {
-        try {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType("image/*");
-            startActivityForResult(i, 2001);
-        } catch (Throwable t) {
-            try {
-                Intent i2 = new Intent(Intent.ACTION_PICK,
-                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                startActivityForResult(i2, 2001);
-            } catch (Throwable ignored) { }
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int req, int res, Intent data) {
-        super.onActivityResult(req, res, data);
-        if (req != 2001 || res != RESULT_OK || data == null || data.getData() == null) return;
-        boolean ok = BackgroundStore.saveFrom(this, data.getData());
-        WallpaperTint.invalidate();
-        refreshBgState();
-        kickWidget();
-        android.widget.Toast.makeText(this,
-                ok ? "背景已更新，小组件马上生效" : "这张图读不出来，换一张试试",
-                android.widget.Toast.LENGTH_SHORT).show();
-    }
-
-    private void refreshBgState() {
-        TextView t = (TextView) findViewById(R.id.bg_state);
-        if (t == null) return;
-        if (BackgroundStore.isEnabled(this)) {
-            t.setText("✅ 已启用自定义背景（模糊版已生成）");
-            t.setTextColor(getColor(R.color.accent));
-        } else if (BackgroundStore.hasImage(this)) {
-            t.setText("已存过图片，但未启用");
-            t.setTextColor(getColor(R.color.tx3));
-        } else {
-            t.setText("当前用默认背景（纯半透明）");
-            t.setTextColor(getColor(R.color.tx3));
-        }
-    }
-
     private void kickWidget() {
         try {
             Intent k = new Intent(this, BalanceWidgetProvider.class);
@@ -287,20 +219,49 @@ public class SettingsActivity extends Activity {
 
     // ---------- 密钥列表（一个平台可挂多个 Key）----------
 
+    /** 当前搜索关键字（空=不过滤） */
+    private String searchQuery = "";
+
+    /** 平台名 / 平台 id / 该平台任一 Key 的 label 是否命中搜索关键字 */
+    private boolean matches(String q, String name, String plat) {
+        if (name != null && name.toLowerCase().contains(q)) return true;
+        if (plat != null && plat.toLowerCase().contains(q)) return true;
+        List<KeyStore.ApiKey> ks = KeyStore.get(this, plat);
+        for (int i = 0; i < ks.size(); i++) {
+            KeyStore.ApiKey k = ks.get(i);
+            if (k.label != null && k.label.toLowerCase().contains(q)) return true;
+        }
+        return false;
+    }
+
     private void renderKeyList() {
         LinearLayout box = (LinearLayout) findViewById(R.id.key_fields);
         if (box == null) return;
         box.removeAllViews();
+        String q = searchQuery == null ? "" : searchQuery.trim().toLowerCase();
+        int shown = 0;
         for (int i = 0; i < BalanceFetcher.PRESETS.length; i++) {
             BalanceFetcher.Preset p = BalanceFetcher.PRESETS[i];
+            if (q.length() > 0 && !matches(q, p.name, p.id)) continue;
             box.addView(platformBlock(p.id, p.name, BalanceFetcher.COLORS[i], p.hint));
+            shown++;
         }
 
         /* 自定义平台也并进这一栏。
            之前它们散在另一个区块，这里既看不到 Key，也没有删除入口 —— 用户反馈过。 */
         List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(this);
         for (int i = 0; i < cs.size(); i++) {
+            if (q.length() > 0 && !matches(q, cs.get(i).name, "custom:" + i)) continue;
             box.addView(customBlock("custom:" + i, cs.get(i), i));
+            shown++;
+        }
+        if (q.length() > 0 && shown == 0) {
+            TextView none = new TextView(this);
+            none.setText("没有匹配「" + searchQuery + "」的平台或 Key");
+            none.setTextColor(getColor(R.color.tx3));
+            none.setTextSize(12);
+            none.setPadding(0, dp(8), 0, dp(8));
+            box.addView(none);
         }
     }
 
@@ -1059,8 +1020,26 @@ public class SettingsActivity extends Activity {
         final SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
         renderKeyList();
         setupCollapsibleKeys();
-        setupBackgroundSection();
         buildSecuritySection();
+
+        // 搜索窗口：日常收起，点「搜索」展开输入框，输入即过滤平台/Key
+        findViewById(R.id.search_toggle).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                EditText sb = (EditText) findViewById(R.id.search_box);
+                boolean vis = sb.getVisibility() == View.VISIBLE;
+                sb.setVisibility(vis ? View.GONE : View.VISIBLE);
+                if (!vis) sb.requestFocus();
+            }
+        });
+        final EditText searchBox = (EditText) findViewById(R.id.search_box);
+        searchBox.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+                searchQuery = s == null ? "" : s.toString();
+                renderKeyList();
+            }
+            public void afterTextChanged(android.text.Editable s) { }
+        });
 
         findViewById(R.id.btn_add_custom).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCustomDialog(-1, null); }

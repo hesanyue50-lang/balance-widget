@@ -67,6 +67,39 @@ public class MainActivity extends Activity {
         findViewById(R.id.tab_stats).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showTab(false); buildStats(); }
         });
+
+        // 统计范围切换
+        int[] rangeIds = { R.id.range_7, R.id.range_30, R.id.range_90, R.id.range_180 };
+        final int[] rangeDays = { 7, 30, 90, 180 };
+        for (int i = 0; i < rangeIds.length; i++) {
+            final int days = rangeDays[i];
+            final int rid = rangeIds[i];
+            findViewById(rid).setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    statsDays = days;
+                    highlightRange(rid);
+                    buildStats();
+                }
+            });
+        }
+        findViewById(R.id.stats_clean).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                // 删除超出当前范围的旧快照/充值记录，释放空间
+                Ledger.get(MainActivity.this).prune(MainActivity.this, statsDays);
+                buildStats();
+                android.widget.Toast.makeText(MainActivity.this,
+                        "已清理 " + statsDays + " 天前的数据", android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /** 高亮当前选中的范围按钮 */
+    private void highlightRange(int activeId) {
+        int[] rangeIds = { R.id.range_7, R.id.range_30, R.id.range_90, R.id.range_180 };
+        for (int id : rangeIds) {
+            TextView t = (TextView) findViewById(id);
+            if (t != null) t.setTextColor(getColor(id == activeId ? R.color.tx : R.color.tx2));
+        }
     }
 
     /** 切换 API / 统计 两个栏目 */
@@ -78,17 +111,21 @@ public class MainActivity extends Activity {
         TextView ts = (TextView) findViewById(R.id.tab_stats);
         ta.setTextColor(getColor(api ? R.color.tx : R.color.tx2));
         ts.setTextColor(getColor(api ? R.color.tx2 : R.color.tx));
-        ta.setTypeface(null, api ? android.graphics.Typeface.BOLD : null);
-        ts.setTypeface(null, api ? null : android.graphics.Typeface.BOLD);
+        // 注意：三元 int:null 会装箱 Integer，api=false 时拆箱 null 直接 NPE 崩溃
+        ta.setTypeface(null, api ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        ts.setTypeface(null, api ? android.graphics.Typeface.NORMAL : android.graphics.Typeface.BOLD);
     }
 
+    /** 当前统计范围天数（默认 7 天，可切换 30/90/180） */
+    private int statsDays = 7;
+
     /**
-     * 构建用量统计页：近 30 天按天聚合消耗（柱）与总余额（线）。
+     * 构建用量统计页：按当前范围（默认 7 天，可切换 30/90/180）按天聚合消耗（柱）与总余额（线）。
      * 只统计 draw=true（未隐藏）的平台；每平台一行隐藏开关。
      * 消耗 = Ledger 快照差值，已扣除充值（record 内自动检测）。
      */
     private void buildStats() {
-        final int DAYS = 30;
+        final int DAYS = statsDays;
         long now = System.currentTimeMillis();
         long from = now - (long) DAYS * 86400000L;
         double rate = 7.1;

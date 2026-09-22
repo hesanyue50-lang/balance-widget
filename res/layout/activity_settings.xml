@@ -114,6 +114,45 @@
                 android:id="@+id/key_card"
                 style="@style/SectionCard">
 
+                <!-- 搜索窗口（日常收起，点击「搜索」展开输入框，过滤平台/Key） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/search_toggle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/btn_bg"
+                        android:gravity="center"
+                        android:paddingLeft="18dp"
+                        android:paddingRight="18dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:text="🔍 搜索平台 / Key"
+                        android:textColor="@color/tx2"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/search_box"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/btn_bg"
+                        android:hint="输入平台名或 Key 关键字过滤…"
+                        android:inputType="text"
+                        android:paddingLeft="14dp"
+                        android:paddingRight="14dp"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:textColor="@color/tx"
+                        android:textColorHint="@color/tx3"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
                 <!-- 通知未开启时的可点击提示（点击即引导开启） -->
                 <TextView
                     android:id="@+id/notify_state"
@@ -162,46 +201,6 @@
                     android:text="@string/custom_add"
                     android:textColor="@color/accent"
                     android:textSize="13sp" />
-            </LinearLayout>
-
-            <!-- ========== 小组件背景 ========== -->
-            <TextView style="@style/SectionTitle" android:text="小组件背景" />
-
-            <LinearLayout style="@style/SectionCard">
-                <TextView
-                    style="@style/FieldHint"
-                    android:text="传一张图，自动生成模糊版作为小组件背景。不开就用默认的纯半透明。" />
-
-                <TextView
-                    android:id="@+id/bg_pick"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/btn_bg"
-                    android:gravity="center"
-                    android:paddingTop="20dp"
-                    android:paddingBottom="20dp"
-                    android:text="选择图片"
-                    android:textColor="@color/accent"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/bg_clear"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/btn_bg"
-                    android:gravity="center"
-                    android:paddingTop="20dp"
-                    android:paddingBottom="20dp"
-                    android:text="恢复默认背景"
-                    android:textColor="@color/tx2"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/bg_state"
-                    style="@style/FieldHint"
-                    android:layout_marginTop="10dp" />
             </LinearLayout>
 
             <!-- ========== 操作 ========== -->

@@ -24,7 +24,7 @@
     <string name="custom_url_ph">余额查询 URL（https://…）</string>
     <string name="custom_key_ph">API Key</string>
     <string name="custom_path_ph">取值路径（可空，如 data.balance）</string>
-    <string name="custom_note">上面 6 家之外的平台用这里。取值路径留空会自动识别余额字段；识别不出来时，卡片上会直接显示接口原始返回，照着填路径即可。</string>
+    <string name="custom_note">上面 15 家之外的平台用这里。取值路径留空会自动识别余额字段；识别不出来时，卡片上会直接显示接口原始返回，照着填路径即可。</string>
 
     <string name="pin_title">添加到桌面</string>
     <string name="pin_manual">当前桌面（vivo 桌面）不支持一键添加小组件。\n\n请手动添加：\n\n1. 回到桌面，长按空白处\n2. 选择「小组件」\n3. 在列表里找到「API 管理助手」\n4. 按住拖到桌面合适位置\n\n添加后点一下即可刷新余额。</string>
