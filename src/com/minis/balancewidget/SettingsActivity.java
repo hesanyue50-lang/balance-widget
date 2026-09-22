@@ -194,6 +194,7 @@ public class SettingsActivity extends Activity {
         boolean opened = sp.getBoolean("key_opened", false);
         card.setVisibility(opened ? View.VISIBLE : View.GONE);
         markKeyTitle(toggle, opened);
+        if (opened) searchHandler.post(new Runnable() { public void run() { ensureKeyBlocks(); } });
 
         toggle.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -202,6 +203,12 @@ public class SettingsActivity extends Activity {
                 getSharedPreferences(BalanceFetcher.PREFS, MODE_PRIVATE)
                         .edit().putBoolean("key_opened", now).apply();
                 markKeyTitle((TextView) v, now);
+                if (now) {
+                    ensureKeyBlocks();          // 展开时才懒加载密钥列表
+                    card.setAlpha(0f);
+                    card.setTranslationY(-dp(12));
+                    card.animate().alpha(1f).translationY(0f).setDuration(220).start();
+                }
             }
         });
     }
@@ -277,33 +284,79 @@ public class SettingsActivity extends Activity {
         }
     }
 
+    /** 密钥块缓存是否已构建 / 构建时的数据版本 / 是否正在分片构建 */
+    private boolean keyCacheBuilt = false;
+    private long keyCacheVersion = -1;
+    private boolean keyBuilding = false;
+    private int buildCursor = 0, presetCount = 0, customCount = 0;
+
+    private boolean keyCardVisible() {
+        View c = findViewById(R.id.key_card);
+        return c != null && c.getVisibility() == View.VISIBLE;
+    }
+
+    /** 数据变更时调用：作废缓存；若当前展开则立即分片重建 */
     private void renderKeyList() {
+        keyCacheBuilt = false;
+        if (keyCardVisible()) ensureKeyBlocks();
+    }
+
+    /** 展开时调用：有缓存且版本未变直接挂；否则分片构建（一次构建多次使用） */
+    private void ensureKeyBlocks() {
+        long ver = KeyStore.dataVersion;
+        if (keyCacheBuilt && ver == keyCacheVersion) { attachCache(); return; }
+        if (keyBuilding) return;
+        keyBuilding = true;
+        buildCursor = 0;
+        cachedBlocks.clear();
+        cachedKeys.clear();
+        presetCount = BalanceFetcher.PRESETS.length;
+        customCount = BalanceFetcher.loadCustom(this).size();
+        LinearLayout box = (LinearLayout) findViewById(R.id.key_fields);
+        if (box != null) box.removeAllViews();
+        searchHandler.post(buildChunk);
+    }
+
+    /** 分片构建：每片最多 3 块并让出主线程，构建期间屏幕仍可滑动 */
+    private final Runnable buildChunk = new Runnable() {
+        public void run() {
+            int done = 0;
+            while (done < 3) {
+                if (buildCursor < presetCount) {
+                    int i = buildCursor++;
+                    BalanceFetcher.Preset p = BalanceFetcher.PRESETS[i];
+                    cachedBlocks.add(platformBlock(p.id, p.name, BalanceFetcher.COLORS[i], p.hint));
+                    cachedKeys.add(searchKey(p.name, p.id));
+                } else if (buildCursor - presetCount < customCount) {
+                    int ci = buildCursor++ - presetCount;
+                    List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(SettingsActivity.this);
+                    if (ci < cs.size()) {
+                        cachedBlocks.add(customBlock("custom:" + ci, cs.get(ci), ci));
+                        cachedKeys.add(searchKey(cs.get(ci).name, "custom:" + ci));
+                    }
+                } else break;
+                done++;
+            }
+            if (buildCursor < presetCount + customCount) { searchHandler.post(this); return; }
+            keyBuilding = false;
+            keyCacheBuilt = true;
+            keyCacheVersion = KeyStore.dataVersion;
+            attachCache();
+        }
+    };
+
+    /** 把缓存块挂进容器（复用，不重建） */
+    private void attachCache() {
         LinearLayout box = (LinearLayout) findViewById(R.id.key_fields);
         if (box == null) return;
         box.removeAllViews();
-        cachedBlocks.clear();
-        cachedKeys.clear();
-        for (int i = 0; i < BalanceFetcher.PRESETS.length; i++) {
-            BalanceFetcher.Preset p = BalanceFetcher.PRESETS[i];
-            View v = platformBlock(p.id, p.name, BalanceFetcher.COLORS[i], p.hint);
-            box.addView(v);
-            cachedBlocks.add(v);
-            cachedKeys.add(searchKey(p.name, p.id));
+        for (int i = 0; i < cachedBlocks.size(); i++) box.addView(cachedBlocks.get(i));
+        if (noneView == null) {
+            noneView = new TextView(this);
+            noneView.setTextColor(getColor(R.color.tx3));
+            noneView.setTextSize(12);
+            noneView.setPadding(0, dp(8), 0, dp(8));
         }
-
-        /* 自定义平台也并进这一栏。
-           之前它们散在另一个区块，这里既看不到 Key，也没有删除入口 —— 用户反馈过。 */
-        List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(this);
-        for (int i = 0; i < cs.size(); i++) {
-            View v = customBlock("custom:" + i, cs.get(i), i);
-            box.addView(v);
-            cachedBlocks.add(v);
-            cachedKeys.add(searchKey(cs.get(i).name, "custom:" + i));
-        }
-        noneView = new TextView(this);
-        noneView.setTextColor(getColor(R.color.tx3));
-        noneView.setTextSize(12);
-        noneView.setPadding(0, dp(8), 0, dp(8));
         noneView.setVisibility(View.GONE);
         box.addView(noneView);
         applyFilter();
@@ -332,7 +385,7 @@ public class SettingsActivity extends Activity {
 
         TextView cfg = mkTextWrap("配置", getColor(R.color.accent), 12f);
         cfg.setPadding(dp(16), dp(11), dp(16), dp(11));
-        cfg.setBackgroundResource(R.drawable.btn_bg);
+        cfg.setBackgroundResource(R.drawable.neu_btn);
         cfg.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCustomDialog(idx, c); }
         });
@@ -344,7 +397,7 @@ public class SettingsActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         dlp.leftMargin = dp(6);
         del.setLayoutParams(dlp);
-        del.setBackgroundResource(R.drawable.btn_bg);
+        del.setBackgroundResource(R.drawable.neu_btn);
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 /* 删平台时把它名下的 Key 记录一并清掉，
@@ -409,7 +462,7 @@ public class SettingsActivity extends Activity {
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             slp.rightMargin = dp(6);
             site.setLayoutParams(slp);
-            site.setBackgroundResource(R.drawable.btn_bg);
+            site.setBackgroundResource(R.drawable.neu_btn);
             site.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     // 直达控制台（collectSites 控制台永远排第一），不弹子菜单
@@ -429,7 +482,7 @@ public class SettingsActivity extends Activity {
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             tlp.rightMargin = dp(6);
             tp.setLayoutParams(tlp);
-            tp.setBackgroundResource(R.drawable.btn_bg);
+            tp.setBackgroundResource(R.drawable.neu_btn);
             tp.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     openUrl(pt.topup);
@@ -440,7 +493,7 @@ public class SettingsActivity extends Activity {
 
         TextView add = mkTextWrap("+ 添加", getColor(R.color.accent), 12f);
         add.setPadding(dp(18), dp(11), dp(18), dp(11));
-        add.setBackgroundResource(R.drawable.btn_bg);
+        add.setBackgroundResource(R.drawable.neu_btn);
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(platform, null); }
         });
@@ -482,7 +535,7 @@ public class SettingsActivity extends Activity {
 
         TextView edit = mkTextWrap("编辑", getColor(R.color.accent), 12f);
         edit.setPadding(dp(14), dp(10), dp(14), dp(10));
-        edit.setBackgroundResource(R.drawable.btn_bg);
+        edit.setBackgroundResource(R.drawable.neu_btn);
         edit.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(k.platform, k); }
         });
@@ -494,7 +547,7 @@ public class SettingsActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         dlp.leftMargin = dp(6);
         del.setLayoutParams(dlp);
-        del.setBackgroundResource(R.drawable.btn_bg);
+        del.setBackgroundResource(R.drawable.neu_btn);
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 KeyStore.remove(SettingsActivity.this, k.id);
@@ -578,7 +631,7 @@ public class SettingsActivity extends Activity {
             // 添加"如何配置"帮助按钮
             TextView helpBtn = mkText("如何配置阿里云 AccessKey？", getColor(R.color.accent), 12, 12);
             helpBtn.setGravity(Gravity.CENTER);
-            helpBtn.setBackgroundResource(R.drawable.btn_bg);
+            helpBtn.setBackgroundResource(R.drawable.neu_btn);
             helpBtn.setPadding(0, dp(18), 0, dp(18));
             helpBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -623,7 +676,7 @@ public class SettingsActivity extends Activity {
 
         TextView cancel = mkText("取消", getColor(R.color.tx2), 14f, 0);
         cancel.setGravity(Gravity.CENTER);
-        cancel.setBackgroundResource(R.drawable.btn_bg);
+        cancel.setBackgroundResource(R.drawable.neu_btn);
         cancel.setPadding(0, dp(22), 0, dp(22));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -731,7 +784,7 @@ public class SettingsActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackgroundResource(R.drawable.btn_bg);
+        row.setBackgroundResource(R.drawable.neu_btn);
         row.setPadding(dp(24), dp(18), dp(14), dp(18));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -838,7 +891,7 @@ public class SettingsActivity extends Activity {
         unitBtn.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         unitBtn.setPadding(dp(16), dp(15), dp(16), dp(15));
-        unitBtn.setBackgroundResource(R.drawable.btn_bg);
+        unitBtn.setBackgroundResource(R.drawable.neu_btn);
         unitRow.addView(unitBtn);
         card.addView(unitRow);
 
@@ -853,7 +906,7 @@ public class SettingsActivity extends Activity {
 
         final TextView kindBtn = mkText("制式：" + kindLabel(kind[0]), getColor(R.color.tx2), 12, 0);
         kindBtn.setPadding(dp(16), dp(15), dp(16), dp(15));
-        kindBtn.setBackgroundResource(R.drawable.btn_bg);
+        kindBtn.setBackgroundResource(R.drawable.neu_btn);
         kindRow.addView(kindBtn);
         card.addView(kindRow);
 
@@ -950,7 +1003,7 @@ public class SettingsActivity extends Activity {
         cancel.setTextColor(getColor(R.color.tx2));
         cancel.setTextSize(14);
         cancel.setGravity(Gravity.CENTER);
-        cancel.setBackgroundResource(R.drawable.btn_bg);
+        cancel.setBackgroundResource(R.drawable.neu_btn);
         cancel.setPadding(0, dp(22), 0, dp(22));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -1062,18 +1115,8 @@ public class SettingsActivity extends Activity {
         } catch (Throwable ignored) { }
 
         final SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
-        // 进入设置先出骨架，密钥列表延迟 300ms 再构建 ——
-        // 全量 inflate 15 个平台块会卡一下，放在用户不会高频操作的空档里做。
-        LinearLayout kf = (LinearLayout) findViewById(R.id.key_fields);
-        if (kf != null) {
-            TextView loading = new TextView(this);
-            loading.setText("加载平台列表…");
-            loading.setTextColor(getColor(R.color.tx3));
-            loading.setTextSize(12);
-            loading.setPadding(0, dp(8), 0, dp(8));
-            kf.addView(loading);
-        }
-        searchHandler.postDelayed(new Runnable() { public void run() { renderKeyList(); } }, 300);
+        // 密钥列表改为「展开时才懒加载 + 分片构建 + 一次缓存多次使用」，
+        // 进入设置不再同步/延迟全量 inflate，见 setupCollapsibleKeys / ensureKeyBlocks。
         setupCollapsibleKeys();
         buildSecuritySection();
 

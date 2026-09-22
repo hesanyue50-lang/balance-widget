@@ -124,6 +124,16 @@ public class MainActivity extends Activity {
         findViewById(R.id.total_card).setVisibility(api ? View.VISIBLE : View.GONE);
         findViewById(R.id.cards).setVisibility(api ? View.VISIBLE : View.GONE);
         findViewById(R.id.stats_container).setVisibility(api ? View.GONE : View.VISIBLE);
+        // 切换淡入+上浮动画
+        View shown = api ? findViewById(R.id.cards) : findViewById(R.id.stats_container);
+        shown.setAlpha(0f);
+        shown.setTranslationY(dp(12));
+        shown.animate().alpha(1f).translationY(0f).setDuration(220).start();
+        if (api) {
+            View tc = findViewById(R.id.total_card);
+            tc.setAlpha(0f);
+            tc.animate().alpha(1f).setDuration(220).start();
+        }
         TextView ta = (TextView) findViewById(R.id.tab_api);
         TextView ts = (TextView) findViewById(R.id.tab_stats);
         ta.setTextColor(getColor(api ? R.color.accent : R.color.tx));
