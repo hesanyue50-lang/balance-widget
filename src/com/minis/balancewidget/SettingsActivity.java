@@ -223,6 +223,12 @@ public class SettingsActivity extends Activity {
     /** 当前搜索关键字（空=不过滤） */
     private String searchQuery = "";
 
+    /** 搜索防抖：停止输入 250ms 后才重建列表，避免每键全量 inflate 卡死输入法 */
+    private final android.os.Handler searchHandler = new android.os.Handler();
+    private final Runnable searchFilterTask = new Runnable() {
+        public void run() { renderKeyList(); }
+    };
+
     /** 平台名 / 平台 id / 该平台任一 Key 的 label 是否命中搜索关键字 */
     private boolean matches(String q, String name, String plat) {
         if (name != null && name.toLowerCase().contains(q)) return true;
@@ -233,6 +239,12 @@ public class SettingsActivity extends Activity {
             if (k.label != null && k.label.toLowerCase().contains(q)) return true;
         }
         return false;
+    }
+
+    @Override
+    protected void onDestroy() {
+        searchHandler.removeCallbacks(searchFilterTask);   // 退出后不再重建列表
+        super.onDestroy();
     }
 
     private void renderKeyList() {
@@ -1036,8 +1048,11 @@ public class SettingsActivity extends Activity {
         searchBox.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             public void onTextChanged(CharSequence s, int a, int b, int c) {
+                // 防抖：每敲一字就全量重建 15 个平台块会卡死输入法，
+                // 改成停止输入 250ms 后才过滤一次。
+                searchHandler.removeCallbacks(searchFilterTask);
                 searchQuery = s == null ? "" : s.toString();
-                renderKeyList();
+                searchHandler.postDelayed(searchFilterTask, 250);
             }
             public void afterTextChanged(android.text.Editable s) { }
         });
