@@ -3,6 +3,7 @@ package com.minis.balancewidget;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
@@ -128,15 +129,13 @@ public class MainActivity extends Activity {
         final int DAYS = statsDays;
         long now = System.currentTimeMillis();
         long from = now - (long) DAYS * 86400000L;
-        double rate = 7.1;
-        try {
-            rate = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
-                    .getFloat("last_rate", 7.1f);
-        } catch (Throwable ig) { }
+        SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+        double rate = sp.getFloat("last_rate", 7.1f);
+        boolean showBars = sp.getBoolean("chart_show_bars", true);
+        boolean showGrid = sp.getBoolean("chart_show_grid", true);
+        boolean showLegend = sp.getBoolean("chart_show_legend", true);
+        boolean showTotal = sp.getBoolean("stats_show_total", true);
 
-        double[] consDay = new double[DAYS];
-        double[] balDay = new double[DAYS];
-        int[] balCnt = new int[DAYS];
         String[] labels = new String[DAYS];
         java.util.Calendar cal = java.util.Calendar.getInstance();
         for (int i = 0; i < DAYS; i++) {
@@ -147,76 +146,108 @@ public class MainActivity extends Activity {
 
         Ledger lg = Ledger.get(this);
         java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
+        java.util.List<UsageChartView.Series> series =
+                new java.util.ArrayList<UsageChartView.Series>();
+        double[] consDay = new double[DAYS];
+        double[] totalBal = new double[DAYS];
+        int[] totalCnt = new int[DAYS];
         StringBuilder sum = new StringBuilder();
         double totalCons = 0;
+
         for (int i = 0; i < aks.size(); i++) {
             final KeyStore.ApiKey ak = aks.get(i);
             if (!ak.isConfigured()) continue;
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
             String kind = p == null ? "balance" : p.kind;
+            if (!"balance".equals(kind)) continue;              // 非余额类不进图表
             boolean usd = p != null && "USD".equals(p.unit);
             double mul = usd ? rate : 1.0;
-            if (!ak.draw || !"balance".equals(kind)) continue;   // 隐藏 / 非余额类不进图表
+            String name = (ak.label != null && ak.label.length() > 0)
+                    ? ak.label : (p == null ? ak.platform : p.name);
 
             java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
+            double[] own = new double[DAYS];
+            int[] cnt = new int[DAYS];
             double platCons = 0;
             for (int j = 0; j < pts.size(); j++) {
                 Ledger.Point pt = pts.get(j);
                 int idx = DAYS - 1 - (int) ((now - pt.ts) / 86400000L);
                 if (idx < 0 || idx >= DAYS) continue;
+                own[idx] = pt.balance * mul; cnt[idx]++;
                 consDay[idx] += pt.consumed * mul;
-                balDay[idx] += pt.balance * mul;
-                balCnt[idx]++;
                 platCons += pt.consumed * mul;
             }
-            if (pts.size() >= 2) {
-                totalCons += platCons;
-                sum.append(ak.label.length() > 0 ? ak.label : (p == null ? ak.platform : p.name))
-                   .append("  近30天消耗 ").append(String.format("%.2f", platCons)).append("\n");
+            if (pts.size() < 2) continue;                        // 数据太少不画线
+            // 前向填充：当天无快照沿用前一天，避免断线掉到 0
+            for (int d = 0; d < DAYS; d++) if (cnt[d] == 0) own[d] = (d > 0 ? own[d - 1] : 0);
+            totalCons += platCons;
+            sum.append(name).append("  消耗 ").append(String.format("%.2f", platCons)).append("\n");
+
+            if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
+                series.add(new UsageChartView.Series(
+                        BalanceFetcher.colorOf(ak.platform), own, name));
+                for (int d = 0; d < DAYS; d++) { totalBal[d] += own[d]; totalCnt[d]++; }
             }
         }
-        // 余额折线：当天无快照的平台用 0 占位会导致凹陷，这里按"有快照才平均"简化为总和
-        for (int i = 0; i < DAYS; i++) if (balCnt[i] == 0) balDay[i] = (i > 0 ? balDay[i - 1] : 0);
+        // 总计线（独立开关）
+        if (showTotal && totalCnt[0] >= 0 && series.size() > 0) {
+            series.add(new UsageChartView.Series(0xFFFF9800, totalBal, "总计"));
+        }
 
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
-        chart.setData(consDay, balDay, labels);
+        chart.setData(series, showBars ? consDay : null, labels, showBars, showGrid, showLegend);
 
         TextView st = (TextView) findViewById(R.id.stats_summary);
-        st.setText("近 30 天总消耗 " + String.format("%.2f", totalCons)
+        st.setText("近 " + DAYS + " 天总消耗 " + String.format("%.2f", totalCons)
                 + "（CNY，已扣除充值）\n" + sum.toString()
-                + "\n采样精度 6 小时/点，按天聚合显示");
+                + "\n采样 6 小时/点 · 按天聚合 · 每条线=一个 API");
 
         buildPlatformToggles(aks);
     }
 
-    /** 每个平台一行「显示/隐藏」开关，切换 KeyStore.draw 后重绘图表 */
+    /** 每个 API 一个 Switch 开关数据源；总计单独一个 Switch。切换后重绘图表。 */
     private void buildPlatformToggles(java.util.List<KeyStore.ApiKey> aks) {
         LinearLayout box = (LinearLayout) findViewById(R.id.stats_platforms);
         box.removeAllViews();
+        final SharedPreferences sp =
+                getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+
+        // 总计开关
+        android.widget.Switch totalSw = new android.widget.Switch(this);
+        totalSw.setText("总计（所有已启用 API 之和）");
+        totalSw.setTextColor(getColor(R.color.tx));
+        totalSw.setTextSize(13);
+        totalSw.setChecked(sp.getBoolean("stats_show_total", true));
+        totalSw.setPadding(dp(14), dp(10), dp(14), dp(10));
+        totalSw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
+                sp.edit().putBoolean("stats_show_total", on).apply();
+                buildStats();
+            }
+        });
+        box.addView(totalSw);
+
         for (int i = 0; i < aks.size(); i++) {
             final KeyStore.ApiKey ak = aks.get(i);
             if (!ak.isConfigured()) continue;
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
-            String name = p == null ? ak.platform : p.name;
-            TextView row = new TextView(this);
-            row.setPadding(dp(14), dp(12), dp(14), dp(12));
-            row.setBackgroundResource(R.drawable.btn_bg);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.bottomMargin = dp(6);
-            row.setLayoutParams(lp);
-            row.setTextSize(13);
-            row.setText(name + "    " + (ak.draw ? "[显示中 · 点击隐藏]" : "[已隐藏 · 点击显示]"));
-            row.setTextColor(getColor(ak.draw ? R.color.tx2 : R.color.tx3));
-            row.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    ak.draw = !ak.draw;
+            if (p == null || !"balance".equals(p.kind)) continue;
+            String name = (ak.label != null && ak.label.length() > 0)
+                    ? ak.label : p.name;
+            android.widget.Switch sw = new android.widget.Switch(this);
+            sw.setText(name);
+            sw.setTextColor(getColor(R.color.tx2));
+            sw.setTextSize(13);
+            sw.setChecked(ak.draw);
+            sw.setPadding(dp(14), dp(8), dp(14), dp(8));
+            sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+                public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
+                    ak.draw = on;
                     KeyStore.update(MainActivity.this, ak);
                     buildStats();
                 }
             });
-            box.addView(row);
+            box.addView(sw);
         }
     }
 
