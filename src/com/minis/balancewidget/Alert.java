@@ -59,7 +59,8 @@ public class Alert {
             BalanceFetcher.Item it = r.items.get(i);
             double thr = it.threshold > 0 ? it.threshold : threshold(c, it.id);
             it.low = it.ok && thr > 0 && it.bal < thr
-                    && !"消费".equals(it.tag);   // 后付费平台（如七牛云）没有余额概念，不参与低余额预警
+                    && !"消费".equals(it.tag)      // 后付费平台（如七牛云）没有余额概念，不参与低余额预警
+                    && !"sub".equals(it.kind);     // 订阅制（Token Plan）bal 是占位值，不参与低余额预警
             if (it.low) lows.add(it);
         }
         return lows;
