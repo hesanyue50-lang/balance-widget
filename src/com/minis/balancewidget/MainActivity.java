@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
         int[] rangeIds = { R.id.range_7, R.id.range_30, R.id.range_90, R.id.range_180 };
         for (int id : rangeIds) {
             TextView t = (TextView) findViewById(id);
-            if (t != null) t.setTextColor(getColor(id == activeId ? R.color.tx : R.color.tx2));
+            if (t != null) t.setTextColor(getColor(id == activeId ? R.color.accent : R.color.tx));
         }
     }
 
@@ -126,8 +126,8 @@ public class MainActivity extends Activity {
         findViewById(R.id.stats_container).setVisibility(api ? View.GONE : View.VISIBLE);
         TextView ta = (TextView) findViewById(R.id.tab_api);
         TextView ts = (TextView) findViewById(R.id.tab_stats);
-        ta.setTextColor(getColor(api ? R.color.tx : R.color.tx2));
-        ts.setTextColor(getColor(api ? R.color.tx2 : R.color.tx));
+        ta.setTextColor(getColor(api ? R.color.accent : R.color.tx));
+        ts.setTextColor(getColor(api ? R.color.tx : R.color.accent));
         // 注意：三元 int:null 会装箱 Integer，api=false 时拆箱 null 直接 NPE 崩溃
         ta.setTypeface(null, api ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         ts.setTypeface(null, api ? android.graphics.Typeface.NORMAL : android.graphics.Typeface.BOLD);
@@ -141,6 +141,11 @@ public class MainActivity extends Activity {
      * 只统计 draw=true（未隐藏）的平台；每平台一行隐藏开关。
      * 消耗 = Ledger 快照差值，已扣除充值（record 内自动检测）。
      */
+    /** 图表折线调色板（按线索引取色，同平台多 Key 也能区分） */
+    private static final int[] CHART_PALETTE = {
+            0xFF4D6BFE, 0xFF22C55E, 0xFFF97316, 0xFF8B5CF6, 0xFF0EA5E9,
+            0xFFEC4899, 0xFF14B8A6, 0xFFEAB308, 0xFF6366F1, 0xFF84CC16 };
+
     private void buildStats() {
         final int DAYS = statsDays;
         long now = System.currentTimeMillis();
@@ -164,6 +169,7 @@ public class MainActivity extends Activity {
         java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
         java.util.List<UsageChartView.Series> series =
                 new java.util.ArrayList<UsageChartView.Series>();
+        java.util.HashMap<String, Integer> seen = new java.util.HashMap<String, Integer>();
         double[] consDay = new double[DAYS];
         double[] totalBal = new double[DAYS];
         int[] totalCnt = new int[DAYS];
@@ -182,6 +188,10 @@ public class MainActivity extends Activity {
             String lb0 = ak.label == null ? "" : ak.label.trim();
             String name = (lb0.length() > 0 && !"默认".equals(lb0))
                     ? pname + " · " + lb0 : pname;
+            // 重名加后缀，避免同名节点混淆（关一个像关了另一个）
+            Integer cnt0 = seen.get(name);
+            if (cnt0 == null) seen.put(name, 1);
+            else { seen.put(name, cnt0 + 1); name = name + " #" + (cnt0 + 1); }
 
             java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
             double[] own = new double[DAYS];
@@ -203,7 +213,7 @@ public class MainActivity extends Activity {
 
             if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
                 series.add(new UsageChartView.Series(
-                        BalanceFetcher.colorOf(ak.platform), own, name, false));
+                        CHART_PALETTE[series.size() % CHART_PALETTE.length], own, name, false));
                 for (int d = 0; d < DAYS; d++) { totalBal[d] += own[d]; totalCnt[d]++; }
             }
         }
@@ -229,6 +239,7 @@ public class MainActivity extends Activity {
         box.removeAllViews();
         final SharedPreferences sp =
                 getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+        java.util.HashMap<String, Integer> seen = new java.util.HashMap<String, Integer>();
 
         // 总计开关
         android.widget.Switch totalSw = new android.widget.Switch(this);
@@ -254,9 +265,12 @@ public class MainActivity extends Activity {
             String lb1 = ak.label == null ? "" : ak.label.trim();
             String name = (lb1.length() > 0 && !"默认".equals(lb1))
                     ? pname + " · " + lb1 : pname;
+            Integer cnt1 = seen.get(name);
+            if (cnt1 == null) seen.put(name, 1);
+            else { seen.put(name, cnt1 + 1); name = name + " #" + (cnt1 + 1); }
             android.widget.Switch sw = new android.widget.Switch(this);
             sw.setText(name);
-            sw.setTextColor(getColor(R.color.tx2));
+            sw.setTextColor(getColor(R.color.tx));
             sw.setTextSize(13);
             sw.setChecked(ak.draw);
             sw.setPadding(dp(14), dp(8), dp(14), dp(8));

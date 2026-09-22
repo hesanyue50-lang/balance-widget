@@ -13,8 +13,9 @@ import android.view.View;
 import java.util.List;
 
 /**
- * 用量统计图表（纯代码绘制 + 渐变/圆角等素材效果，无第三方库）。
- * 多折线（每 API 一条 + 总计）+ 可选消耗柱 + 渐变面积填充 + 数据点 + Y 轴刻度。
+ * 用量统计图表 —— 手机查看优化版：
+ * 信息密度低（稀疏标签/网格/数据点）、字号大、标注明显（Y 刻度+峰值数值）。
+ * 多折线（每 API 一条 + 总计）+ 可选消耗柱 + 渐变面积填充。
  */
 public class UsageChartView extends View {
 
@@ -22,7 +23,7 @@ public class UsageChartView extends View {
         public int color;
         public double[] vals;
         public String label;
-        public boolean fill;      // 是否画渐变面积填充（总计线用）
+        public boolean fill;
         public Series(int color, double[] vals, String label, boolean fill) {
             this.color = color; this.vals = vals; this.label = label; this.fill = fill;
         }
@@ -40,8 +41,10 @@ public class UsageChartView extends View {
     private final Paint pDot = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pDotIn = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pGrid = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pLegend = new Paint(Paint.ANTI_ALIAS_FLAG);   // 图例专用（更大字号）
+    private final Paint pAxis = new Paint(Paint.ANTI_ALIAS_FLAG);   // Y/X 刻度（大）
+    private final Paint pMark = new Paint(Paint.ANTI_ALIAS_FLAG);   // 峰值标注（最大最亮）
+    private final Paint pLegend = new Paint(Paint.ANTI_ALIAS_FLAG);
+
     private final Path linePath = new Path();
     private final Path fillPath = new Path();
 
@@ -52,16 +55,20 @@ public class UsageChartView extends View {
         pBar.setStyle(Paint.Style.FILL);
         pFill.setStyle(Paint.Style.FILL);
         pLine.setStyle(Paint.Style.STROKE);
-        pLine.setStrokeWidth(4f);
+        pLine.setStrokeWidth(5f);
         pLine.setStrokeCap(Paint.Cap.ROUND);
         pLine.setStrokeJoin(Paint.Join.ROUND);
         pDot.setStyle(Paint.Style.FILL);
         pDotIn.setStyle(Paint.Style.FILL);
         pGrid.setStyle(Paint.Style.STROKE);
-        pGrid.setStrokeWidth(1f);
-        pGrid.setPathEffect(new DashPathEffect(new float[]{6, 6}, 0));
-        pText.setTextSize(18f);
-        pLegend.setTextSize(26f);          // 图例字号明显大于坐标轴，便于阅读
+        pGrid.setStrokeWidth(1.5f);
+        pGrid.setPathEffect(new DashPathEffect(new float[]{8, 8}, 0));
+        // 手机可读字号：刻度 22、图例 26、峰值标注 24 加粗
+        pAxis.setTextSize(22f);
+        pAxis.setColor(0xFF9AA3B0);
+        pMark.setTextSize(24f);
+        pMark.setFakeBoldText(true);
+        pLegend.setTextSize(26f);
         pLegend.setFakeBoldText(true);
     }
 
@@ -80,108 +87,134 @@ public class UsageChartView extends View {
     protected void onDraw(Canvas cv) {
         super.onDraw(cv);
         int w = getWidth(), h = getHeight();
-        float padL = 46, padR = 12, padT = showLegend ? 34 : 14, padB = 40;
+        float padL = 70, padR = 16, padT = showLegend ? 46 : 20, padB = 46;
         float cw = w - padL - padR, ch = h - padT - padB;
         if (cw <= 0 || ch <= 0) return;
         int n = labels != null ? labels.length : 0;
         if (n == 0) return;
 
-        // 虚线网格 + Y 轴刻度
-        pGrid.setColor(0x2A888888);
-        pText.setColor(0xFF8A93A0);
-        for (int g = 0; g <= 4; g++) {
-            float y = padT + ch * g / 4f;
+        // 稀疏网格（3 条）+ 大 Y 刻度（max / mid / 0）
+        pGrid.setColor(0x2E8A94A3);
+        for (int g = 0; g <= 2; g++) {
+            float y = padT + ch * g / 2f;
             if (showGrid) cv.drawLine(padL, y, w - padR, y, pGrid);
-            double val = maxLine * (4 - g) / 4f;
-            cv.drawText(fmt(val), 4, y + 6, pText);
+            double val = maxLine * (2 - g) / 2f;
+            cv.drawText(fmt(val), 6, y + 8, pAxis);
         }
 
         float slot = cw / n;
 
-        // 消耗柱（半透明圆角感）
+        // 消耗柱（中性石板色，宽而淡，不抢折线）
         if (showBars && bars != null) {
-            float barW = Math.max(3f, slot * 0.45f);
-            pBar.setColor(0x404D6BFE);
+            float barW = Math.max(4f, slot * 0.5f);
+            pBar.setColor(0x308A94A3);
             for (int i = 0; i < n && i < bars.length; i++) {
                 float bh = (float) (bars[i] / maxBar * ch);
                 if (bh < 1) continue;
                 float x = padL + slot * i + (slot - barW) / 2f;
-                cv.drawRoundRect(x, padT + ch - bh, x + barW, padT + ch, 3, 3, pBar);
+                cv.drawRoundRect(x, padT + ch - bh, x + barW, padT + ch, 4, 4, pBar);
             }
         }
 
-        // 折线 + 渐变面积 + 数据点
+        // 折线 + 渐变面积 + 稀疏数据点 + 峰值标注
         if (series != null) {
             for (Series s : series) {
                 if (s.vals == null) continue;
-                // 面积填充（仅 fill=true 的线，如总计）
                 if (s.fill) {
                     fillPath.rewind();
                     boolean st = false;
-                    float firstX = 0, lastX = 0;
+                    float fx = 0, lx2 = 0;
                     for (int i = 0; i < n && i < s.vals.length; i++) {
                         float x = padL + slot * i + slot / 2f;
                         float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
-                        if (!st) { fillPath.moveTo(x, y); firstX = x; st = true; }
+                        if (!st) { fillPath.moveTo(x, y); fx = x; st = true; }
                         else fillPath.lineTo(x, y);
-                        lastX = x;
+                        lx2 = x;
                     }
-                    fillPath.lineTo(lastX, padT + ch);
-                    fillPath.lineTo(firstX, padT + ch);
+                    fillPath.lineTo(lx2, padT + ch);
+                    fillPath.lineTo(fx, padT + ch);
                     fillPath.close();
                     pFill.setShader(new LinearGradient(0, padT, 0, padT + ch,
-                            (s.color & 0x00FFFFFF) | 0x55000000,
+                            (s.color & 0x00FFFFFF) | 0x4D000000,
                             (s.color & 0x00FFFFFF) | 0x00000000,
                             Shader.TileMode.CLAMP));
                     cv.drawPath(fillPath, pFill);
                     pFill.setShader(null);
                 }
-                // 折线
                 pLine.setColor(s.color);
                 linePath.rewind();
                 boolean st2 = false;
+                int peakI = 0;
+                double peakV = -1;
                 for (int i = 0; i < n && i < s.vals.length; i++) {
                     float x = padL + slot * i + slot / 2f;
                     float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
                     if (!st2) { linePath.moveTo(x, y); st2 = true; }
                     else linePath.lineTo(x, y);
+                    if (s.vals[i] > peakV) { peakV = s.vals[i]; peakI = i; }
                 }
                 cv.drawPath(linePath, pLine);
-                // 数据点（外圈色 + 内圈白）
+
+                // 稀疏数据点：点少全画，点多只画首/峰/末
                 pDot.setColor(s.color);
                 pDotIn.setColor(0xFFFFFFFF);
+                int stepDot = (n > 12) ? n : 1;   // 点多时只画关键三点
                 for (int i = 0; i < n && i < s.vals.length; i++) {
+                    boolean key = (n <= 12) || (i == 0 || i == peakI || i == n - 1);
+                    if (!key) continue;
                     float x = padL + slot * i + slot / 2f;
                     float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
-                    cv.drawCircle(x, y, 5f, pDot);
-                    cv.drawCircle(x, y, 2.2f, pDotIn);
+                    cv.drawCircle(x, y, 7f, pDot);
+                    cv.drawCircle(x, y, 3f, pDotIn);
+                }
+                // 峰值数值标注（明显）
+                if (peakV > 0) {
+                    float px = padL + slot * peakI + slot / 2f;
+                    float py = padT + ch - (float) (peakV / maxLine * ch);
+                    pMark.setColor(s.color);
+                    String mk = fmt(peakV);
+                    float tw = pMark.measureText(mk);
+                    float mx = Math.min(Math.max(px - tw / 2, padL), w - padR - tw);
+                    cv.drawText(mk, mx, Math.max(py - 14, padT + 20), pMark);
                 }
             }
         }
 
-        // X 轴标签（居中于刻度）
-        pText.setColor(0xFF8A93A0);
-        int step = Math.max(1, n / 5);
-        for (int i = 0; i < n; i += step) {
+        // X 轴标签：只显 首/中/末 三个，大字
+        int[] xi = { 0, n / 2, n - 1 };
+        for (int k = 0; k < xi.length; k++) {
+            int i = xi[k];
+            if (i < 0 || i >= n) continue;
             float x = padL + slot * i + slot / 2f;
-            cv.drawText(labels[i], x - pText.measureText(labels[i]) / 2, h - 12, pText);
+            String t = labels[i];
+            float tw = pAxis.measureText(t);
+            float dx = (k == 0) ? padL : (k == 2 ? w - padR - tw : x - tw / 2);
+            cv.drawText(t, dx, h - 12, pAxis);
         }
 
-        // 图例：圆点 + 名称（大字号）
-        if (showLegend && series != null) {
+        // 图例：消耗柱 + 各折线（大圆点+大字）
+        if (showLegend) {
             float lx = padL;
-            for (Series s : series) {
+            if (showBars && bars != null) {
+                pBar.setColor(0x558A94A3);
+                cv.drawRoundRect(lx, 14, lx + 20, 34, 5, 5, pBar);
+                pLegend.setColor(0xFFC9D0DA);
+                cv.drawText("消耗", lx + 28, 34, pLegend);
+                lx += 28 + pLegend.measureText("消耗") + 34;
+            }
+            if (series != null) for (Series s : series) {
                 pDot.setColor(s.color);
-                cv.drawCircle(lx + 8, 20, 8, pDot);
-                pLegend.setColor(0xFFC6CDD6);
-                cv.drawText(s.label, lx + 22, 29, pLegend);
-                lx += 22 + pLegend.measureText(s.label) + 30;
-                if (lx > w - 80) break;
+                cv.drawCircle(lx + 10, 24, 10, pDot);
+                pLegend.setColor(0xFFC9D0DA);
+                cv.drawText(s.label, lx + 28, 34, pLegend);
+                lx += 28 + pLegend.measureText(s.label) + 34;
+                if (lx > w - 90) break;
             }
         }
     }
 
     private String fmt(double v) {
+        if (v >= 10000) return String.format("%.1fw", v / 10000);
         if (v >= 1000) return String.format("%.1fk", v / 1000);
         if (v >= 100) return String.format("%.0f", v);
         return String.format("%.1f", v);
