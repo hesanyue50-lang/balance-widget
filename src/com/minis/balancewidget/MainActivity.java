@@ -61,51 +61,126 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
             }
         });
-        findViewById(R.id.btn_usage).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showUsageDialog();
-            }
+        findViewById(R.id.tab_api).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showTab(true); }
+        });
+        findViewById(R.id.tab_stats).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showTab(false); buildStats(); }
         });
     }
 
+    /** 切换 API / 统计 两个栏目 */
+    private void showTab(boolean api) {
+        findViewById(R.id.total_card).setVisibility(api ? View.VISIBLE : View.GONE);
+        findViewById(R.id.cards).setVisibility(api ? View.VISIBLE : View.GONE);
+        findViewById(R.id.stats_container).setVisibility(api ? View.GONE : View.VISIBLE);
+        TextView ta = (TextView) findViewById(R.id.tab_api);
+        TextView ts = (TextView) findViewById(R.id.tab_stats);
+        ta.setTextColor(getColor(api ? R.color.tx : R.color.tx2));
+        ts.setTextColor(getColor(api ? R.color.tx2 : R.color.tx));
+        ta.setTypeface(null, api ? android.graphics.Typeface.BOLD : null);
+        ts.setTypeface(null, api ? null : android.graphics.Typeface.BOLD);
+    }
+
     /**
-     * 用量统计：聚合各平台消耗。
-     * 余额类平台用 Ledger 快照差值（期间消耗）；usage 平台用实时消费额+token；
-     * 订阅制显示实例/到期（无公开余量接口）。
+     * 构建用量统计页：近 30 天按天聚合消耗（柱）与总余额（线）。
+     * 只统计 draw=true（未隐藏）的平台；每平台一行隐藏开关。
+     * 消耗 = Ledger 快照差值，已扣除充值（record 内自动检测）。
      */
-    private void showUsageDialog() {
-        StringBuilder sb = new StringBuilder();
+    private void buildStats() {
+        final int DAYS = 30;
         long now = System.currentTimeMillis();
-        long from = now - 30L * 86400000L;   // 近 30 天
+        long from = now - (long) DAYS * 86400000L;
+        double rate = 7.1;
+        try {
+            rate = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                    .getFloat("last_rate", 7.1f);
+        } catch (Throwable ig) { }
+
+        double[] consDay = new double[DAYS];
+        double[] balDay = new double[DAYS];
+        int[] balCnt = new int[DAYS];
+        String[] labels = new String[DAYS];
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        for (int i = 0; i < DAYS; i++) {
+            cal.setTimeInMillis(now - (long) (DAYS - 1 - i) * 86400000L);
+            labels[i] = (cal.get(java.util.Calendar.MONTH) + 1) + "/"
+                    + cal.get(java.util.Calendar.DAY_OF_MONTH);
+        }
+
         Ledger lg = Ledger.get(this);
         java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
-        boolean any = false;
+        StringBuilder sum = new StringBuilder();
+        double totalCons = 0;
         for (int i = 0; i < aks.size(); i++) {
-            KeyStore.ApiKey ak = aks.get(i);
+            final KeyStore.ApiKey ak = aks.get(i);
             if (!ak.isConfigured()) continue;
-            String plat = ak.platform == null ? "" : ak.platform;
-            BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
-            String name = p != null ? p.name : plat;
-            if ("sub".equals(p == null ? "" : p.kind)) {
-                sb.append(name).append("：订阅制（Token Plan）\n  余量见控制台，按到期天数预警\n\n");
-                any = true;
-                continue;
-            }
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
+            String kind = p == null ? "balance" : p.kind;
+            boolean usd = p != null && "USD".equals(p.unit);
+            double mul = usd ? rate : 1.0;
+            if (!ak.draw || !"balance".equals(kind)) continue;   // 隐藏 / 非余额类不进图表
+
             java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
-            double consumed = 0;
-            for (int j = 1; j < pts.size(); j++) consumed += pts.get(j).consumed;
-            if (pts.size() >= 2 || consumed > 0) {
-                sb.append(name).append("  近30天消耗 ")
-                  .append(String.format("%.2f", consumed)).append("\n\n");
-                any = true;
+            double platCons = 0;
+            for (int j = 0; j < pts.size(); j++) {
+                Ledger.Point pt = pts.get(j);
+                int idx = DAYS - 1 - (int) ((now - pt.ts) / 86400000L);
+                if (idx < 0 || idx >= DAYS) continue;
+                consDay[idx] += pt.consumed * mul;
+                balDay[idx] += pt.balance * mul;
+                balCnt[idx]++;
+                platCons += pt.consumed * mul;
+            }
+            if (pts.size() >= 2) {
+                totalCons += platCons;
+                sum.append(ak.label.length() > 0 ? ak.label : (p == null ? ak.platform : p.name))
+                   .append("  近30天消耗 ").append(String.format("%.2f", platCons)).append("\n");
             }
         }
-        if (!any) sb.append("暂无用量数据。\n余额类平台需积累快照（每次刷新自动记录）后才有消耗统计。");
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("用量统计（近 30 天）")
-                .setMessage(sb.toString())
-                .setPositiveButton("关闭", null)
-                .show();
+        // 余额折线：当天无快照的平台用 0 占位会导致凹陷，这里按"有快照才平均"简化为总和
+        for (int i = 0; i < DAYS; i++) if (balCnt[i] == 0) balDay[i] = (i > 0 ? balDay[i - 1] : 0);
+
+        UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
+        chart.setData(consDay, balDay, labels);
+
+        TextView st = (TextView) findViewById(R.id.stats_summary);
+        st.setText("近 30 天总消耗 " + String.format("%.2f", totalCons)
+                + "（CNY，已扣除充值）\n" + sum.toString()
+                + "\n采样精度 6 小时/点，按天聚合显示");
+
+        buildPlatformToggles(aks);
+    }
+
+    /** 每个平台一行「显示/隐藏」开关，切换 KeyStore.draw 后重绘图表 */
+    private void buildPlatformToggles(java.util.List<KeyStore.ApiKey> aks) {
+        LinearLayout box = (LinearLayout) findViewById(R.id.stats_platforms);
+        box.removeAllViews();
+        for (int i = 0; i < aks.size(); i++) {
+            final KeyStore.ApiKey ak = aks.get(i);
+            if (!ak.isConfigured()) continue;
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
+            String name = p == null ? ak.platform : p.name;
+            TextView row = new TextView(this);
+            row.setPadding(dp(14), dp(12), dp(14), dp(12));
+            row.setBackgroundResource(R.drawable.btn_bg);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = dp(6);
+            row.setLayoutParams(lp);
+            row.setTextSize(13);
+            row.setText(name + "    " + (ak.draw ? "[显示中 · 点击隐藏]" : "[已隐藏 · 点击显示]"));
+            row.setTextColor(getColor(ak.draw ? R.color.tx2 : R.color.tx3));
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    ak.draw = !ak.draw;
+                    KeyStore.update(MainActivity.this, ak);
+                    buildStats();
+                }
+            });
+            box.addView(row);
+        }
     }
 
     /** 刘海 / 状态栏 / 手势条适配（与设置界面共用同一套逻辑） */
