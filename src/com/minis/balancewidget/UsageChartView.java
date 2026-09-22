@@ -41,6 +41,7 @@ public class UsageChartView extends View {
     private final Paint pDotIn = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pGrid = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pLegend = new Paint(Paint.ANTI_ALIAS_FLAG);   // 图例专用（更大字号）
     private final Path linePath = new Path();
     private final Path fillPath = new Path();
 
@@ -60,6 +61,8 @@ public class UsageChartView extends View {
         pGrid.setStrokeWidth(1f);
         pGrid.setPathEffect(new DashPathEffect(new float[]{6, 6}, 0));
         pText.setTextSize(18f);
+        pLegend.setTextSize(26f);          // 图例字号明显大于坐标轴，便于阅读
+        pLegend.setFakeBoldText(true);
     }
 
     public void setData(List<Series> series, double[] bars, String[] labels,
@@ -164,16 +167,16 @@ public class UsageChartView extends View {
             cv.drawText(labels[i], x - pText.measureText(labels[i]) / 2, h - 12, pText);
         }
 
-        // 图例：圆点 + 名称
+        // 图例：圆点 + 名称（大字号）
         if (showLegend && series != null) {
             float lx = padL;
             for (Series s : series) {
                 pDot.setColor(s.color);
-                cv.drawCircle(lx + 6, 16, 6, pDot);
-                pText.setColor(0xFFB9C1CC);
-                cv.drawText(s.label, lx + 18, 22, pText);
-                lx += 18 + pText.measureText(s.label) + 26;
-                if (lx > w - 60) break;
+                cv.drawCircle(lx + 8, 20, 8, pDot);
+                pLegend.setColor(0xFFC6CDD6);
+                cv.drawText(s.label, lx + 22, 29, pLegend);
+                lx += 22 + pLegend.measureText(s.label) + 30;
+                if (lx > w - 80) break;
             }
         }
     }

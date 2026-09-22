@@ -247,35 +247,66 @@ public class SettingsActivity extends Activity {
         super.onDestroy();
     }
 
+    /** 已构建的平台块缓存（过滤时只切可见性，不重建，根治回车卡顿） */
+    private final java.util.List<View> cachedBlocks = new java.util.ArrayList<View>();
+    private final java.util.List<String> cachedKeys = new java.util.ArrayList<String>();
+    private TextView noneView;
+
+    /** 平台的可搜索关键字串（平台名 + id + 各 Key 标签，小写） */
+    private String searchKey(String name, String plat) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(name == null ? "" : name).append('\u0001').append(plat == null ? "" : plat);
+        List<KeyStore.ApiKey> ks = KeyStore.get(this, plat);
+        for (int i = 0; i < ks.size(); i++) sb.append('\u0001').append(ks.get(i).label);
+        return sb.toString().toLowerCase();
+    }
+
+    /** 只切换已缓存块的可见性 —— O(n) 设 visibility，毫秒级，不 inflate */
+    private void applyFilter() {
+        String q = searchQuery == null ? "" : searchQuery.trim().toLowerCase();
+        int shown = 0;
+        for (int i = 0; i < cachedBlocks.size(); i++) {
+            boolean hit = q.length() == 0 || cachedKeys.get(i).contains(q);
+            cachedBlocks.get(i).setVisibility(hit ? View.VISIBLE : View.GONE);
+            if (hit) shown++;
+        }
+        if (noneView != null) {
+            boolean showNone = q.length() > 0 && shown == 0;
+            noneView.setVisibility(showNone ? View.VISIBLE : View.GONE);
+            if (showNone) noneView.setText("没有匹配「" + searchQuery + "」的平台或 Key");
+        }
+    }
+
     private void renderKeyList() {
         LinearLayout box = (LinearLayout) findViewById(R.id.key_fields);
         if (box == null) return;
         box.removeAllViews();
-        String q = searchQuery == null ? "" : searchQuery.trim().toLowerCase();
-        int shown = 0;
+        cachedBlocks.clear();
+        cachedKeys.clear();
         for (int i = 0; i < BalanceFetcher.PRESETS.length; i++) {
             BalanceFetcher.Preset p = BalanceFetcher.PRESETS[i];
-            if (q.length() > 0 && !matches(q, p.name, p.id)) continue;
-            box.addView(platformBlock(p.id, p.name, BalanceFetcher.COLORS[i], p.hint));
-            shown++;
+            View v = platformBlock(p.id, p.name, BalanceFetcher.COLORS[i], p.hint);
+            box.addView(v);
+            cachedBlocks.add(v);
+            cachedKeys.add(searchKey(p.name, p.id));
         }
 
         /* 自定义平台也并进这一栏。
            之前它们散在另一个区块，这里既看不到 Key，也没有删除入口 —— 用户反馈过。 */
         List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(this);
         for (int i = 0; i < cs.size(); i++) {
-            if (q.length() > 0 && !matches(q, cs.get(i).name, "custom:" + i)) continue;
-            box.addView(customBlock("custom:" + i, cs.get(i), i));
-            shown++;
+            View v = customBlock("custom:" + i, cs.get(i), i);
+            box.addView(v);
+            cachedBlocks.add(v);
+            cachedKeys.add(searchKey(cs.get(i).name, "custom:" + i));
         }
-        if (q.length() > 0 && shown == 0) {
-            TextView none = new TextView(this);
-            none.setText("没有匹配「" + searchQuery + "」的平台或 Key");
-            none.setTextColor(getColor(R.color.tx3));
-            none.setTextSize(12);
-            none.setPadding(0, dp(8), 0, dp(8));
-            box.addView(none);
-        }
+        noneView = new TextView(this);
+        noneView.setTextColor(getColor(R.color.tx3));
+        noneView.setTextSize(12);
+        noneView.setPadding(0, dp(8), 0, dp(8));
+        noneView.setVisibility(View.GONE);
+        box.addView(noneView);
+        applyFilter();
     }
 
     /** 自定义平台一块：名称 + 配置/删除 + 它名下的 Key */
@@ -1053,7 +1084,7 @@ public class SettingsActivity extends Activity {
                         || (ev != null && ev.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER
                             && ev.getAction() == android.view.KeyEvent.ACTION_UP)) {
                     searchQuery = v.getText() == null ? "" : v.getText().toString();
-                    renderKeyList();
+                    applyFilter();   // 只切可见性，不重建，回车即时出结果
                     return true;
                 }
                 return false;
