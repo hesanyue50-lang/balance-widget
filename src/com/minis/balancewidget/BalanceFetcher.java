@@ -693,6 +693,7 @@ public class BalanceFetcher {
             /* 百炼 / 魔搭是展示型：没 Key 也该出现在列表里，方便点官网 */
             boolean displayOnly = "dashscope".equals(plat) || "modelscope".equals(plat);
             if (!ak.isConfigured() && !displayOnly) continue;
+            if (ak.hideCard) continue;   // 用户在「隐藏 API」里关掉卡片显示的，不出卡片/小组件
 
             Item it = new Item();
             it.id = ak.id;                       // Key id 才是唯一标识

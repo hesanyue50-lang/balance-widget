@@ -29,6 +29,23 @@ public class UsageChartView extends View {
         }
     }
 
+    /** 点击图表某天位置的回调 */
+    public interface OnTapDay { void onTap(int dayIndex); }
+    private OnTapDay tapListener;
+    public void setOnTapDay(OnTapDay l) { tapListener = l; }
+    private float mPadL, mCw; private int mN;
+
+    @Override
+    public boolean onTouchEvent(android.view.MotionEvent ev) {
+        if (ev.getAction() == android.view.MotionEvent.ACTION_UP
+                && tapListener != null && mN > 0 && mCw > 0) {
+            float slot = mCw / mN;
+            int idx = (int) ((ev.getX() - mPadL) / slot);
+            if (idx >= 0 && idx < mN) { tapListener.onTap(idx); return true; }
+        }
+        return super.onTouchEvent(ev);
+    }
+
     private List<Series> series;
     private double[] bars;
     private String[] labels;
@@ -104,6 +121,7 @@ public class UsageChartView extends View {
         if (cw <= 0 || ch <= 0) return;
         int n = labels != null ? labels.length : 0;
         if (n == 0) return;
+        mPadL = padL; mCw = cw; mN = n;   // 供 onTouchEvent 换算点击的日期下标
 
         // 稀疏网格（3 条）+ 大 Y 刻度（max / mid / 0）
         pGrid.setColor(0x2E8A94A3);

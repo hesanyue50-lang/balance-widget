@@ -184,6 +184,20 @@ public final class Ledger extends SQLiteOpenHelper {
         return out;
     }
 
+    /** 手动修正充值：插入一条手动充值记录（防止自动匹配档位错误） */
+    public void manualRecharge(Context c, String keyId, double amount) {
+        try {
+            android.content.ContentValues cv = new android.content.ContentValues();
+            cv.put("key_id", keyId);
+            cv.put("ts", System.currentTimeMillis());
+            cv.put("delta", amount);
+            cv.put("matched", amount);
+            cv.put("amount", amount);
+            getWritableDatabase().insert(T_RECH, null, cv);
+            BalanceFetcher.diag(c, "手动修正充值 " + keyId + " +" + amount);
+        } catch (Throwable ignored) { }
+    }
+
     public static class Recharge {
         public long ts;
         public double delta, matched, amount;
