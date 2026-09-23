@@ -227,6 +227,8 @@ public class MainActivity extends Activity {
     /** 当前图表序列与日期标签（供点击某天弹框用） */
     private java.util.List<UsageChartView.Series> statsSeries;
     private String[] statsLabels;
+    /** keyId → 折线色，保证开关色点与折线同色 */
+    private final java.util.HashMap<String, Integer> keyColorMap = new java.util.HashMap<String, Integer>();
 
     /**
      * 构建用量统计页：按当前范围（默认 7 天，可切换 30/90/180）按天聚合消耗（柱）与总余额（线）。
@@ -244,7 +246,12 @@ public class MainActivity extends Activity {
         long from = now - (long) DAYS * 86400000L;
         SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
         double rate = sp.getFloat("last_rate", 7.1f);
-        boolean showBars = sp.getBoolean("chart_show_bars", true);
+        // 一次性迁移：旧版默认开柱，设计稿只要折线 → 重置为关
+        if (!sp.contains("bars_reset_v180")) {
+            sp.edit().putBoolean("chart_show_bars", false)
+                    .putBoolean("bars_reset_v180", true).apply();
+        }
+        boolean showBars = sp.getBoolean("chart_show_bars", false);   // 设计稿图表只画折线，柱默认关
         boolean showGrid = sp.getBoolean("chart_show_grid", true);
         boolean showLegend = sp.getBoolean("chart_show_legend", true);
         boolean showTotal = sp.getBoolean("stats_show_total", true);
@@ -253,17 +260,20 @@ public class MainActivity extends Activity {
         java.util.Calendar cal = java.util.Calendar.getInstance();
         for (int i = 0; i < DAYS; i++) {
             cal.setTimeInMillis(now - (long) (DAYS - 1 - i) * 86400000L);
-            labels[i] = (cal.get(java.util.Calendar.MONTH) + 1) + "/"
-                    + cal.get(java.util.Calendar.DAY_OF_MONTH);
+            labels[i] = String.format("%02d/%02d",
+                    cal.get(java.util.Calendar.MONTH) + 1,
+                    cal.get(java.util.Calendar.DAY_OF_MONTH));
         }
 
         Ledger lg = Ledger.get(this);
         java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
         java.util.List<UsageChartView.Series> series =
                 new java.util.ArrayList<UsageChartView.Series>();
+        keyColorMap.clear();
         java.util.HashMap<String, Integer> seen = new java.util.HashMap<String, Integer>();
         double[] consDay = new double[DAYS];
         double[] totalBal = new double[DAYS];
+        java.util.Arrays.fill(totalBal, Double.NaN);   // 无数据天=NaN，总计线断开不掉0
         int[] totalCnt = new int[DAYS];
         StringBuilder sum = new StringBuilder();
         StringBuilder detail = new StringBuilder();
@@ -290,6 +300,7 @@ public class MainActivity extends Activity {
 
             java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
             double[] own = new double[DAYS];
+            java.util.Arrays.fill(own, Double.NaN);   // 无快照的天=NaN，折线断开不从0陡升
             int[] cnt = new int[DAYS];
             double platCons = 0;
             double platCharged = 0;
@@ -303,8 +314,6 @@ public class MainActivity extends Activity {
                 platCharged += pt.charged * mul;
             }
             if (pts.size() < 2) continue;                        // 数据太少不画线
-            // 前向填充：当天无快照沿用前一天，避免断线掉到 0
-            for (int d = 0; d < DAYS; d++) if (cnt[d] == 0) own[d] = (d > 0 ? own[d - 1] : 0);
             totalCons += platCons;
             totalCharged += platCharged;
             detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
@@ -312,11 +321,16 @@ public class MainActivity extends Activity {
             sum.append(name).append("  消耗 ").append(String.format("%.2f", platCons)).append("\n");
 
             if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
-                // 图例带最新余额，便于直接读数；颜色按平台序号稳定分配（开关切换不变色）
-                String legendLabel = name + "  ¥" + String.format("%.2f", own[DAYS - 1]);
-                series.add(new UsageChartView.Series(
-                        CHART_PALETTE[balIdx % CHART_PALETTE.length], own, legendLabel, false));
-                for (int d = 0; d < DAYS; d++) { totalBal[d] += own[d]; totalCnt[d]++; }
+                // 图例余额=最后一个有数据天的值
+                double lastBal = 0;
+                for (int d = DAYS - 1; d >= 0; d--) if (!Double.isNaN(own[d])) { lastBal = own[d]; break; }
+                String legendLabel = name + "  ¥" + String.format("%.2f", lastBal);
+                int lineColor = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                keyColorMap.put(ak.id, Integer.valueOf(lineColor));
+                series.add(new UsageChartView.Series(lineColor, own, legendLabel, false));
+                for (int d = 0; d < DAYS; d++)
+                    if (!Double.isNaN(own[d]))
+                        totalBal[d] = Double.isNaN(totalBal[d]) ? own[d] : totalBal[d] + own[d];
             }
             balIdx++;
         }
@@ -348,9 +362,9 @@ public class MainActivity extends Activity {
                 if (lines[i].length() == 0) continue;
                 TextView row = new TextView(this);
                 row.setText(lines[i]);
-                row.setTextColor(getColor(R.color.tx2));
+                row.setTextColor(getColor(R.color.tx));
                 row.setTextSize(13);
-                row.setPadding(0, dp(4), 0, dp(4));
+                row.setPadding(0, dp(5), 0, dp(5));
                 dbox.addView(row);
             }
         }
@@ -377,6 +391,8 @@ public class MainActivity extends Activity {
         totalSw.setTextColor(getColor(R.color.tx));
         totalSw.setTextSize(13);
         totalSw.setChecked(sp.getBoolean("stats_show_total", true));
+        totalSw.setTrackTintList(android.content.res.ColorStateList.valueOf(0xFFDCE1E9));
+        totalSw.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFF6E7887));
         totalSw.setPadding(dp(14), dp(10), dp(14), dp(10));
         totalSw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
@@ -390,7 +406,8 @@ public class MainActivity extends Activity {
             final KeyStore.ApiKey ak = aks.get(i);
             if (!ak.isConfigured()) continue;
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
-            if (p == null || !"balance".equals(p.kind)) continue;
+            if (p == null) continue;
+            boolean isBal = "balance".equals(p.kind);
             String pname = p == null ? ak.platform : p.name;
             String lb1 = ak.label == null ? "" : ak.label.trim();
             String name = (lb1.length() > 0 && !"默认".equals(lb1))
@@ -398,15 +415,20 @@ public class MainActivity extends Activity {
             Integer cnt1 = seen.get(name);
             if (cnt1 == null) seen.put(name, 1);
             else { seen.put(name, cnt1 + 1); name = name + " #" + (cnt1 + 1); }
-            // 行：色点 + 名称 + Switch（色点与折线同色）
+            // 行：色点 + 名称 + Switch（余额类色点=折线色，其余灰点）
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setPadding(dp(6), dp(6), dp(6), dp(6));
             View dot = new View(this);
-            dot.setBackgroundColor(CHART_PALETTE[balIdx % CHART_PALETTE.length]);
-            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(12), dp(12));
-            dlp.rightMargin = dp(10);
+            android.graphics.drawable.GradientDrawable gd =
+                    new android.graphics.drawable.GradientDrawable();
+            gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            Integer lc = keyColorMap.get(ak.id);
+            gd.setColor(lc != null ? lc.intValue() : 0xFF9AA3B0);
+            dot.setBackground(gd);
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(14), dp(14));
+            dlp.rightMargin = dp(12);
             dot.setLayoutParams(dlp);
             row.addView(dot);
             android.widget.Switch sw = new android.widget.Switch(this);
@@ -414,6 +436,9 @@ public class MainActivity extends Activity {
             sw.setTextColor(getColor(R.color.tx));
             sw.setTextSize(13);
             sw.setChecked(ak.draw);
+            // 浅色胶囊开关：浅灰轨道 + 深灰圆点，开启态清晰
+            sw.setTrackTintList(android.content.res.ColorStateList.valueOf(0xFFDCE1E9));
+            sw.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFF6E7887));
             sw.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {

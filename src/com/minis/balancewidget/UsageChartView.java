@@ -96,7 +96,8 @@ public class UsageChartView extends View {
         this.showBars = showBars; this.showGrid = showGrid; this.showLegend = showLegend;
         maxLine = 1; maxBar = 1;
         if (series != null) for (Series s : series)
-            if (s.vals != null) for (double v : s.vals) if (v > maxLine) maxLine = v;
+            if (s.vals != null) for (double v : s.vals)
+                if (!Double.isNaN(v) && v > maxLine) maxLine = v;
         if (bars != null) for (double v : bars) if (v > maxBar) maxBar = v;
         // 渐进揭示动画：从左到右画出数据层
         progress = 0f;
@@ -123,13 +124,15 @@ public class UsageChartView extends View {
         if (n == 0) return;
         mPadL = padL; mCw = cw; mN = n;   // 供 onTouchEvent 换算点击的日期下标
 
-        // 稀疏网格（3 条）+ 大 Y 刻度（max / mid / 0）
+        // 稀疏网格（5 档）+ 明显 Y 轴刻度（¥ 前缀，大字深色）
         pGrid.setColor(0x2E8A94A3);
-        for (int g = 0; g <= 2; g++) {
-            float y = padT + ch * g / 2f;
+        pAxis.setTextSize(24f);
+        pAxis.setColor(0xFF6E7887);
+        for (int g = 0; g <= 4; g++) {
+            float y = padT + ch * g / 4f;
             if (showGrid) cv.drawLine(padL, y, w - padR, y, pGrid);
-            double val = maxLine * (2 - g) / 2f;
-            cv.drawText(fmt(val), 6, y + 8, pAxis);
+            double val = maxLine * (4 - g) / 4f;
+            cv.drawText("¥" + fmt(val), 4, y + 8, pAxis);
         }
 
         float slot = cw / n;
@@ -154,88 +157,76 @@ public class UsageChartView extends View {
         if (series != null) {
             for (Series s : series) {
                 if (s.vals == null) continue;
+                // 渐变面积填充：只覆盖有数据的连续段（跳过 NaN 空天）
                 if (s.fill) {
                     fillPath.rewind();
                     boolean st = false;
                     float fx = 0, lx2 = 0;
                     for (int i = 0; i < n && i < s.vals.length; i++) {
+                        if (Double.isNaN(s.vals[i])) continue;
                         float x = padL + slot * i + slot / 2f;
                         float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
                         if (!st) { fillPath.moveTo(x, y); fx = x; st = true; }
                         else fillPath.lineTo(x, y);
                         lx2 = x;
                     }
-                    fillPath.lineTo(lx2, padT + ch);
-                    fillPath.lineTo(fx, padT + ch);
-                    fillPath.close();
-                    pFill.setShader(new LinearGradient(0, padT, 0, padT + ch,
-                            (s.color & 0x00FFFFFF) | 0x4D000000,
-                            (s.color & 0x00FFFFFF) | 0x00000000,
-                            Shader.TileMode.CLAMP));
-                    cv.drawPath(fillPath, pFill);
-                    pFill.setShader(null);
+                    if (st) {
+                        fillPath.lineTo(lx2, padT + ch);
+                        fillPath.lineTo(fx, padT + ch);
+                        fillPath.close();
+                        pFill.setShader(new LinearGradient(0, padT, 0, padT + ch,
+                                (s.color & 0x00FFFFFF) | 0x4D000000,
+                                (s.color & 0x00FFFFFF) | 0x00000000,
+                                Shader.TileMode.CLAMP));
+                        cv.drawPath(fillPath, pFill);
+                        pFill.setShader(null);
+                    }
                 }
+                // 折线：跳过 NaN 空天（断线重启，不从 0 陡升）
                 pLine.setColor(s.color);
                 linePath.rewind();
                 boolean st2 = false;
-                int peakI = 0;
-                double peakV = -1;
                 for (int i = 0; i < n && i < s.vals.length; i++) {
+                    if (Double.isNaN(s.vals[i])) { st2 = false; continue; }
                     float x = padL + slot * i + slot / 2f;
                     float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
                     if (!st2) { linePath.moveTo(x, y); st2 = true; }
                     else linePath.lineTo(x, y);
-                    if (s.vals[i] > peakV) { peakV = s.vals[i]; peakI = i; }
                 }
                 cv.drawPath(linePath, pLine);
-
-                // 稀疏数据点：点少全画，点多只画首/峰/末
+                // 数据点：只画有数据的天
                 pDot.setColor(s.color);
                 pDotIn.setColor(0xFFFFFFFF);
-                int stepDot = (n > 12) ? n : 1;   // 点多时只画关键三点
                 for (int i = 0; i < n && i < s.vals.length; i++) {
-                    boolean key = (n <= 12) || (i == 0 || i == peakI || i == n - 1);
-                    if (!key) continue;
+                    if (Double.isNaN(s.vals[i])) continue;
                     float x = padL + slot * i + slot / 2f;
                     float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
-                    cv.drawCircle(x, y, 7f, pDot);
-                    cv.drawCircle(x, y, 3f, pDotIn);
-                }
-                // 峰值数值标注（明显）
-                if (peakV > 0) {
-                    float px = padL + slot * peakI + slot / 2f;
-                    float py = padT + ch - (float) (peakV / maxLine * ch);
-                    pMark.setColor(s.color);
-                    String mk = fmt(peakV);
-                    float tw = pMark.measureText(mk);
-                    float mx = Math.min(Math.max(px - tw / 2, padL), w - padR - tw);
-                    cv.drawText(mk, mx, Math.max(py - 14, padT + 20), pMark);
+                    cv.drawCircle(x, y, 6f, pDot);
+                    cv.drawCircle(x, y, 2.5f, pDotIn);
                 }
             }
         }
 
         cv.restore();   // 结束数据层裁剪
 
-        // X 轴标签：只显 首/中/末 三个，大字
-        int[] xi = { 0, n / 2, n - 1 };
-        for (int k = 0; k < xi.length; k++) {
-            int i = xi[k];
-            if (i < 0 || i >= n) continue;
+        // X 轴标签：尽量每天标（最多 8 个），MM/DD
+        int step = Math.max(1, (n + 7) / 8);
+        for (int i = 0; i < n; i += step) {
             float x = padL + slot * i + slot / 2f;
             String t = labels[i];
             float tw = pAxis.measureText(t);
-            float dx = (k == 0) ? padL : (k == 2 ? w - padR - tw : x - tw / 2);
+            float dx = Math.min(Math.max(x - tw / 2, padL - 20), w - padR - tw);
             cv.drawText(t, dx, h - 12, pAxis);
         }
 
-        // 图例：图内右上浮动框（竖排：色点+名称+余额），贴合设计稿
-        if (showLegend) {
-            int entries = (showBars && bars != null ? 1 : 0) + (series == null ? 0 : series.size());
+        // 图例：图内右上浅色浮动框，只列各 API（不含消耗/总计），贴合设计稿
+        if (showLegend && series != null) {
+            int entries = 0;
+            for (Series s : series) if (!s.fill) entries++;
             if (entries > 0) {
-                float rowH = 34f;
+                float rowH = 36f;
                 float maxW = 0;
-                if (showBars && bars != null) maxW = Math.max(maxW, pLegend.measureText("消耗"));
-                if (series != null) for (Series s : series)
+                for (Series s : series) if (!s.fill)
                     maxW = Math.max(maxW, pLegend.measureText(s.label));
                 float boxW = maxW + 46;
                 float boxH = entries * rowH + 14;
@@ -243,24 +234,18 @@ public class UsageChartView extends View {
                 float by = 6;
                 Paint boxp = new Paint(Paint.ANTI_ALIAS_FLAG);
                 boxp.setStyle(Paint.Style.FILL);
-                boxp.setColor(0xCC1F2733);
-                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 10, 10, boxp);
+                boxp.setColor(0xF2FFFFFF);
+                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, boxp);
                 boxp.setStyle(Paint.Style.STROKE);
                 boxp.setStrokeWidth(1.5f);
-                boxp.setColor(0x55FFFFFF);
-                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 10, 10, boxp);
+                boxp.setColor(0x2A000000);
+                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, boxp);
                 float ry = by + 10 + rowH / 2;
-                if (showBars && bars != null) {
-                    pBar.setColor(0x888A94A3);
-                    cv.drawRoundRect(bx + 12, ry - 9, bx + 28, ry + 7, 4, 4, pBar);
-                    pLegend.setColor(0xFFE3E8EE);
-                    cv.drawText("消耗", bx + 36, ry + 9, pLegend);
-                    ry += rowH;
-                }
-                if (series != null) for (Series s : series) {
+                for (Series s : series) {
+                    if (s.fill) continue;
                     pDot.setColor(s.color);
                     cv.drawCircle(bx + 20, ry, 8, pDot);
-                    pLegend.setColor(0xFFE3E8EE);
+                    pLegend.setColor(0xFF39424F);
                     cv.drawText(s.label, bx + 36, ry + 9, pLegend);
                     ry += rowH;
                 }
