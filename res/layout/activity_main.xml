@@ -62,6 +62,16 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
+            <!-- 设置面板（第三块，与 API/统计同层，include 同一份设置主体） -->
+            <LinearLayout
+                android:id="@+id/settings_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+                <include layout="@layout/settings_body" />
+            </LinearLayout>
+
             <!-- 平台卡片容器（动态填充） -->
             <LinearLayout
                 android:id="@+id/cards"
@@ -81,7 +91,7 @@
                 <com.minis.balancewidget.UsageChartView
                     android:id="@+id/usage_chart"
                     android:layout_width="match_parent"
-                    android:layout_height="250dp"
+                    android:layout_height="260dp"
                     android:background="@drawable/card_bg"
                     android:padding="18dp" />
 
@@ -94,9 +104,9 @@
                     android:layout_marginTop="6dp">
                     <TextView android:id="@+id/range_pick" android:layout_width="wrap_content"
                         android:layout_height="wrap_content" android:gravity="center"
-                        android:background="@drawable/mini_btn" android:paddingLeft="8dp" android:paddingRight="8dp"
-                        android:paddingTop="2dp" android:paddingBottom="2dp"
-                        android:text="近 7 天 ▽" android:textColor="@color/tx" android:textSize="10sp" />
+                        android:background="@drawable/mini_btn_border" android:paddingLeft="12dp" android:paddingRight="12dp"
+                        android:paddingTop="4dp" android:paddingBottom="4dp"
+                        android:text="近 7 天 ▽" android:textColor="@color/tx" android:textSize="11sp" />
                 </LinearLayout>
 
                 <!-- ③ 平台数据源开关（圆点+名称+Switch） -->
@@ -139,14 +149,14 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center_horizontal"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/mini_btn"
-                    android:paddingLeft="10dp"
-                    android:paddingRight="10dp"
-                    android:paddingTop="3dp"
-                    android:paddingBottom="3dp"
+                    android:background="@drawable/mini_btn_border"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="14dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
                     android:text="修正充值"
                     android:textColor="@color/tx"
-                    android:textSize="10sp" />
+                    android:textSize="12sp" />
 
                 <!-- ⑥ 总充值 / 总消耗 -->
                 <TextView
@@ -163,9 +173,9 @@
                     android:layout_height="wrap_content" android:layout_gravity="right"
                     android:layout_marginTop="12dp"
                     android:layout_marginBottom="28dp" android:gravity="center"
-                    android:background="@drawable/mini_btn" android:paddingLeft="10dp" android:paddingRight="10dp"
-                    android:paddingTop="3dp" android:paddingBottom="3dp"
-                    android:text="清理数据" android:textColor="@color/danger" android:textSize="10sp" />
+                    android:background="@drawable/mini_btn_border" android:paddingLeft="14dp" android:paddingRight="14dp"
+                    android:paddingTop="6dp" android:paddingBottom="6dp"
+                    android:text="清理数据" android:textColor="@color/danger" android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
@@ -179,14 +189,14 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@drawable/header_bg"
-        android:paddingLeft="18dp"
-        android:paddingRight="12dp"
+        android:paddingLeft="10dp"
+        android:paddingRight="10dp"
         android:paddingTop="12dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="14dp">
 
-        <!-- 分段控件容器（iOS 分段存在形态，无玻璃效果）：三按钮均分，下置留白 -->
+        <!-- 分段导航：三按钮等宽，选中项背景高亮（无浮动指示块，避免错位/圆角问题） -->
         <LinearLayout
-            android:id="@+id/seg_container"
+            android:id="@+id/seg_wrap"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -194,7 +204,7 @@
             android:background="@drawable/seg_bg"
             android:padding="5dp"
             android:layout_marginTop="10dp"
-            android:layout_marginBottom="4dp">
+            android:layout_marginBottom="6dp">
 
             <TextView
                 android:id="@+id/tab_api"
@@ -214,7 +224,6 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginLeft="4dp"
                 android:gravity="center"
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"
@@ -226,8 +235,7 @@
                 android:id="@+id/btn_settings"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="0.6"
-                android:layout_marginLeft="4dp"
+                android:layout_weight="1"
                 android:gravity="center"
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"

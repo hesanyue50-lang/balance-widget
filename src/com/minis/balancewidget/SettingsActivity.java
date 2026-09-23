@@ -164,7 +164,7 @@ public class SettingsActivity extends Activity {
                 getColor(R.color.accent_tx), 13f, 10);
         btn.setGravity(Gravity.CENTER);
         btn.setBackgroundResource(R.drawable.btn_primary);
-        btn.setPadding(0, dp(20), 0, dp(20));
+        btn.setPadding(0, dp(12), 0, dp(12));
         btn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 if (Lock.isSet(SettingsActivity.this)) LockDialog.reset(SettingsActivity.this);
@@ -260,10 +260,20 @@ public class SettingsActivity extends Activity {
         return false;
     }
 
+    /** 左右滑回主界面对应 Tab（与主界面切换同语言，视觉同级） */
+    private void gotoMain(String tab) {
+        Intent it = new Intent(this, MainActivity.class);
+        it.putExtra("goto_tab", tab);
+        it.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(it);
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+
     @Override
     public void finish() {
         super.finish();
-        overridePendingTransition(R.anim.fade_in, R.anim.slide_out_up);
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
     @Override
@@ -476,21 +486,21 @@ public class SettingsActivity extends Activity {
         label.setLayoutParams(new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView cfg = mkTextWrap("配置", getColor(R.color.accent), 12f);
-        cfg.setPadding(dp(16), dp(11), dp(16), dp(11));
-        cfg.setBackgroundResource(R.drawable.card_bg);
+        TextView cfg = mkTextWrap("配置", getColor(R.color.accent), 11f);
+        cfg.setPadding(dp(10), dp(5), dp(10), dp(5));
+        cfg.setBackgroundResource(R.drawable.mini_btn_border);
         cfg.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCustomDialog(idx, c); }
         });
         head.addView(cfg);
 
-        TextView del = mkTextWrap("删除", getColor(R.color.danger), 12f);
-        del.setPadding(dp(16), dp(11), dp(16), dp(11));
+        TextView del = mkTextWrap("删除", getColor(R.color.danger), 11f);
+        del.setPadding(dp(10), dp(5), dp(10), dp(5));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         dlp.leftMargin = dp(6);
         del.setLayoutParams(dlp);
-        del.setBackgroundResource(R.drawable.card_bg);
+        del.setBackgroundResource(R.drawable.mini_btn_border);
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 /* 删平台时把它名下的 Key 记录一并清掉，
@@ -548,14 +558,14 @@ public class SettingsActivity extends Activity {
         int nSites = BalanceFetcher.collectSites(platform, siteLabels, siteUrls);
         if (nSites > 0) {
             TextView site = mkTextWrap("控制台",
-                    getColor(R.color.tx2), 12f);
-            site.setPadding(dp(16), dp(11), dp(16), dp(11));
+                    getColor(R.color.tx2), 11f);
+            site.setPadding(dp(10), dp(5), dp(10), dp(5));
             LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             slp.rightMargin = dp(6);
             site.setLayoutParams(slp);
-            site.setBackgroundResource(R.drawable.card_bg);
+            site.setBackgroundResource(R.drawable.mini_btn_border);
             site.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     // 直达控制台（collectSites 控制台永远排第一），不弹子菜单
@@ -565,28 +575,12 @@ public class SettingsActivity extends Activity {
             head.addView(site);
         }
 
-        // 充值页直达按钮（所有平台都收录了 topup 地址）
+        // 充值按钮已按用户要求移除（控制台内可充值）
         final BalanceFetcher.Preset pt = BalanceFetcher.presetOf(platform);
-        if (pt != null && pt.topup != null && pt.topup.trim().length() > 0) {
-            TextView tp = mkTextWrap("充值", getColor(R.color.tx2), 12f);
-            tp.setPadding(dp(16), dp(11), dp(16), dp(11));
-            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT);
-            tlp.rightMargin = dp(6);
-            tp.setLayoutParams(tlp);
-            tp.setBackgroundResource(R.drawable.card_bg);
-            tp.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    openUrl(pt.topup);
-                }
-            });
-            head.addView(tp);
-        }
 
-        TextView add = mkTextWrap("+ 添加", getColor(R.color.accent), 12f);
-        add.setPadding(dp(18), dp(11), dp(18), dp(11));
-        add.setBackgroundResource(R.drawable.card_bg);
+        TextView add = mkTextWrap("+ 添加", getColor(R.color.accent), 11f);
+        add.setPadding(dp(10), dp(5), dp(10), dp(5));
+        add.setBackgroundResource(R.drawable.mini_btn_border);
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(platform, null); }
         });
@@ -626,21 +620,21 @@ public class SettingsActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         row.addView(kv);
 
-        TextView edit = mkTextWrap("编辑", getColor(R.color.accent), 12f);
-        edit.setPadding(dp(14), dp(10), dp(14), dp(10));
-        edit.setBackgroundResource(R.drawable.card_bg);
+        TextView edit = mkTextWrap("编辑", getColor(R.color.accent), 11f);
+        edit.setPadding(dp(10), dp(5), dp(10), dp(5));
+        edit.setBackgroundResource(R.drawable.mini_btn_border);
         edit.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(k.platform, k); }
         });
         row.addView(edit);
 
-        TextView del = mkTextWrap("删除", getColor(R.color.danger), 12f);
-        del.setPadding(dp(14), dp(10), dp(14), dp(10));
+        TextView del = mkTextWrap("删除", getColor(R.color.danger), 11f);
+        del.setPadding(dp(10), dp(5), dp(10), dp(5));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         dlp.leftMargin = dp(6);
         del.setLayoutParams(dlp);
-        del.setBackgroundResource(R.drawable.card_bg);
+        del.setBackgroundResource(R.drawable.mini_btn_border);
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 KeyStore.remove(SettingsActivity.this, k.id);
@@ -724,8 +718,8 @@ public class SettingsActivity extends Activity {
             // 添加"如何配置"帮助按钮
             TextView helpBtn = mkText("如何配置阿里云 AccessKey？", getColor(R.color.accent), 12, 12);
             helpBtn.setGravity(Gravity.CENTER);
-            helpBtn.setBackgroundResource(R.drawable.card_bg);
-            helpBtn.setPadding(0, dp(18), 0, dp(18));
+            helpBtn.setBackgroundResource(R.drawable.mini_btn_border);
+            helpBtn.setPadding(0, dp(10), 0, dp(10));
             helpBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -769,8 +763,8 @@ public class SettingsActivity extends Activity {
 
         TextView cancel = mkText("取消", getColor(R.color.tx2), 14f, 0);
         cancel.setGravity(Gravity.CENTER);
-        cancel.setBackgroundResource(R.drawable.card_bg);
-        cancel.setPadding(0, dp(22), 0, dp(22));
+        cancel.setBackgroundResource(R.drawable.mini_btn_border);
+        cancel.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         clp.rightMargin = dp(6);
@@ -784,7 +778,7 @@ public class SettingsActivity extends Activity {
         save.setGravity(Gravity.CENTER);
         save.setTypeface(null, Typeface.BOLD);
         save.setBackgroundResource(R.drawable.btn_primary);
-        save.setPadding(0, dp(22), 0, dp(22));
+        save.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         slp.leftMargin = dp(6);
@@ -983,8 +977,8 @@ public class SettingsActivity extends Activity {
         final TextView unitBtn = mkText("币种：" + unit[0], getColor(R.color.tx2), 12, 0);
         unitBtn.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        unitBtn.setPadding(dp(16), dp(15), dp(16), dp(15));
-        unitBtn.setBackgroundResource(R.drawable.card_bg);
+        unitBtn.setPadding(dp(12), dp(6), dp(12), dp(6));
+        unitBtn.setBackgroundResource(R.drawable.mini_btn_border);
         unitRow.addView(unitBtn);
         card.addView(unitRow);
 
@@ -998,8 +992,8 @@ public class SettingsActivity extends Activity {
         kindRow.setLayoutParams(klp);
 
         final TextView kindBtn = mkText("制式：" + kindLabel(kind[0]), getColor(R.color.tx2), 12, 0);
-        kindBtn.setPadding(dp(16), dp(15), dp(16), dp(15));
-        kindBtn.setBackgroundResource(R.drawable.card_bg);
+        kindBtn.setPadding(dp(12), dp(6), dp(12), dp(6));
+        kindBtn.setBackgroundResource(R.drawable.mini_btn_border);
         kindRow.addView(kindBtn);
         card.addView(kindRow);
 
@@ -1096,8 +1090,8 @@ public class SettingsActivity extends Activity {
         cancel.setTextColor(getColor(R.color.tx2));
         cancel.setTextSize(14);
         cancel.setGravity(Gravity.CENTER);
-        cancel.setBackgroundResource(R.drawable.card_bg);
-        cancel.setPadding(0, dp(22), 0, dp(22));
+        cancel.setBackgroundResource(R.drawable.mini_btn_border);
+        cancel.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         clp.rightMargin = dp(6);
@@ -1114,7 +1108,7 @@ public class SettingsActivity extends Activity {
         save.setTypeface(null, Typeface.BOLD);
         save.setGravity(Gravity.CENTER);
         save.setBackgroundResource(R.drawable.btn_primary);
-        save.setPadding(0, dp(22), 0, dp(22));
+        save.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         slp.leftMargin = dp(6);
@@ -1179,105 +1173,17 @@ public class SettingsActivity extends Activity {
         setContentView(R.layout.activity_settings);
         UiInsets.apply(this, R.id.settings_header, R.id.settings_scroll, 12, 20);
 
-        customBox = (LinearLayout) findViewById(R.id.custom_fields);
-        eFg = (EditText) findViewById(R.id.e_fg_min);
-        eBg = (EditText) findViewById(R.id.e_bg_min);
-        if (eFg != null) eFg.setText(String.valueOf(RefreshScheduler.fgMinutes(this)));
-        if (eBg != null) eBg.setText(String.valueOf(RefreshScheduler.bgMinutes(this)));
-        try {
-            TextView ver = (TextView) findViewById(R.id.app_version);
-            if (ver != null) {
-                android.content.pm.PackageInfo pi =
-                        getPackageManager().getPackageInfo(getPackageName(), 0);
-                ver.setText("版本 " + pi.versionName + " (" + pi.versionCode + ")");
-            }
-            if (ver != null && ver.getParent() instanceof android.view.ViewGroup) {
-                TextView gh = new TextView(this);
-                gh.setText("GitHub：github.com/hesanyue50-lang/balance-widget");
-                gh.setTextSize(11);
-                gh.setTextColor(getColor(R.color.accent));
-                gh.setPadding(0, dp(8), 0, 0);
-                gh.setOnClickListener(new View.OnClickListener() {
-                    public void onClick(View v) {
-                        openUrl("https://github.com/hesanyue50-lang/balance-widget");
-                    }
-                });
-                android.view.ViewGroup gp = (android.view.ViewGroup) ver.getParent();
-                gp.addView(gh, Math.min(gp.indexOfChild(ver) + 1, gp.getChildCount()));
-            }
-        } catch (Throwable ignored) { }
-
-        final SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
-        // 密钥列表改为「展开时才懒加载 + 分片构建 + 一次缓存多次使用」，
-        // 进入设置不再同步/延迟全量 inflate，见 setupCollapsibleKeys / ensureKeyBlocks。
-        setupCollapsibleKeys();
-        setupHideSection();
-        buildSecuritySection();
-
-        // 修改即保存：刷新间隔输入停止 400ms 自动落盘，无需底部「保存」按钮
-        android.text.TextWatcher intervalWatcher = new android.text.TextWatcher() {
-            public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
-            public void onTextChanged(CharSequence s, int a, int b, int c) {
-                searchHandler.removeCallbacks(saveIntervalsTask);
-                searchHandler.postDelayed(saveIntervalsTask, 400);
-            }
-            public void afterTextChanged(android.text.Editable s) { }
-        };
-        if (eFg != null) eFg.addTextChangedListener(intervalWatcher);
-        if (eBg != null) eBg.addTextChangedListener(intervalWatcher);
-
-        // 搜索窗口：日常收起，点「搜索」展开输入框，输入即过滤平台/Key
-        findViewById(R.id.search_toggle).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                EditText sb = (EditText) findViewById(R.id.search_box);
-                boolean vis = sb.getVisibility() == View.VISIBLE;
-                sb.setVisibility(vis ? View.GONE : View.VISIBLE);
-                if (!vis) sb.requestFocus();
-            }
+        // 与主界面同级导航：点 API余额/用量统计 左右滑回主界面对应页
+        findViewById(R.id.tab_api).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { gotoMain("api"); }
         });
-        final EditText searchBox = (EditText) findViewById(R.id.search_box);
-        // 只在用户按回车（或输入法「搜索」键）时才过滤 —— 边打字边全量重建列表会卡死输入法
-        searchBox.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            public boolean onEditorAction(TextView v, int actionId, android.view.KeyEvent ev) {
-                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
-                        || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE
-                        || (ev != null && ev.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER
-                            && ev.getAction() == android.view.KeyEvent.ACTION_UP)) {
-                    searchQuery = v.getText() == null ? "" : v.getText().toString();
-                    applyFilter();   // 只切可见性，不重建，回车即时出结果
-                    return true;
-                }
-                return false;
-            }
+        findViewById(R.id.tab_stats).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { gotoMain("stats"); }
         });
+        // 设置页布局已默认高亮「设置」（无需指示块）
 
-        findViewById(R.id.btn_add_custom).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { showCustomDialog(-1, null); }
-        });
-
-        // 「保存并刷新」按钮已移除：改为修改即保存（间隔走 TextWatcher 即时落盘，密钥走 KeyStore 即时）
-
-
-        findViewById(R.id.btn_pin).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { doPin(); }
-        });
-
-        // 首次进入设置页：引导开启自启动（后台刷新/预警依赖它），只自动弹一次
-        new android.os.Handler().postDelayed(new Runnable() {
-            public void run() { Autostart.ensure(SettingsActivity.this, false); }
-        }, 700);
-
-        findViewById(R.id.btn_autostart).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { Autostart.ensure(SettingsActivity.this, true); }
-        });
-
-        findViewById(R.id.notify_state).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                NotifyPermission.ensure(SettingsActivity.this, new NotifyPermission.Callback() {
-                    public void onResult(boolean granted) { refreshNotifyState(); }
-                }, true);
-            }
-        });
+        // 设置主体统一由 SettingsBinder 绑定（与主界面第三面板同一份逻辑）
+        new SettingsBinder(this, findViewById(R.id.settings_root)).bind();
     }
 
     /** 通知不可用时，在设置页顶部显著提示 */
