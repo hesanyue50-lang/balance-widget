@@ -261,6 +261,12 @@ public class SettingsActivity extends Activity {
     }
 
     @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.fade_in, R.anim.slide_out_up);
+    }
+
+    @Override
     protected void onDestroy() {
         searchHandler.removeCallbacks(searchFilterTask);   // 退出后不再重建列表
         super.onDestroy();

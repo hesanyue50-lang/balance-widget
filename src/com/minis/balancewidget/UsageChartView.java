@@ -125,7 +125,7 @@ public class UsageChartView extends View {
     protected void onDraw(Canvas cv) {
         super.onDraw(cv);
         int w = getWidth(), h = getHeight();
-        float padL = 70, padR = 22, padT = 34, padB = 88;
+        float padL = 92, padR = 42, padT = 54, padB = 64;
         float cw = w - padL - padR, ch = h - padT - padB;
         if (cw <= 0 || ch <= 0) return;
         int n = labels != null ? labels.length : 0;
@@ -224,7 +224,7 @@ public class UsageChartView extends View {
             String t = labels[i];
             float tw = pAxis.measureText(t);
             float dx = Math.min(Math.max(x - tw / 2, padL - 20), w - padR - tw);
-            cv.drawText(t, dx, h - 56, pAxis);
+            cv.drawText(t, dx, h - 14, pAxis);
         }
 
         // 按住时在该日位置显示浮动框：各 API 当日余额（松开隐藏）
@@ -232,12 +232,16 @@ public class UsageChartView extends View {
             int entries = 0;
             for (Series ss : series) if (!ss.fill) entries++;
             if (entries > 0) {
-                float rowH = 50f;
+                float rowH = 52f;
                 pLegend.setTextSize(30f);
                 float maxW = pLegend.measureText(labels[touchIdx]);
-                for (Series ss : series) if (!ss.fill)
-                    maxW = Math.max(maxW, pLegend.measureText(ss.label));
-                float boxW = maxW + 130;
+                for (Series ss : series) {
+                    if (ss.fill) continue;
+                    double vv = (ss.vals != null && touchIdx < ss.vals.length) ? ss.vals[touchIdx] : Double.NaN;
+                    String rowTxt = ss.label + "  余额 \u00a5" + (Double.isNaN(vv) ? "--" : String.format("%.2f", vv));
+                    maxW = Math.max(maxW, pLegend.measureText(rowTxt));
+                }
+                float boxW = maxW + 60;   // 左色点留白 + 右内边距，宽度随文字自适应
                 float boxH = (entries + 1) * rowH + 12;
                 float slot2 = mCw / mN;
                 float cx = mPadL + slot2 * touchIdx + slot2 / 2f;
