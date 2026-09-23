@@ -269,6 +269,7 @@ public class MainActivity extends Activity {
         StringBuilder detail = new StringBuilder();
         double totalCons = 0;
         double totalCharged = 0;
+        int balIdx = 0;   // balance 类平台序号（折线/圆点配色稳定用）
 
         for (int i = 0; i < aks.size(); i++) {
             final KeyStore.ApiKey ak = aks.get(i);
@@ -311,12 +312,13 @@ public class MainActivity extends Activity {
             sum.append(name).append("  消耗 ").append(String.format("%.2f", platCons)).append("\n");
 
             if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
-                // 图例带最新余额，便于直接读数
+                // 图例带最新余额，便于直接读数；颜色按平台序号稳定分配（开关切换不变色）
                 String legendLabel = name + "  ¥" + String.format("%.2f", own[DAYS - 1]);
                 series.add(new UsageChartView.Series(
-                        CHART_PALETTE[series.size() % CHART_PALETTE.length], own, legendLabel, false));
+                        CHART_PALETTE[balIdx % CHART_PALETTE.length], own, legendLabel, false));
                 for (int d = 0; d < DAYS; d++) { totalBal[d] += own[d]; totalCnt[d]++; }
             }
+            balIdx++;
         }
         // 总计线（独立开关，带渐变面积填充）
         if (showTotal && series.size() > 0) {
@@ -335,7 +337,7 @@ public class MainActivity extends Activity {
         TextView rl = (TextView) findViewById(R.id.stats_range_label);
         if (rl != null) rl.setText("近 " + DAYS + " 日");
         TextView rp = (TextView) findViewById(R.id.range_pick);
-        if (rp != null) rp.setText("日期范围：近 " + DAYS + " 天 ▽");
+        if (rp != null) rp.setText("近 " + DAYS + " 天 ▽");
 
         // 每平台充值/消耗明细
         LinearLayout dbox = (LinearLayout) findViewById(R.id.stats_detail);
@@ -357,9 +359,6 @@ public class MainActivity extends Activity {
         if (tt != null) tt.setText("总充值 ¥" + String.format("%.2f", totalCharged)
                 + "    总消耗 ¥" + String.format("%.2f", totalCons));
 
-        TextView st = (TextView) findViewById(R.id.stats_summary);
-        st.setText("采样 6 小时/点 · 按天聚合 · 每条线=一个 API · 点图表某天看明细");
-
         buildPlatformToggles(aks);
     }
 
@@ -370,6 +369,7 @@ public class MainActivity extends Activity {
         final SharedPreferences sp =
                 getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
         java.util.HashMap<String, Integer> seen = new java.util.HashMap<String, Integer>();
+        int balIdx = 0;   // 与 buildStats 同序，保证圆点色=折线色
 
         // 总计开关
         android.widget.Switch totalSw = new android.widget.Switch(this);
@@ -398,12 +398,24 @@ public class MainActivity extends Activity {
             Integer cnt1 = seen.get(name);
             if (cnt1 == null) seen.put(name, 1);
             else { seen.put(name, cnt1 + 1); name = name + " #" + (cnt1 + 1); }
+            // 行：色点 + 名称 + Switch（色点与折线同色）
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(6), dp(6), dp(6), dp(6));
+            View dot = new View(this);
+            dot.setBackgroundColor(CHART_PALETTE[balIdx % CHART_PALETTE.length]);
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(12), dp(12));
+            dlp.rightMargin = dp(10);
+            dot.setLayoutParams(dlp);
+            row.addView(dot);
             android.widget.Switch sw = new android.widget.Switch(this);
             sw.setText(name);
             sw.setTextColor(getColor(R.color.tx));
             sw.setTextSize(13);
             sw.setChecked(ak.draw);
-            sw.setPadding(dp(14), dp(8), dp(14), dp(8));
+            sw.setLayoutParams(new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
                     ak.draw = on;
@@ -411,7 +423,9 @@ public class MainActivity extends Activity {
                     buildStats();
                 }
             });
-            box.addView(sw);
+            row.addView(sw);
+            box.addView(row);
+            balIdx++;
         }
     }
 
