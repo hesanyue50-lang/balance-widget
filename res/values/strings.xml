@@ -10,7 +10,7 @@
     <string name="settings">设置</string>
     <string name="not_configured">还没有配置任何平台的 Key\n点右上角「设置」填入，填哪个显示哪个</string>
     <string name="refreshing">正在查询…</string>
-    <string name="tap_refresh">点「点击刷新」或任意卡片获取最新余额</string>
+    <string name="tap_refresh">点击此栏或任意卡片刷新余额</string>
 
     <string name="cfg_title">设置 · API Key</string>
     <string name="cfg_save">保存并刷新</string>

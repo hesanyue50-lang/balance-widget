@@ -1249,24 +1249,6 @@ public class SettingsActivity extends Activity {
             public void onClick(View v) { showCustomDialog(-1, null); }
         });
 
-        // 统计图表显示开关（存 prefs，统计页读取）
-        final SharedPreferences chartSp =
-                getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
-        int[] chartIds = { R.id.chart_show_bars, R.id.chart_show_grid, R.id.chart_show_legend };
-        final String[] chartKeys = { "chart_show_bars", "chart_show_grid", "chart_show_legend" };
-        for (int i = 0; i < chartIds.length; i++) {
-            Switch sw = (Switch) findViewById(chartIds[i]);
-            if (sw == null) continue;
-            final String key = chartKeys[i];
-            boolean def = !"chart_show_bars".equals(key);   // 消耗柱默认关（设计稿只画折线）
-            sw.setChecked(chartSp.getBoolean(key, def));
-            sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
-                public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
-                    chartSp.edit().putBoolean(key, on).apply();
-                }
-            });
-        }
-
         // 「保存并刷新」按钮已移除：改为修改即保存（间隔走 TextWatcher 即时落盘，密钥走 KeyStore 即时）
 
 

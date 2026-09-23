@@ -177,6 +177,11 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                     long t0 = System.currentTimeMillis();
                     BalanceFetcher.diag(ctx, "=== 小组件刷新开始 ===");
                     BalanceFetcher.Result r = BalanceFetcher.fetch(ctx, FETCH_TIMEOUT_MS);
+                    // Doze/idle 下网络栈可能未就绪导致全 DNS 失败：等 2s 自愈重试一次
+                    if (r.configured > 0 && r.failed == r.configured) {
+                        try { Thread.sleep(2000); } catch (Exception ig) { }
+                        r = BalanceFetcher.fetch(ctx, FETCH_TIMEOUT_MS);
+                    }
 
                     /* 本轮全军覆没就别覆盖缓存了 —— 弱网、Doze 掐断都是常事 */
                     if (WidgetCache.okCount(r) == 0) {
