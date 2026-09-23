@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -69,20 +70,13 @@ public class MainActivity extends Activity {
             public void onClick(View v) { showTab(false); buildStats(); }
         });
 
-        // 统计范围切换
-        int[] rangeIds = { R.id.range_7, R.id.range_30, R.id.range_90, R.id.range_180 };
-        final int[] rangeDays = { 7, 30, 90, 180 };
-        for (int i = 0; i < rangeIds.length; i++) {
-            final int days = rangeDays[i];
-            final int rid = rangeIds[i];
-            findViewById(rid).setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    statsDays = days;
-                    highlightRange(rid);
-                    buildStats();
-                }
-            });
-        }
+        // 日期范围下拉（5/7/14/30/90/180 天）
+        findViewById(R.id.range_pick).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showRangePicker(); }
+        });
+        findViewById(R.id.btn_fix_recharge).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showFixRecharge(); }
+        });
         findViewById(R.id.stats_clean).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 final int[] keep = { 7, 30, 90, 180 };
@@ -111,12 +105,97 @@ public class MainActivity extends Activity {
     }
 
     /** 高亮当前选中的范围按钮 */
-    private void highlightRange(int activeId) {
-        int[] rangeIds = { R.id.range_7, R.id.range_30, R.id.range_90, R.id.range_180 };
-        for (int id : rangeIds) {
-            TextView t = (TextView) findViewById(id);
-            if (t != null) t.setTextColor(getColor(id == activeId ? R.color.accent : R.color.tx));
+    /** 日期范围下拉菜单（设计稿：5/7/14/30/90/180 日） */
+    private void showRangePicker() {
+        final int[] days = { 5, 7, 14, 30, 90, 180 };
+        String[] items = { "近 5 日", "近 7 日", "近 14 日", "近 30 日", "近 90 日", "近 180 日" };
+        int checked = 1;
+        for (int i = 0; i < days.length; i++) if (days[i] == statsDays) checked = i;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("日期范围")
+                .setSingleChoiceItems(items, checked,
+                        new android.content.DialogInterface.OnClickListener() {
+                            public void onClick(android.content.DialogInterface d, int which) {
+                                statsDays = days[which];
+                                d.dismiss();
+                                buildStats();
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 修正充值弹窗：手动修正各平台充值额，防止自动匹配错误 */
+    private void showFixRecharge() {
+        final java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
+        final java.util.List<KeyStore.ApiKey> targets = new java.util.ArrayList<KeyStore.ApiKey>();
+        final java.util.List<EditText> inputs = new java.util.ArrayList<EditText>();
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(12), dp(20), 0);
+        for (int i = 0; i < aks.size(); i++) {
+            KeyStore.ApiKey ak = aks.get(i);
+            if (!ak.isConfigured()) continue;
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
+            if (p == null || !"balance".equals(p.kind)) continue;
+            targets.add(ak);
+            TextView lb = new TextView(this);
+            String nm = p.name + ((ak.label != null && ak.label.length() > 0) ? " · " + ak.label : "");
+            lb.setText(nm + "  充值额（留空=不改）");
+            lb.setTextColor(getColor(R.color.tx2));
+            lb.setTextSize(12);
+            lb.setPadding(0, dp(10), 0, dp(4));
+            panel.addView(lb);
+            EditText et = new EditText(this);
+            et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                    | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            et.setHint("0");
+            et.setTextSize(14);
+            panel.addView(et);
+            inputs.add(et);
         }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("修正充值金额")
+                .setView(panel)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        Ledger lg = Ledger.get(MainActivity.this);
+                        int n = 0;
+                        for (int i = 0; i < targets.size(); i++) {
+                            String s = inputs.get(i).getText().toString().trim();
+                            if (s.length() == 0) continue;
+                            try {
+                                double amt = Double.parseDouble(s);
+                                if (amt > 0) { lg.manualRecharge(MainActivity.this,
+                                        targets.get(i).id, amt); n++; }
+                            } catch (Exception ig) { }
+                        }
+                        android.widget.Toast.makeText(MainActivity.this,
+                                n > 0 ? ("已修正 " + n + " 条充值记录") : "没有修改",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                        buildStats();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 点击图表某天：弹框显示该日各平台余额 */
+    private void showDayDialog(int idx) {
+        if (statsSeries == null || statsLabels == null || idx < 0
+                || idx >= statsLabels.length) return;
+        StringBuilder sb = new StringBuilder();
+        sb.append("日期：").append(statsLabels[idx]).append("\n\n");
+        for (int i = 0; i < statsSeries.size(); i++) {
+            UsageChartView.Series s = statsSeries.get(i);
+            double v = (s.vals != null && idx < s.vals.length) ? s.vals[idx] : 0;
+            sb.append(s.label).append("   余额 ¥").append(String.format("%.2f", v)).append("\n");
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(statsLabels[idx] + " 各平台余额")
+                .setMessage(sb.toString())
+                .setPositiveButton("关闭", null)
+                .show();
     }
 
     /** 切换 API / 统计 两个栏目 */
@@ -145,6 +224,9 @@ public class MainActivity extends Activity {
 
     /** 当前统计范围天数（默认 7 天，可切换 30/90/180） */
     private int statsDays = 7;
+    /** 当前图表序列与日期标签（供点击某天弹框用） */
+    private java.util.List<UsageChartView.Series> statsSeries;
+    private String[] statsLabels;
 
     /**
      * 构建用量统计页：按当前范围（默认 7 天，可切换 30/90/180）按天聚合消耗（柱）与总余额（线）。
@@ -184,7 +266,9 @@ public class MainActivity extends Activity {
         double[] totalBal = new double[DAYS];
         int[] totalCnt = new int[DAYS];
         StringBuilder sum = new StringBuilder();
+        StringBuilder detail = new StringBuilder();
         double totalCons = 0;
+        double totalCharged = 0;
 
         for (int i = 0; i < aks.size(); i++) {
             final KeyStore.ApiKey ak = aks.get(i);
@@ -207,6 +291,7 @@ public class MainActivity extends Activity {
             double[] own = new double[DAYS];
             int[] cnt = new int[DAYS];
             double platCons = 0;
+            double platCharged = 0;
             for (int j = 0; j < pts.size(); j++) {
                 Ledger.Point pt = pts.get(j);
                 int idx = DAYS - 1 - (int) ((now - pt.ts) / 86400000L);
@@ -214,16 +299,22 @@ public class MainActivity extends Activity {
                 own[idx] = pt.balance * mul; cnt[idx]++;
                 consDay[idx] += pt.consumed * mul;
                 platCons += pt.consumed * mul;
+                platCharged += pt.charged * mul;
             }
             if (pts.size() < 2) continue;                        // 数据太少不画线
             // 前向填充：当天无快照沿用前一天，避免断线掉到 0
             for (int d = 0; d < DAYS; d++) if (cnt[d] == 0) own[d] = (d > 0 ? own[d - 1] : 0);
             totalCons += platCons;
+            totalCharged += platCharged;
+            detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
+                  .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
             sum.append(name).append("  消耗 ").append(String.format("%.2f", platCons)).append("\n");
 
             if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
+                // 图例带最新余额，便于直接读数
+                String legendLabel = name + "  ¥" + String.format("%.2f", own[DAYS - 1]);
                 series.add(new UsageChartView.Series(
-                        CHART_PALETTE[series.size() % CHART_PALETTE.length], own, name, false));
+                        CHART_PALETTE[series.size() % CHART_PALETTE.length], own, legendLabel, false));
                 for (int d = 0; d < DAYS; d++) { totalBal[d] += own[d]; totalCnt[d]++; }
             }
         }
@@ -234,11 +325,40 @@ public class MainActivity extends Activity {
 
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
         chart.setData(series, showBars ? consDay : null, labels, showBars, showGrid, showLegend);
+        statsSeries = series;
+        statsLabels = labels;
+        chart.setOnTapDay(new UsageChartView.OnTapDay() {
+            public void onTap(int dayIndex) { showDayDialog(dayIndex); }
+        });
+
+        // 范围标签 / 下拉按钮文字
+        TextView rl = (TextView) findViewById(R.id.stats_range_label);
+        if (rl != null) rl.setText("近 " + DAYS + " 日");
+        TextView rp = (TextView) findViewById(R.id.range_pick);
+        if (rp != null) rp.setText("日期范围：近 " + DAYS + " 天 ▽");
+
+        // 每平台充值/消耗明细
+        LinearLayout dbox = (LinearLayout) findViewById(R.id.stats_detail);
+        if (dbox != null) {
+            dbox.removeAllViews();
+            String[] lines = detail.toString().split("\n");
+            for (int i = 0; i < lines.length; i++) {
+                if (lines[i].length() == 0) continue;
+                TextView row = new TextView(this);
+                row.setText(lines[i]);
+                row.setTextColor(getColor(R.color.tx2));
+                row.setTextSize(13);
+                row.setPadding(0, dp(4), 0, dp(4));
+                dbox.addView(row);
+            }
+        }
+        // 总充值 / 总消耗
+        TextView tt = (TextView) findViewById(R.id.stats_totals);
+        if (tt != null) tt.setText("总充值 ¥" + String.format("%.2f", totalCharged)
+                + "    总消耗 ¥" + String.format("%.2f", totalCons));
 
         TextView st = (TextView) findViewById(R.id.stats_summary);
-        st.setText("近 " + DAYS + " 天总消耗 " + String.format("%.2f", totalCons)
-                + "（CNY，已扣除充值）\n" + sum.toString()
-                + "\n采样 6 小时/点 · 按天聚合 · 每条线=一个 API");
+        st.setText("采样 6 小时/点 · 按天聚合 · 每条线=一个 API · 点图表某天看明细");
 
         buildPlatformToggles(aks);
     }

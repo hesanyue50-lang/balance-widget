@@ -236,6 +236,18 @@ public class SettingsActivity extends Activity {
         public void run() { renderKeyList(); }
     };
 
+    /** 刷新间隔即时保存任务（修改即保存，无需底部按钮） */
+    private final Runnable saveIntervalsTask = new Runnable() {
+        public void run() { saveIntervalsInstant(); }
+    };
+
+    private void saveIntervalsInstant() {
+        int fg = parseMin(eFg, RefreshScheduler.FG_DEFAULT_MIN);
+        int bg = parseMin(eBg, RefreshScheduler.BG_DEFAULT_MIN);
+        RefreshScheduler.setIntervals(this, fg, bg);
+        kickWidget();
+    }
+
     /** 平台名 / 平台 id / 该平台任一 Key 的 label 是否命中搜索关键字 */
     private boolean matches(String q, String name, String plat) {
         if (name != null && name.toLowerCase().contains(q)) return true;
@@ -281,6 +293,81 @@ public class SettingsActivity extends Activity {
             boolean showNone = q.length() > 0 && shown == 0;
             noneView.setVisibility(showNone ? View.VISIBLE : View.GONE);
             if (showNone) noneView.setText("没有匹配「" + searchQuery + "」的平台或 Key");
+        }
+    }
+
+    /** 「隐藏 API」折叠区：每平台两个开关（卡片隐藏 / 统计隐藏） */
+    private void setupHideSection() {
+        final View card = findViewById(R.id.hide_card);
+        final TextView toggle = (TextView) findViewById(R.id.hide_toggle);
+        if (card == null || toggle == null) return;
+        toggle.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                boolean now = card.getVisibility() != View.VISIBLE;
+                card.setVisibility(now ? View.VISIBLE : View.GONE);
+                toggle.setText(now ? "收起" : "展开");
+                if (now) {
+                    buildHideList();
+                    card.setAlpha(0f);
+                    card.setTranslationY(-dp(12));
+                    card.animate().alpha(1f).translationY(0f).setDuration(220).start();
+                }
+            }
+        });
+    }
+
+    private void buildHideList() {
+        LinearLayout box = (LinearLayout) findViewById(R.id.hide_fields);
+        if (box == null) return;
+        box.removeAllViews();
+        List<KeyStore.ApiKey> aks = KeyStore.all(this);
+        for (int i = 0; i < aks.size(); i++) {
+            final KeyStore.ApiKey ak = aks.get(i);
+            if (!ak.isConfigured()) continue;
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
+            String pname = p == null ? ak.platform : p.name;
+            String lb = ak.label == null ? "" : ak.label.trim();
+            String name = (lb.length() > 0 && !"默认".equals(lb)) ? pname + " · " + lb : pname;
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(6), 0, dp(6));
+            TextView nm = new TextView(this);
+            nm.setText(name);
+            nm.setTextColor(getColor(R.color.tx));
+            nm.setTextSize(13);
+            nm.setLayoutParams(new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(nm);
+
+            Switch swCard = new Switch(this);
+            swCard.setText("卡片");
+            swCard.setTextSize(11);
+            swCard.setTextColor(getColor(R.color.tx2));
+            swCard.setChecked(ak.hideCard);
+            swCard.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+                public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
+                    ak.hideCard = on;
+                    KeyStore.update(SettingsActivity.this, ak);
+                    kickWidget();
+                }
+            });
+            row.addView(swCard);
+
+            Switch swStat = new Switch(this);
+            swStat.setText("统计");
+            swStat.setTextSize(11);
+            swStat.setTextColor(getColor(R.color.tx2));
+            swStat.setChecked(!ak.draw);   // 开关语义=「在统计中隐藏」
+            swStat.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+                public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
+                    ak.draw = !on;
+                    KeyStore.update(SettingsActivity.this, ak);
+                }
+            });
+            row.addView(swStat);
+            box.addView(row);
         }
     }
 
@@ -1118,7 +1205,20 @@ public class SettingsActivity extends Activity {
         // 密钥列表改为「展开时才懒加载 + 分片构建 + 一次缓存多次使用」，
         // 进入设置不再同步/延迟全量 inflate，见 setupCollapsibleKeys / ensureKeyBlocks。
         setupCollapsibleKeys();
+        setupHideSection();
         buildSecuritySection();
+
+        // 修改即保存：刷新间隔输入停止 400ms 自动落盘，无需底部「保存」按钮
+        android.text.TextWatcher intervalWatcher = new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+                searchHandler.removeCallbacks(saveIntervalsTask);
+                searchHandler.postDelayed(saveIntervalsTask, 400);
+            }
+            public void afterTextChanged(android.text.Editable s) { }
+        };
+        if (eFg != null) eFg.addTextChangedListener(intervalWatcher);
+        if (eBg != null) eBg.addTextChangedListener(intervalWatcher);
 
         // 搜索窗口：日常收起，点「搜索」展开输入框，输入即过滤平台/Key
         findViewById(R.id.search_toggle).setOnClickListener(new View.OnClickListener() {
@@ -1166,9 +1266,7 @@ public class SettingsActivity extends Activity {
             });
         }
 
-        findViewById(R.id.btn_save).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { doSave(); }
-        });
+        // 「保存并刷新」按钮已移除：改为修改即保存（间隔走 TextWatcher 即时落盘，密钥走 KeyStore 即时）
 
 
         findViewById(R.id.btn_pin).setOnClickListener(new View.OnClickListener() {

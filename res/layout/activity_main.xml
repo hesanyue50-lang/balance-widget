@@ -122,27 +122,15 @@
                     android:orientation="horizontal"
                     android:layout_marginBottom="10dp">
 
-                    <TextView android:id="@+id/range_7" android:layout_width="0dp" android:layout_weight="1"
+                    <TextView android:id="@+id/range_pick" android:layout_width="0dp" android:layout_weight="1"
                         android:layout_height="wrap_content" android:gravity="center"
-                        android:background="@drawable/neu_btn" android:paddingTop="8dp" android:paddingBottom="8dp"
-                        android:text="7天" android:textColor="@color/tx" android:textSize="12sp" />
-                    <TextView android:id="@+id/range_30" android:layout_width="0dp" android:layout_weight="1"
-                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
-                        android:background="@drawable/neu_btn" android:paddingTop="8dp" android:paddingBottom="8dp"
-                        android:text="30天" android:textColor="@color/tx2" android:textSize="12sp" />
-                    <TextView android:id="@+id/range_90" android:layout_width="0dp" android:layout_weight="1"
-                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
-                        android:background="@drawable/neu_btn" android:paddingTop="8dp" android:paddingBottom="8dp"
-                        android:text="90天" android:textColor="@color/tx2" android:textSize="12sp" />
-                    <TextView android:id="@+id/range_180" android:layout_width="0dp" android:layout_weight="1"
-                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
-                        android:background="@drawable/neu_btn" android:paddingTop="8dp" android:paddingBottom="8dp"
-                        android:text="180天" android:textColor="@color/tx2" android:textSize="12sp" />
+                        android:background="@drawable/neu_btn" android:paddingTop="10dp" android:paddingBottom="10dp"
+                        android:text="日期范围：近 7 天 ▽" android:textColor="@color/tx" android:textSize="13sp" />
                     <TextView android:id="@+id/stats_clean" android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" android:layout_marginLeft="6dp" android:gravity="center"
-                        android:background="@drawable/neu_btn" android:paddingLeft="12dp" android:paddingRight="12dp"
-                        android:paddingTop="8dp" android:paddingBottom="8dp"
-                        android:text="清理数据" android:textColor="@color/danger" android:textSize="12sp" />
+                        android:layout_height="wrap_content" android:layout_marginLeft="8dp" android:gravity="center"
+                        android:background="@drawable/neu_btn" android:paddingLeft="16dp" android:paddingRight="16dp"
+                        android:paddingTop="10dp" android:paddingBottom="10dp"
+                        android:text="清理数据" android:textColor="@color/danger" android:textSize="13sp" />
                 </LinearLayout>
 
                 <com.minis.balancewidget.UsageChartView
@@ -173,6 +161,46 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
+
+                <!-- 每平台充值/消耗明细 + 修正充值 -->
+                <TextView
+                    android:id="@+id/stats_range_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="近 7 日"
+                    android:textColor="@color/tx"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/stats_detail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/btn_fix_recharge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/neu_btn"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp"
+                    android:text="修正充值"
+                    android:textColor="@color/tx"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/stats_totals"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textColor="@color/tx"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

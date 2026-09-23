@@ -46,6 +46,7 @@ public final class KeyStore {
         public String accessKeyId = "";     // AccessKeyId（LTAI 开头）
         public String accessKeySecret = ""; // AccessKeySecret
         public String planMode = "";        // 百炼计费模式：balance=余额制 / subscription=订阅制(Token Plan)，空视为 balance
+        public boolean hideCard = false;    // 在 API 卡片/小组件中隐藏（统计由 draw 单独控制）
 
         public boolean isConfigured() {
             return key != null && key.length() > 0;
@@ -168,6 +169,7 @@ public final class KeyStore {
                 k.accessKeyId = KeyVault.dec(o.optString("accessKeyId", ""));
                 k.accessKeySecret = KeyVault.dec(o.optString("accessKeySecret", ""));
                 k.planMode = o.optString("planMode", "balance");
+                k.hideCard = o.optBoolean("hideCard", false);
                 if (k.planMode == null || k.planMode.length() == 0) k.planMode = "balance";
                 out.add(k);
             }
@@ -193,6 +195,7 @@ public final class KeyStore {
                 // 阿里云 AccessKey（新增字段）
                 o.put("accessKeyId", KeyVault.enc(k.accessKeyId));
                 o.put("accessKeySecret", KeyVault.enc(k.accessKeySecret));
+                o.put("hideCard", k.hideCard);
                 o.put("planMode", (k.planMode == null || k.planMode.length() == 0)
                         ? "balance" : k.planMode);
                 arr.put(o);

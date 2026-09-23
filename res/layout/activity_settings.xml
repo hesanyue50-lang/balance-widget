@@ -206,6 +206,58 @@
             </LinearLayout>
 
             <!-- ========== 图表显示（统计页图表元素开关）========== -->
+            <!-- ========== 隐藏 API（默认收起）========== -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginLeft="6dp"
+                android:layout_marginBottom="10dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="隐藏 API"
+                    android:textColor="@color/tx3"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/hide_toggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/neu_btn"
+                    android:gravity="center"
+                    android:minWidth="92dp"
+                    android:paddingLeft="26dp"
+                    android:paddingRight="26dp"
+                    android:paddingTop="17dp"
+                    android:paddingBottom="17dp"
+                    android:text="展开"
+                    android:textColor="@color/accent"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/hide_card"
+                style="@style/SectionCard"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/FieldHint"
+                    android:text="左开关=在 API 卡片/小组件隐藏；右开关=在用量统计隐藏。" />
+
+                <LinearLayout
+                    android:id="@+id/hide_fields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
             <TextView style="@style/SectionTitle" android:text="统计图表显示" />
 
             <LinearLayout style="@style/SectionCard">
@@ -240,20 +292,7 @@
                     android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- ========== 操作 ========== -->
-            <TextView
-                android:id="@+id/btn_save"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:background="@drawable/btn_primary"
-                android:gravity="center"
-                android:paddingTop="24dp"
-                android:paddingBottom="24dp"
-                android:text="@string/cfg_save"
-                android:textColor="@color/accent_tx"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+            <!-- ========== 操作 ==========（「保存并刷新」已移除：修改即保存） -->
 
             <TextView
                 android:id="@+id/btn_pin"
