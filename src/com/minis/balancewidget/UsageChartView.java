@@ -116,7 +116,7 @@ public class UsageChartView extends View {
     protected void onDraw(Canvas cv) {
         super.onDraw(cv);
         int w = getWidth(), h = getHeight();
-        float padL = 70, padR = 16, padT = showLegend ? 46 : 20, padB = 46;
+        float padL = 70, padR = 16, padT = 20, padB = 46;
         float cw = w - padL - padR, ch = h - padT - padB;
         if (cw <= 0 || ch <= 0) return;
         int n = labels != null ? labels.length : 0;
@@ -228,23 +228,42 @@ public class UsageChartView extends View {
             cv.drawText(t, dx, h - 12, pAxis);
         }
 
-        // 图例：消耗柱 + 各折线（大圆点+大字）
+        // 图例：图内右上浮动框（竖排：色点+名称+余额），贴合设计稿
         if (showLegend) {
-            float lx = padL;
-            if (showBars && bars != null) {
-                pBar.setColor(0x558A94A3);
-                cv.drawRoundRect(lx, 14, lx + 20, 34, 5, 5, pBar);
-                pLegend.setColor(0xFFC9D0DA);
-                cv.drawText("消耗", lx + 28, 34, pLegend);
-                lx += 28 + pLegend.measureText("消耗") + 34;
-            }
-            if (series != null) for (Series s : series) {
-                pDot.setColor(s.color);
-                cv.drawCircle(lx + 10, 24, 10, pDot);
-                pLegend.setColor(0xFFC9D0DA);
-                cv.drawText(s.label, lx + 28, 34, pLegend);
-                lx += 28 + pLegend.measureText(s.label) + 34;
-                if (lx > w - 90) break;
+            int entries = (showBars && bars != null ? 1 : 0) + (series == null ? 0 : series.size());
+            if (entries > 0) {
+                float rowH = 34f;
+                float maxW = 0;
+                if (showBars && bars != null) maxW = Math.max(maxW, pLegend.measureText("消耗"));
+                if (series != null) for (Series s : series)
+                    maxW = Math.max(maxW, pLegend.measureText(s.label));
+                float boxW = maxW + 46;
+                float boxH = entries * rowH + 14;
+                float bx = w - padR - boxW;
+                float by = 6;
+                Paint boxp = new Paint(Paint.ANTI_ALIAS_FLAG);
+                boxp.setStyle(Paint.Style.FILL);
+                boxp.setColor(0xCC1F2733);
+                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 10, 10, boxp);
+                boxp.setStyle(Paint.Style.STROKE);
+                boxp.setStrokeWidth(1.5f);
+                boxp.setColor(0x55FFFFFF);
+                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 10, 10, boxp);
+                float ry = by + 10 + rowH / 2;
+                if (showBars && bars != null) {
+                    pBar.setColor(0x888A94A3);
+                    cv.drawRoundRect(bx + 12, ry - 9, bx + 28, ry + 7, 4, 4, pBar);
+                    pLegend.setColor(0xFFE3E8EE);
+                    cv.drawText("消耗", bx + 36, ry + 9, pLegend);
+                    ry += rowH;
+                }
+                if (series != null) for (Series s : series) {
+                    pDot.setColor(s.color);
+                    cv.drawCircle(bx + 20, ry, 8, pDot);
+                    pLegend.setColor(0xFFE3E8EE);
+                    cv.drawText(s.label, bx + 36, ry + 9, pLegend);
+                    ry += rowH;
+                }
             }
         }
     }

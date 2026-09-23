@@ -114,55 +114,37 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- 统计范围选择 + 清理旧数据 -->
-                <LinearLayout
-                    android:id="@+id/stats_range_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="10dp">
-
-                    <TextView android:id="@+id/range_pick" android:layout_width="0dp" android:layout_weight="1"
-                        android:layout_height="wrap_content" android:gravity="center"
-                        android:background="@drawable/neu_btn" android:paddingTop="10dp" android:paddingBottom="10dp"
-                        android:text="日期范围：近 7 天 ▽" android:textColor="@color/tx" android:textSize="13sp" />
-                    <TextView android:id="@+id/stats_clean" android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" android:layout_marginLeft="8dp" android:gravity="center"
-                        android:background="@drawable/neu_btn" android:paddingLeft="16dp" android:paddingRight="16dp"
-                        android:paddingTop="10dp" android:paddingBottom="10dp"
-                        android:text="清理数据" android:textColor="@color/danger" android:textSize="13sp" />
-                </LinearLayout>
-
+                <!-- ① 图表（图例为图内右上浮动框） -->
                 <com.minis.balancewidget.UsageChartView
                     android:id="@+id/usage_chart"
                     android:layout_width="match_parent"
-                    android:layout_height="240dp"
+                    android:layout_height="250dp"
                     android:background="@drawable/stats_card_bg"
                     android:padding="10dp" />
 
-                <TextView
-                    android:id="@+id/stats_summary"
+                <!-- ② 日期范围下拉（贴近 X 轴行末） -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:textColor="@color/tx2"
-                    android:textSize="12sp" />
+                    android:orientation="horizontal"
+                    android:gravity="right"
+                    android:layout_marginTop="4dp">
+                    <TextView android:id="@+id/range_pick" android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" android:gravity="center"
+                        android:background="@drawable/neu_btn" android:paddingLeft="14dp" android:paddingRight="14dp"
+                        android:paddingTop="8dp" android:paddingBottom="8dp"
+                        android:text="日期 ▽" android:textColor="@color/tx" android:textSize="12sp" />
+                </LinearLayout>
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="图表显示开关（隐藏无用/免费/无法查询的平台）"
-                    android:textColor="@color/tx3"
-                    android:textSize="11sp" />
-
+                <!-- ③ 平台数据源开关（圆点+名称+Switch） -->
                 <LinearLayout
                     android:id="@+id/stats_platforms"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical" />
+                    android:orientation="vertical"
+                    android:layout_marginTop="14dp" />
 
-                <!-- 每平台充值/消耗明细 + 修正充值 -->
+                <!-- ④ 近 N 日 -->
                 <TextView
                     android:id="@+id/stats_range_label"
                     android:layout_width="match_parent"
@@ -170,9 +152,10 @@
                     android:layout_marginTop="16dp"
                     android:text="近 7 日"
                     android:textColor="@color/tx"
-                    android:textSize="14sp"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
+                <!-- ⑤ 每平台充值/消耗明细 -->
                 <LinearLayout
                     android:id="@+id/stats_detail"
                     android:layout_width="match_parent"
@@ -193,14 +176,22 @@
                     android:textColor="@color/tx"
                     android:textSize="12sp" />
 
+                <!-- ⑥ 总充值 / 总消耗 -->
                 <TextView
                     android:id="@+id/stats_totals"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="12dp"
                     android:textColor="@color/tx"
-                    android:textSize="14sp"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
+
+                <!-- ⑦ 清理数据（红） -->
+                <TextView android:id="@+id/stats_clean" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:layout_marginTop="12dp" android:gravity="center"
+                    android:background="@drawable/neu_btn" android:paddingLeft="18dp" android:paddingRight="18dp"
+                    android:paddingTop="10dp" android:paddingBottom="10dp"
+                    android:text="清理数据" android:textColor="@color/danger" android:textSize="13sp" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
