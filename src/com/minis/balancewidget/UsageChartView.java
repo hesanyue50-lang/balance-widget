@@ -107,6 +107,8 @@ public class UsageChartView extends View {
             if (s.vals != null) for (double v : s.vals)
                 if (!Double.isNaN(v) && v > maxLine) maxLine = v;
         if (bars != null) for (double v : bars) if (v > maxBar) maxBar = v;
+        // 顶部留 18% 余量：折线整体压低收敛，不顶满边框
+        maxLine *= 1.18;
         // 渐进揭示动画：从左到右画出数据层
         progress = 0f;
         android.animation.ValueAnimator va = android.animation.ValueAnimator.ofFloat(0f, 1f);
@@ -125,7 +127,11 @@ public class UsageChartView extends View {
     protected void onDraw(Canvas cv) {
         super.onDraw(cv);
         int w = getWidth(), h = getHeight();
-        float padL = 92, padR = 42, padT = 54, padB = 64;
+        // 数据绘制区基于 View 的 padding 计算，保证全部收敛在卡片边框（内容区）内
+        float padL = getPaddingLeft() + 46;   // 左侧留给 ¥ 刻度
+        float padR = getPaddingRight() + 14;
+        float padT = getPaddingTop() + 26;
+        float padB = getPaddingBottom() + 34;  // 底部留给日期标签
         float cw = w - padL - padR, ch = h - padT - padB;
         if (cw <= 0 || ch <= 0) return;
         int n = labels != null ? labels.length : 0;
@@ -140,7 +146,7 @@ public class UsageChartView extends View {
             float y = padT + ch * g / 4f;
             if (showGrid) cv.drawLine(padL, y, w - padR, y, pGrid);
             double val = maxLine * (4 - g) / 4f;
-            cv.drawText("¥" + fmt(val), 4, y + 8, pAxis);
+            cv.drawText("¥" + fmt(val), getPaddingLeft() + 4, y + 8, pAxis);
         }
 
         float slot = cw / n;
@@ -224,7 +230,7 @@ public class UsageChartView extends View {
             String t = labels[i];
             float tw = pAxis.measureText(t);
             float dx = Math.min(Math.max(x - tw / 2, padL - 20), w - padR - tw);
-            cv.drawText(t, dx, h - 14, pAxis);
+            cv.drawText(t, dx, h - getPaddingBottom() - 12, pAxis);
         }
 
         // 按住时在该日位置显示浮动框：各 API 当日余额（松开隐藏）

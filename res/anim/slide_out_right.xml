@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromXDelta="0" android:toXDelta="12%p" android:duration="200"
+    android:interpolator="@android:anim/accelerate_interpolator" />

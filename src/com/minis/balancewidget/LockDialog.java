@@ -97,11 +97,14 @@ public final class LockDialog {
     private static TextView button(Context ctx, String s, boolean primary, View.OnClickListener l) {
         TextView b = new TextView(ctx);
         b.setText(s);
-        b.setTextColor(ctx.getColor(primary ? R.color.accent_tx : R.color.tx2));
-        b.setTextSize(14);
+        b.setTextColor(ctx.getColor(primary ? R.color.accent_tx : R.color.tx));
+        b.setTextSize(13);
         b.setGravity(Gravity.CENTER);
-        b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.card_bg);
-        b.setPadding(0, dp(ctx, 22), 0, dp(ctx, 22));
+        // 等大统一：固定最小高度 + 统一描边背景（主按钮保留主色）
+        b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.mini_btn_border);
+        b.setMinHeight(dp(ctx, 44));
+        b.setPadding(dp(ctx, 12), dp(ctx, 8), dp(ctx, 12), dp(ctx, 8));
+        b.setSingleLine(true);   // 自适应长度不转行
         b.setOnClickListener(l);
         return b;
     }
@@ -148,6 +151,21 @@ public final class LockDialog {
             if (w != null) {
                 int target = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.9f);
                 w.setLayout(target, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+                // 非线性展开：缩放回弹(overshoot) + 淡入
+                final View decor = w.getDecorView();
+                decor.post(new Runnable() {
+                    public void run() {
+                        decor.setPivotX(decor.getWidth() / 2f);
+                        decor.setPivotY(decor.getHeight() / 2f);
+                        decor.setScaleX(0.86f);
+                        decor.setScaleY(0.86f);
+                        decor.setAlpha(0f);
+                        decor.animate().scaleX(1f).scaleY(1f).alpha(1f)
+                                .setDuration(260)
+                                .setInterpolator(new android.view.animation.OvershootInterpolator(1.2f))
+                                .start();
+                    }
+                });
             }
         } catch (Throwable ignored) { }
     }
@@ -231,7 +249,7 @@ public final class LockDialog {
                 }
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             if (i > 0) lp.leftMargin = dp(ctx, 8);
             btn.setLayoutParams(lp);
             row.addView(btn);

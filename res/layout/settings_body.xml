@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 设置主体（设置页与主界面第三面板共用，保证同层） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="28dp">
+
+            <!-- ========== 刷新频率 ========== -->
+            <TextView style="@style/SectionTitle" android:text="@string/sec_refresh" />
+
+            <LinearLayout style="@style/SectionCard">
+
+                <LinearLayout style="@style/FieldRow">
+                    <TextView style="@style/FieldLabel"
+                        android:text="@string/refresh_foreground" />
+                    <EditText
+                        android:id="@+id/e_fg_min"
+                        style="@style/FieldInput"
+                        android:inputType="number"
+                        android:hint="5" />
+                    <TextView style="@style/FieldUnit" android:text="@string/unit_minute" />
+                </LinearLayout>
+
+                <TextView style="@style/FieldHint"
+                    android:text="@string/hint_refresh_fg" />
+
+                <LinearLayout style="@style/FieldRow" android:layout_marginTop="14dp">
+                    <TextView style="@style/FieldLabel"
+                        android:text="@string/refresh_background" />
+                    <EditText
+                        android:id="@+id/e_bg_min"
+                        style="@style/FieldInput"
+                        android:inputType="number"
+                        android:hint="20" />
+                    <TextView style="@style/FieldUnit" android:text="@string/unit_minute" />
+                </LinearLayout>
+
+                <TextView style="@style/FieldHint"
+                    android:text="@string/hint_refresh_bg" />
+
+                <TextView
+                    android:id="@+id/btn_autostart"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="14dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:text="@string/autostart_entry"
+                    android:textColor="@color/accent"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- ========== API 密钥与平台（可折叠：平台太多，全展开太长）========== -->
+            <!-- 注意：不要给标题套 SectionTitle 样式 —— 它自带 marginTop=24dp，
+                 而旁边的按钮没有，两者就会错位（标题被挤下去）。margin 统一放容器上。 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginLeft="6dp"
+                android:layout_marginBottom="10dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/sec_keys"
+                    android:textColor="@color/tx3"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/key_toggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:minWidth="64dp"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="展开"
+                    android:textColor="@color/accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/key_card"
+                style="@style/SectionCard">
+
+                <!-- 搜索窗口（日常收起，点击「搜索」展开输入框，过滤平台/Key） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/search_toggle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/card_bg"
+                        android:gravity="center"
+                        android:paddingLeft="18dp"
+                        android:paddingRight="18dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:text="🔍 搜索平台 / Key"
+                        android:textColor="@color/tx"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/search_box"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/card_bg"
+                        android:hint="输入平台名或 Key 关键字，按回车过滤…"
+                        android:inputType="text"
+                        android:imeOptions="actionSearch"
+                        android:maxLines="1"
+                        android:paddingLeft="14dp"
+                        android:paddingRight="14dp"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:textColor="@color/tx"
+                        android:textColorHint="@color/tx3"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- 通知未开启时的可点击提示（点击即引导开启） -->
+                <TextView
+                    android:id="@+id/notify_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/card_bg"
+                    android:gravity="center"
+                    android:paddingLeft="22dp"
+                    android:paddingRight="22dp"
+                    android:paddingTop="20dp"
+                    android:paddingBottom="20dp"
+                    android:text="@string/notify_off_hint"
+                    android:textColor="@color/warn"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/key_fields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- 自定义平台（并入同一分组） -->
+                <TextView
+                    style="@style/FieldHint"
+                    android:layout_marginTop="22dp"
+                    android:text="@string/custom_note" />
+
+                <LinearLayout
+                    android:id="@+id/custom_fields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/btn_add_custom"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:text="@string/custom_add"
+                    android:textColor="@color/accent"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- ========== 图表显示（统计页图表元素开关）========== -->
+            <!-- ========== 隐藏 API（默认收起）========== -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginLeft="6dp"
+                android:layout_marginBottom="10dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="隐藏 API"
+                    android:textColor="@color/tx3"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/hide_toggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:minWidth="64dp"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="展开"
+                    android:textColor="@color/accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/hide_card"
+                style="@style/SectionCard"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/FieldHint"
+                    android:text="左开关=在 API 卡片/小组件隐藏；右开关=在用量统计隐藏。" />
+
+                <LinearLayout
+                    android:id="@+id/hide_fields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            
+            <!-- ========== 操作 ==========（「保存并刷新」已移除：修改即保存） -->
+
+            <TextView
+                android:id="@+id/btn_pin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:text="@string/cfg_pin"
+                android:textColor="@color/tx"
+                android:textSize="13sp" />
+
+            <TextView style="@style/FieldHint"
+                android:layout_marginTop="16dp"
+                android:text="@string/cfg_note" />
+
+            <TextView
+                android:id="@+id/app_version"
+                style="@style/FieldHint"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="" />
+        </LinearLayout>

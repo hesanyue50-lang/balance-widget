@@ -58,10 +58,7 @@ public class MainActivity extends Activity {
 
         findViewById(R.id.total_card).setOnClickListener(refreshClick);
         findViewById(R.id.btn_settings).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, SettingsActivity.class));
-                overridePendingTransition(R.anim.slide_in_down, R.anim.fade_out);
-            }
+            public void onClick(View v) { showPanel(2); }
         });
         findViewById(R.id.tab_api).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showTab(true); }
@@ -85,6 +82,15 @@ public class MainActivity extends Activity {
             bsp.edit().putLong("last_refresh_ts", System.currentTimeMillis()).apply();
             refresh(true);
         }
+        // 从设置页同级导航滑回：切到指定 Tab
+        String gt0 = getIntent().getStringExtra("goto_tab");
+        if ("stats".equals(gt0)) showPanel(1);
+        else showPanel(0);   // 初次进入：定位指示块到 API 余额格
+
+        // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
+        findViewById(R.id.settings_container).postDelayed(new Runnable() {
+            public void run() { buildSettingsPanel(); }
+        }, 900);
         findViewById(R.id.stats_clean).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 final int[] keep = { 7, 30, 90, 180 };
@@ -207,29 +213,85 @@ public class MainActivity extends Activity {
     }
 
     /** 切换 API / 统计 两个栏目 */
-    private void showTab(boolean api) {
-        findViewById(R.id.total_card).setVisibility(api ? View.VISIBLE : View.GONE);
-        findViewById(R.id.cards).setVisibility(api ? View.VISIBLE : View.GONE);
-        findViewById(R.id.stats_container).setVisibility(api ? View.GONE : View.VISIBLE);
-        // 切换淡入+上浮动画
-        final View shown = api ? findViewById(R.id.cards) : findViewById(R.id.stats_container);
-        shown.setAlpha(0f);
-        shown.setTranslationY(-dp(26));
-        shown.animate().alpha(1f).translationY(0f).setDuration(260).start();
-        if (api) {
-            View tc = findViewById(R.id.total_card);
-            tc.setAlpha(0f);
-            tc.animate().alpha(1f).setDuration(220).start();
+    /** 保留旧签名：true=API 面板, false=统计面板 */
+    /** 设置导航选中项背景（选中=浅底，未选中=透明） */
+    private void setSegBg(int idx) {
+        int[] ids = { R.id.tab_api, R.id.tab_stats, R.id.btn_settings };
+        for (int i = 0; i < ids.length; i++) {
+            TextView t = (TextView) findViewById(ids[i]);
+            if (t != null) t.setBackground(i == idx
+                    ? getResources().getDrawable(R.drawable.seg_sel) : null);
         }
+    }
+
+    private void showTab(boolean api) { showPanel(api ? 0 : 1); }
+
+    /** 面板序号（0=API 余额, 1=用量统计, 2=设置） */
+    private int curPanel = 0;
+
+    /** 三个面板同页统一平移切换（API余额 / 用量统计 / 设置 动画完全一致） */
+    private void showPanel(int idx) {
+        final View total = findViewById(R.id.total_card);
+        final View cards = findViewById(R.id.cards);
+        final View stats = findViewById(R.id.stats_container);
+        final View set = findViewById(R.id.settings_container);
+
+        total.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
+        cards.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
+        stats.setVisibility(idx == 1 ? View.VISIBLE : View.GONE);
+        set.setVisibility(idx == 2 ? View.VISIBLE : View.GONE);
+
+        if (idx == 2) buildSettingsPanel();   // 自守卫，只建一次
+        // 切换面板时滚动回顶部：否则沿用上一面板的滚动位置，内容会顶到导航条下（看起来像圆角缺失）
+        final android.widget.ScrollView sc = (android.widget.ScrollView) findViewById(R.id.main_scroll);
+        if (sc != null) sc.post(new Runnable() { public void run() { sc.scrollTo(0, 0); } });
+
+        // 平移动画：按切换方向从两侧滑入（与 Tab 切换同一语言）
+        final int dir = (idx == curPanel) ? 0 : (idx > curPanel ? 1 : -1);
+        curPanel = idx;
+        if (dir != 0) {
+            final float w = findViewById(R.id.main_root).getWidth() * 0.35f;
+            final float fromX = dir * w;
+            View[] vs = (idx == 0) ? new View[] { total, cards } : new View[] { idx == 1 ? stats : set };
+            for (int i = 0; i < vs.length; i++) {
+                if (vs[i] == null) continue;
+                vs[i].setTranslationX(fromX);
+                vs[i].animate().translationX(0f).setDuration(240).start();
+            }
+        }
+
+        // 文字选中态
         TextView ta = (TextView) findViewById(R.id.tab_api);
         TextView ts = (TextView) findViewById(R.id.tab_stats);
-        ta.setTextColor(getColor(api ? R.color.accent : R.color.tx2));
-        ts.setTextColor(getColor(api ? R.color.tx2 : R.color.accent));
-        ta.setBackground(api ? getResources().getDrawable(R.drawable.seg_sel) : null);
-        ts.setBackground(api ? null : getResources().getDrawable(R.drawable.seg_sel));
-        // 注意：三元 int:null 会装箱 Integer，api=false 时拆箱 null 直接 NPE 崩溃
-        ta.setTypeface(null, api ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-        ts.setTypeface(null, api ? android.graphics.Typeface.NORMAL : android.graphics.Typeface.BOLD);
+        TextView tg = (TextView) findViewById(R.id.btn_settings);
+        ta.setTextColor(getColor(idx == 0 ? R.color.accent : R.color.tx2));
+        ts.setTextColor(getColor(idx == 1 ? R.color.accent : R.color.tx2));
+        tg.setTextColor(getColor(idx == 2 ? R.color.accent : R.color.tx2));
+        ta.setTypeface(null, idx == 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        ts.setTypeface(null, idx == 1 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        tg.setTypeface(null, idx == 2 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        setSegBg(idx);
+    }
+
+
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        String gt = i.getStringExtra("goto_tab");
+        if ("stats".equals(gt)) showTab(false);
+        else if ("api".equals(gt)) showTab(true);
+    }
+
+    /** 设置面板是否已构建（避免重复绑定） */
+    private boolean settingsPanelBuilt = false;
+
+    /** 设置面板：直接绑定与设置页相同的设置主体（同层，无跳转） */
+    private void buildSettingsPanel() {
+        if (settingsPanelBuilt) return;
+        settingsPanelBuilt = true;
+        new SettingsBinder(this, findViewById(R.id.settings_container)).bind();
     }
 
     /** 当前统计范围天数（默认 7 天，可切换 30/90/180） */
