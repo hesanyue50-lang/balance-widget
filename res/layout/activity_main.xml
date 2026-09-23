@@ -25,43 +25,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 顶部 Tab：API / 统计 -->
-            <LinearLayout
-                android:id="@+id/tab_row"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="12dp">
-
-                <TextView
-                    android:id="@+id/tab_api"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:background="@drawable/card_bg"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="12dp"
-                    android:text="API 余额"
-                    android:textColor="@color/tx"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tab_stats"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginLeft="8dp"
-                    android:gravity="center"
-                    android:background="@drawable/card_bg"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="12dp"
-                    android:text="用量统计"
-                    android:textColor="@color/tx2"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
             <!-- 总资产 -->
             <LinearLayout
                 android:id="@+id/total_card"
@@ -114,27 +77,28 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- ① 图表（图例为图内右上浮动框） -->
-                <com.minis.balancewidget.UsageChartView
-                    android:id="@+id/usage_chart"
+                <!-- ① 图表 + 日期颗粒度（叠在 X 轴行右端，与日期轴同一行） -->
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="250dp"
-                    android:background="@drawable/stats_card_bg"
-                    android:padding="10dp" />
+                    android:layout_height="wrap_content">
 
-                <!-- ② 日期范围下拉（贴近 X 轴行末） -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="right"
-                    android:layout_marginTop="4dp">
+                    <com.minis.balancewidget.UsageChartView
+                        android:id="@+id/usage_chart"
+                        android:layout_width="match_parent"
+                        android:layout_height="250dp"
+                        android:background="@drawable/card_bg"
+                        android:padding="10dp" />
+
                     <TextView android:id="@+id/range_pick" android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" android:gravity="center"
-                        android:background="@drawable/card_btn" android:paddingLeft="16dp" android:paddingRight="16dp"
-                        android:paddingTop="6dp" android:paddingBottom="6dp"
-                        android:text="日期 ▽" android:textColor="@color/tx" android:textSize="12sp" />
-                </LinearLayout>
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|right"
+                        android:layout_marginRight="6dp"
+                        android:layout_marginBottom="10dp"
+                        android:gravity="center"
+                        android:background="@drawable/card_btn" android:paddingLeft="12dp" android:paddingRight="12dp"
+                        android:paddingTop="4dp" android:paddingBottom="4dp"
+                        android:text="近 7 天 ▽" android:textColor="@color/tx" android:textSize="11sp" />
+                </FrameLayout>
 
                 <!-- ③ 平台数据源开关（圆点+名称+Switch） -->
                 <LinearLayout
@@ -142,14 +106,22 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:layout_marginTop="14dp" />
+                    android:layout_marginTop="6dp" />
+
+                <!-- API 列表 与 余额总结 之间的分割线 -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="4dp"
+                    android:background="@color/neu_dark" />
 
                 <!-- ④ 近 N 日 -->
                 <TextView
                     android:id="@+id/stats_range_label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="10dp"
                     android:text="近 7 日"
                     android:textColor="@color/tx"
                     android:textSize="15sp"
@@ -166,8 +138,9 @@
                     android:id="@+id/btn_fix_recharge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="right"
                     android:layout_marginTop="10dp"
-                    android:background="@drawable/card_btn"
+                    android:background="@drawable/card_bg"
                     android:paddingLeft="16dp"
                     android:paddingRight="16dp"
                     android:paddingTop="9dp"
@@ -188,9 +161,10 @@
 
                 <!-- ⑦ 清理数据（红） -->
                 <TextView android:id="@+id/stats_clean" android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" android:layout_marginTop="12dp"
+                    android:layout_height="wrap_content" android:layout_gravity="right"
+                    android:layout_marginTop="12dp"
                     android:layout_marginBottom="28dp" android:gravity="center"
-                    android:background="@drawable/card_btn" android:paddingLeft="18dp" android:paddingRight="18dp"
+                    android:background="@drawable/card_bg" android:paddingLeft="18dp" android:paddingRight="18dp"
                     android:paddingTop="10dp" android:paddingBottom="10dp"
                     android:text="清理数据" android:textColor="@color/danger" android:textSize="13sp" />
             </LinearLayout>
@@ -217,34 +191,53 @@
             android:layout_weight="1"
             android:text="@string/main_title"
             android:textColor="@color/tx"
-            android:textSize="19sp"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
+        <!-- Tab 与标题同区 -->
         <TextView
-            android:id="@+id/btn_refresh"
+            android:id="@+id/tab_api"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/card_bg"
-            android:paddingLeft="22dp"
-            android:paddingRight="22dp"
-            android:paddingTop="16dp"
-            android:paddingBottom="16dp"
-            android:text="@string/refresh"
+            android:gravity="center"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="API 余额"
             android:textColor="@color/tx"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
 
+        <TextView
+            android:id="@+id/tab_stats"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:background="@drawable/card_bg"
+            android:gravity="center"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="用量统计"
+            android:textColor="@color/tx2"
+            android:textSize="12sp" />
+
+        <!-- 设置=齿轮小按钮，最右 -->
         <TextView
             android:id="@+id/btn_settings"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginLeft="8dp"
             android:background="@drawable/card_bg"
-            android:paddingLeft="22dp"
-            android:paddingRight="22dp"
-            android:paddingTop="16dp"
-            android:paddingBottom="16dp"
-            android:text="@string/settings"
+            android:gravity="center"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="⚙"
             android:textColor="@color/tx2"
-            android:textSize="13sp" />
+            android:textSize="16sp" />
     </LinearLayout>
 </FrameLayout>

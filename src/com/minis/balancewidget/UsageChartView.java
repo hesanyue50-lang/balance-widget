@@ -35,13 +35,21 @@ public class UsageChartView extends View {
     public void setOnTapDay(OnTapDay l) { tapListener = l; }
     private float mPadL, mCw; private int mN;
 
+    private int touchIdx = -1;   // 按住时高亮的日期下标，-1=未按住
+
     @Override
     public boolean onTouchEvent(android.view.MotionEvent ev) {
-        if (ev.getAction() == android.view.MotionEvent.ACTION_UP
-                && tapListener != null && mN > 0 && mCw > 0) {
-            float slot = mCw / mN;
-            int idx = (int) ((ev.getX() - mPadL) / slot);
-            if (idx >= 0 && idx < mN) { tapListener.onTap(idx); return true; }
+        if (mN <= 0 || mCw <= 0) return super.onTouchEvent(ev);
+        float slot = mCw / mN;
+        int idx = (int) ((ev.getX() - mPadL) / slot);
+        if (idx < 0) idx = 0;
+        if (idx >= mN) idx = mN - 1;
+        int a = ev.getAction();
+        if (a == android.view.MotionEvent.ACTION_DOWN || a == android.view.MotionEvent.ACTION_MOVE) {
+            touchIdx = idx; invalidate(); return true;
+        }
+        if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) {
+            touchIdx = -1; invalidate(); return true;
         }
         return super.onTouchEvent(ev);
     }
@@ -117,7 +125,7 @@ public class UsageChartView extends View {
     protected void onDraw(Canvas cv) {
         super.onDraw(cv);
         int w = getWidth(), h = getHeight();
-        float padL = 70, padR = 16, padT = 20, padB = 46;
+        float padL = 70, padR = 22, padT = 34, padB = 88;
         float cw = w - padL - padR, ch = h - padT - padB;
         if (cw <= 0 || ch <= 0) return;
         int n = labels != null ? labels.length : 0;
@@ -201,8 +209,8 @@ public class UsageChartView extends View {
                     if (Double.isNaN(s.vals[i])) continue;
                     float x = padL + slot * i + slot / 2f;
                     float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
-                    cv.drawCircle(x, y, 6f, pDot);
-                    cv.drawCircle(x, y, 2.5f, pDotIn);
+                    cv.drawCircle(x, y, 9f, pDot);
+                    cv.drawCircle(x, y, 3.5f, pDotIn);
                 }
             }
         }
@@ -216,39 +224,47 @@ public class UsageChartView extends View {
             String t = labels[i];
             float tw = pAxis.measureText(t);
             float dx = Math.min(Math.max(x - tw / 2, padL - 20), w - padR - tw);
-            cv.drawText(t, dx, h - 12, pAxis);
+            cv.drawText(t, dx, h - 56, pAxis);
         }
 
-        // 图例：图内右上浅色浮动框，只列各 API（不含消耗/总计），贴合设计稿
-        if (showLegend && series != null) {
+        // 按住时在该日位置显示浮动框：各 API 当日余额（松开隐藏）
+        if (touchIdx >= 0 && series != null && labels != null && touchIdx < labels.length) {
             int entries = 0;
-            for (Series s : series) if (!s.fill) entries++;
+            for (Series ss : series) if (!ss.fill) entries++;
             if (entries > 0) {
-                float rowH = 36f;
-                float maxW = 0;
-                for (Series s : series) if (!s.fill)
-                    maxW = Math.max(maxW, pLegend.measureText(s.label));
-                float boxW = maxW + 46;
-                float boxH = entries * rowH + 14;
-                float bx = w - padR - boxW;
-                float by = 6;
-                Paint boxp = new Paint(Paint.ANTI_ALIAS_FLAG);
-                boxp.setStyle(Paint.Style.FILL);
-                boxp.setColor(0xF2FFFFFF);
-                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, boxp);
-                boxp.setStyle(Paint.Style.STROKE);
-                boxp.setStrokeWidth(1.5f);
-                boxp.setColor(0x2A000000);
-                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, boxp);
-                float ry = by + 10 + rowH / 2;
-                for (Series s : series) {
-                    if (s.fill) continue;
-                    pDot.setColor(s.color);
-                    cv.drawCircle(bx + 20, ry, 8, pDot);
+                float rowH = 50f;
+                pLegend.setTextSize(30f);
+                float maxW = pLegend.measureText(labels[touchIdx]);
+                for (Series ss : series) if (!ss.fill)
+                    maxW = Math.max(maxW, pLegend.measureText(ss.label));
+                float boxW = maxW + 130;
+                float boxH = (entries + 1) * rowH + 12;
+                float slot2 = mCw / mN;
+                float cx = mPadL + slot2 * touchIdx + slot2 / 2f;
+                float bx = Math.min(Math.max(cx - boxW / 2, padL), w - padR - boxW);
+                float by = padT + 4;
+                Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG);
+                bp.setStyle(Paint.Style.FILL); bp.setColor(0xF5FFFFFF);
+                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, bp);
+                bp.setStyle(Paint.Style.STROKE); bp.setStrokeWidth(1.5f); bp.setColor(0x2A000000);
+                cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, bp);
+                float ry = by + 8 + rowH / 2;
+                pLegend.setColor(0xFF39424F);
+                cv.drawText(labels[touchIdx], bx + 16, ry + 11, pLegend);
+                ry += rowH;
+                for (Series ss : series) {
+                    if (ss.fill) continue;
+                    double v = (ss.vals != null && touchIdx < ss.vals.length) ? ss.vals[touchIdx] : Double.NaN;
+                    pDot.setColor(ss.color);
+                    cv.drawCircle(bx + 24, ry, 9, pDot);
                     pLegend.setColor(0xFF39424F);
-                    cv.drawText(s.label, bx + 36, ry + 9, pLegend);
+                    cv.drawText(ss.label + "  余额 \u00a5" + (Double.isNaN(v) ? "--" : String.format("%.2f", v)),
+                            bx + 40, ry + 11, pLegend);
                     ry += rowH;
                 }
+                Paint hl = new Paint(Paint.ANTI_ALIAS_FLAG);
+                hl.setStyle(Paint.Style.STROKE); hl.setStrokeWidth(2f); hl.setColor(0x3339424F);
+                cv.drawLine(cx, padT, cx, padT + ch, hl);
             }
         }
     }

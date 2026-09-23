@@ -22,7 +22,6 @@ public class MainActivity extends Activity {
     private LinearLayout cards;
     private TextView tTotal;
     private TextView tSub;
-    private TextView btnRefresh;
     private boolean loading = false;
 
     private final Handler autoHandler = new Handler();
@@ -52,11 +51,11 @@ public class MainActivity extends Activity {
         cards = (LinearLayout) findViewById(R.id.cards);
         tTotal = (TextView) findViewById(R.id.t_total);
         tSub = (TextView) findViewById(R.id.t_sub);
-        btnRefresh = (TextView) findViewById(R.id.btn_refresh);
+        // 刷新按钮已移除：点总余额栏或任意卡片刷新
+        findViewById(R.id.total_card).setOnClickListener(refreshClick);
 
         applyWindowInsets();
 
-        btnRefresh.setOnClickListener(refreshClick);
         findViewById(R.id.total_card).setOnClickListener(refreshClick);
         findViewById(R.id.btn_settings).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -77,6 +76,14 @@ public class MainActivity extends Activity {
         findViewById(R.id.btn_fix_recharge).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showFixRecharge(); }
         });
+
+        // 补数据：距上次刷新 >30 分钟则静默刷一次，保证 Ledger 快照连续（避免无快照日）
+        final SharedPreferences bsp =
+                getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+        if (System.currentTimeMillis() - bsp.getLong("last_refresh_ts", 0) > 30L * 60000) {
+            bsp.edit().putLong("last_refresh_ts", System.currentTimeMillis()).apply();
+            refresh(true);
+        }
         findViewById(R.id.stats_clean).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 final int[] keep = { 7, 30, 90, 180 };
@@ -240,7 +247,9 @@ public class MainActivity extends Activity {
             0xFF4D6BFE, 0xFF22C55E, 0xFFF97316, 0xFF8B5CF6, 0xFF0EA5E9,
             0xFFEC4899, 0xFF14B8A6, 0xFFEAB308, 0xFF6366F1, 0xFF84CC16 };
 
-    private void buildStats() {
+    private void buildStats() { buildStats(true); }
+
+    private void buildStats(boolean rebuildToggles) {
         final int DAYS = statsDays;
         long now = System.currentTimeMillis();
         long from = now - (long) DAYS * 86400000L;
@@ -251,10 +260,10 @@ public class MainActivity extends Activity {
             sp.edit().putBoolean("chart_show_bars", false)
                     .putBoolean("bars_reset_v180", true).apply();
         }
-        boolean showBars = sp.getBoolean("chart_show_bars", false);   // 设计稿图表只画折线，柱默认关
-        boolean showGrid = sp.getBoolean("chart_show_grid", true);
-        boolean showLegend = sp.getBoolean("chart_show_legend", true);
-        boolean showTotal = sp.getBoolean("stats_show_total", true);
+        boolean showBars = false;      // 设计稿只画折线
+        boolean showGrid = true;
+        boolean showLegend = true;     // 触摸浮动框用
+        boolean showTotal = false;     // 总计已移除
 
         String[] labels = new String[DAYS];
         java.util.Calendar cal = java.util.Calendar.getInstance();
@@ -286,7 +295,6 @@ public class MainActivity extends Activity {
             if (!ak.isConfigured()) continue;
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
             String kind = p == null ? "balance" : p.kind;
-            if (!"balance".equals(kind)) continue;              // 非余额类不进图表
             boolean usd = p != null && "USD".equals(p.unit);
             double mul = usd ? rate : 1.0;
             String pname = p == null ? ak.platform : p.name;
@@ -297,6 +305,18 @@ public class MainActivity extends Activity {
             Integer cnt0 = seen.get(name);
             if (cnt0 == null) seen.put(name, 1);
             else { seen.put(name, cnt0 + 1); name = name + " #" + (cnt0 + 1); }
+
+            if (!"balance".equals(kind)) {
+                // 免费/无余额接口的平台：画一条贴 0 的直线并着色，开关有可见效果
+                if (ak.draw) {
+                    double[] zero = new double[DAYS];
+                    int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                    keyColorMap.put(ak.id, Integer.valueOf(zc));
+                    series.add(new UsageChartView.Series(zc, zero, name + "  ¥0.00", false));
+                    balIdx++;
+                }
+                continue;
+            }
 
             java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
             double[] own = new double[DAYS];
@@ -314,6 +334,9 @@ public class MainActivity extends Activity {
                 platCharged += pt.charged * mul;
             }
             if (pts.size() < 2) continue;                        // 数据太少不画线
+            // 无快照天延续上一日（前向填充），首个有数据天之前仍为 NaN
+            for (int d = 0; d < DAYS; d++)
+                if (cnt[d] == 0) own[d] = (d > 0 && !Double.isNaN(own[d - 1])) ? own[d - 1] : Double.NaN;
             totalCons += platCons;
             totalCharged += platCharged;
             detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
@@ -324,7 +347,7 @@ public class MainActivity extends Activity {
                 // 图例余额=最后一个有数据天的值
                 double lastBal = 0;
                 for (int d = DAYS - 1; d >= 0; d--) if (!Double.isNaN(own[d])) { lastBal = own[d]; break; }
-                String legendLabel = name + "  ¥" + String.format("%.2f", lastBal);
+                String legendLabel = name;
                 int lineColor = CHART_PALETTE[balIdx % CHART_PALETTE.length];
                 keyColorMap.put(ak.id, Integer.valueOf(lineColor));
                 series.add(new UsageChartView.Series(lineColor, own, legendLabel, false));
@@ -334,19 +357,10 @@ public class MainActivity extends Activity {
             }
             balIdx++;
         }
-        // 总计线（独立开关，带渐变面积填充）
-        if (showTotal && series.size() > 0) {
-            series.add(new UsageChartView.Series(0xFFFF9800, totalBal, "总计", true));
-        }
-
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
         chart.setData(series, showBars ? consDay : null, labels, showBars, showGrid, showLegend);
         statsSeries = series;
         statsLabels = labels;
-        chart.setOnTapDay(new UsageChartView.OnTapDay() {
-            public void onTap(int dayIndex) { showDayDialog(dayIndex); }
-        });
-
         // 范围标签 / 下拉按钮文字
         TextView rl = (TextView) findViewById(R.id.stats_range_label);
         if (rl != null) rl.setText("近 " + DAYS + " 日");
@@ -373,7 +387,7 @@ public class MainActivity extends Activity {
         if (tt != null) tt.setText("总充值 ¥" + String.format("%.2f", totalCharged)
                 + "    总消耗 ¥" + String.format("%.2f", totalCons));
 
-        buildPlatformToggles(aks);
+        if (rebuildToggles) buildPlatformToggles(aks);
     }
 
     /** 每个 API 一个 Switch 开关数据源；总计单独一个 Switch。切换后重绘图表。 */
@@ -385,22 +399,6 @@ public class MainActivity extends Activity {
         java.util.HashMap<String, Integer> seen = new java.util.HashMap<String, Integer>();
         int balIdx = 0;   // 与 buildStats 同序，保证圆点色=折线色
 
-        // 总计开关
-        android.widget.Switch totalSw = new android.widget.Switch(this);
-        totalSw.setText("总计（所有已启用 API 之和）");
-        totalSw.setTextColor(getColor(R.color.tx));
-        totalSw.setTextSize(13);
-        totalSw.setChecked(sp.getBoolean("stats_show_total", true));
-        totalSw.setTrackTintList(android.content.res.ColorStateList.valueOf(0xFFDCE1E9));
-        totalSw.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFF6E7887));
-        totalSw.setPadding(dp(14), dp(10), dp(14), dp(10));
-        totalSw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
-                sp.edit().putBoolean("stats_show_total", on).apply();
-                buildStats();
-            }
-        });
-        box.addView(totalSw);
 
         for (int i = 0; i < aks.size(); i++) {
             final KeyStore.ApiKey ak = aks.get(i);
@@ -437,15 +435,20 @@ public class MainActivity extends Activity {
             sw.setTextSize(13);
             sw.setChecked(ak.draw);
             // 浅色胶囊开关：浅灰轨道 + 深灰圆点，开启态清晰
-            sw.setTrackTintList(android.content.res.ColorStateList.valueOf(0xFFDCE1E9));
-            sw.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFF6E7887));
+            sw.setTrackTintList(new android.content.res.ColorStateList(
+                    new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
+                    new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
+            sw.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
             sw.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
                     ak.draw = on;
                     KeyStore.update(MainActivity.this, ak);
-                    buildStats();
+                    buildStats(false);   // 只重算图表，不重建开关（保留切换动画）
+                    Integer nc = keyColorMap.get(ak.id);
+                    gd.setColor(on && nc != null ? nc.intValue() : 0xFF9AA3B0);
+                    dot.invalidate();
                 }
             });
             row.addView(sw);
@@ -500,10 +503,6 @@ public class MainActivity extends Activity {
         if (loading) return;
         loading = true;
         if (!silent) {
-            if (btnRefresh != null) {
-                btnRefresh.setText(R.string.refreshing);
-                btnRefresh.setAlpha(0.5f);
-            }
             tSub.setText(R.string.refreshing);
             tSub.setTextColor(getColor(R.color.tx3));
         }
@@ -517,10 +516,6 @@ public class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     public void run() {
                         loading = false;
-                        if (btnRefresh != null) {
-                            btnRefresh.setText(R.string.refresh);
-                            btnRefresh.setAlpha(1f);
-                        }
                         render(r);
                     }
                 });
