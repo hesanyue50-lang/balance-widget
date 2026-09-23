@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 迷你按钮：纯 shape 圆角浅色（无 9-patch 固有内边距，尺寸可控） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="10dp" />
+    <solid android:color="@color/neu_surface" />
+</shape>

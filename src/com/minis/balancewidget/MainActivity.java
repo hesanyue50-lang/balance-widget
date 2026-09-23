@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.btn_settings).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
+                overridePendingTransition(R.anim.slide_in_down, R.anim.fade_out);
             }
         });
         findViewById(R.id.tab_api).setOnClickListener(new View.OnClickListener() {
@@ -211,10 +212,10 @@ public class MainActivity extends Activity {
         findViewById(R.id.cards).setVisibility(api ? View.VISIBLE : View.GONE);
         findViewById(R.id.stats_container).setVisibility(api ? View.GONE : View.VISIBLE);
         // 切换淡入+上浮动画
-        View shown = api ? findViewById(R.id.cards) : findViewById(R.id.stats_container);
+        final View shown = api ? findViewById(R.id.cards) : findViewById(R.id.stats_container);
         shown.setAlpha(0f);
-        shown.setTranslationY(dp(12));
-        shown.animate().alpha(1f).translationY(0f).setDuration(220).start();
+        shown.setTranslationY(-dp(26));
+        shown.animate().alpha(1f).translationY(0f).setDuration(260).start();
         if (api) {
             View tc = findViewById(R.id.total_card);
             tc.setAlpha(0f);
@@ -222,8 +223,10 @@ public class MainActivity extends Activity {
         }
         TextView ta = (TextView) findViewById(R.id.tab_api);
         TextView ts = (TextView) findViewById(R.id.tab_stats);
-        ta.setTextColor(getColor(api ? R.color.accent : R.color.tx));
-        ts.setTextColor(getColor(api ? R.color.tx : R.color.accent));
+        ta.setTextColor(getColor(api ? R.color.accent : R.color.tx2));
+        ts.setTextColor(getColor(api ? R.color.tx2 : R.color.accent));
+        ta.setBackground(api ? getResources().getDrawable(R.drawable.seg_sel) : null);
+        ts.setBackground(api ? null : getResources().getDrawable(R.drawable.seg_sel));
         // 注意：三元 int:null 会装箱 Integer，api=false 时拆箱 null 直接 NPE 崩溃
         ta.setTypeface(null, api ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         ts.setTypeface(null, api ? android.graphics.Typeface.NORMAL : android.graphics.Typeface.BOLD);
@@ -312,7 +315,8 @@ public class MainActivity extends Activity {
                     double[] zero = new double[DAYS];
                     int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
                     keyColorMap.put(ak.id, Integer.valueOf(zc));
-                    series.add(new UsageChartView.Series(zc, zero, name + "  ¥0.00", false));
+                    series.add(new UsageChartView.Series(zc, zero, name, false));
+                    detail.append(name).append("   无数据 · 查看控制台\n");
                     balIdx++;
                 }
                 continue;
@@ -333,14 +337,19 @@ public class MainActivity extends Activity {
                 platCons += pt.consumed * mul;
                 platCharged += pt.charged * mul;
             }
-            if (pts.size() < 2) continue;                        // 数据太少不画线
+            if (pts.size() < 2) {
+                if (ak.draw) detail.append(name).append("   数据积累中 · 暂无快照\n");
+                continue;
+            }
             // 无快照天延续上一日（前向填充），首个有数据天之前仍为 NaN
             for (int d = 0; d < DAYS; d++)
                 if (cnt[d] == 0) own[d] = (d > 0 && !Double.isNaN(own[d - 1])) ? own[d - 1] : Double.NaN;
             totalCons += platCons;
             totalCharged += platCharged;
-            detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
-                  .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
+            if (ak.draw) {   // 明细跟随开关：打开哪个 API 才显示哪个的充值/消耗
+                detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
+                      .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
+            }
             sum.append(name).append("  消耗 ").append(String.format("%.2f", platCons)).append("\n");
 
             if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
