@@ -34,7 +34,13 @@ public class SettingsBinder {
         public void run() { saveIntervals(); }
     };
 
-    public SettingsBinder(Activity a, View r) { this.act = a; this.root = r; }
+    private final Runnable onChanged;
+
+    public SettingsBinder(Activity a, View r) { this(a, r, null); }
+
+    public SettingsBinder(Activity a, View r, Runnable onChanged) {
+        this.act = a; this.root = r; this.onChanged = onChanged;
+    }
 
     private int dp(float v) { return (int) (v * act.getResources().getDisplayMetrics().density + 0.5f); }
     private int color(int id) { return act.getColor(id); }
@@ -450,6 +456,7 @@ public class SettingsBinder {
                     ak.hideCard = on;
                     KeyStore.update(act, ak);
                     kick();
+                    notifyChanged();
                 }
             });
             row.addView(swCard);
@@ -467,6 +474,7 @@ public class SettingsBinder {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
                     ak.draw = !on;
                     KeyStore.update(act, ak);
+                    notifyChanged();
                 }
             });
             row.addView(swStat);
@@ -579,11 +587,7 @@ public class SettingsBinder {
                             new LockDialog.OnPick() {
                                 public void pick(int which) {
                                     if (which == 0) LockDialog.setup(act, null);
-                                    else {
-                                        Lock.clearPassword(act);
-                                        Toast.makeText(act, "已清除密码保护", Toast.LENGTH_SHORT).show();
-                                        btn.setText("设置密码保护");
-                                    }
+                                    else clearWithQuestion(btn);
                                 }
                             });
                 } else {
@@ -595,6 +599,82 @@ public class SettingsBinder {
         });
         box.addView(btn);
         parent.addView(box);
+    }
+
+    /** 清除密码保护：必须先回答密保问题（未设问题则退化为验证原密码） */
+    private void clearWithQuestion(final TextView btn) {
+        if (!Lock.hasQuestion(act)) {
+            LockDialog.ask(act, "输入密码以清除密码保护", new LockDialog.OnPass() {
+                public void ok() {
+                    Lock.clearPassword(act);
+                    Toast.makeText(act, "已清除密码保护", Toast.LENGTH_SHORT).show();
+                    btn.setText("设置密码保护");
+                }
+            });
+            return;
+        }
+        final EditText ans = new EditText(act);
+        ans.setHint("答案");
+        LinearLayout panel = new LinearLayout(act);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(8), dp(20), 0);
+        TextView q = new TextView(act);
+        q.setText("密保问题：" + Lock.question(act));
+        q.setTextColor(color(R.color.tx2));
+        q.setTextSize(13);
+        panel.addView(q);
+        panel.addView(ans);
+        new AlertDialog.Builder(act)
+                .setTitle("清除密码保护")
+                .setMessage("需回答密保问题验证身份")
+                .setView(panel)
+                .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        if (Lock.checkAnswer(act, ans.getText().toString())) {
+                            Lock.clearPassword(act);
+                            Toast.makeText(act, "已清除密码保护", Toast.LENGTH_SHORT).show();
+                            btn.setText("设置密码保护");
+                        } else {
+                            Toast.makeText(act, "答案不正确，未清除", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .setNeutralButton("忘记密保问题？", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { showForgotGuide(); }
+                })
+                .show();
+    }
+
+    /** 忘记密保问题的唯一出路指引：清除应用数据（明确告知会丢失全部本地数据） */
+    private void showForgotGuide() {
+        new AlertDialog.Builder(act)
+                .setTitle("忘记密保问题")
+                .setMessage("出于安全考虑，密保答案无法找回。\n\n"
+                        + "唯一办法：打开系统「设置 → 应用 → API 管理助手 → 存储」，点击「清除数据」，"
+                        + "再重新打开应用并重新设置密码。\n\n"
+                        + "⚠️ 清除数据会删除本机保存的【全部 API Key、余额快照与统计历史】，且无法恢复；"
+                        + "各平台账号本身的余额与用量不受影响。")
+                .setPositiveButton("打开应用设置", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        try {
+                            Intent it = new Intent(
+                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.parse("package:" + act.getPackageName()));
+                            act.startActivity(it);
+                        } catch (Throwable t) {
+                            Toast.makeText(act, "请手动到系统设置 → 应用 → API 管理助手 → 存储 清除数据",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+                })
+                .setNegativeButton("知道了", null)
+                .show();
+    }
+
+    /** 通知宿主数据已变（主界面需立即重刷卡片列表） */
+    private void notifyChanged() {
+        if (onChanged != null) onChanged.run();
     }
 
     private void kick() {

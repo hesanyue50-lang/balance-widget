@@ -390,6 +390,19 @@ public final class LockDialog {
                 | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         card.addView(np2);
 
+        TextView forgot = new TextView(ctx);
+        forgot.setText("忘记密保问题了？");
+        forgot.setTextColor(ctx.getColor(R.color.accent));
+        forgot.setTextSize(12);
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        flp.topMargin = dp(ctx, 12);
+        forgot.setLayoutParams(flp);
+        forgot.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showForgotGuide(ctx); }
+        });
+        card.addView(forgot);
+
         addButtons(ctx, card, dlg, "重置", new View.OnClickListener() {
             public void onClick(View v) {
                 String s1 = np1.getText().toString();
@@ -409,5 +422,32 @@ public final class LockDialog {
             }
         });
         showSized(dlg, ctx);
+    }
+
+    /** 忘记密保问题：指引用户清除应用数据（明确说明会丢失全部本地数据） */
+    public static void showForgotGuide(final Context ctx) {
+        new android.app.AlertDialog.Builder(ctx)
+                .setTitle("忘记密保问题")
+                .setMessage("出于安全考虑，密保答案无法找回。\n\n"
+                        + "唯一办法：打开系统「设置 → 应用 → API 管理助手 → 存储」，点击「清除数据」，"
+                        + "再重新打开应用并重新设置密码。\n\n"
+                        + "⚠️ 清除数据会删除本机保存的【全部 API Key、余额快照与统计历史】，且无法恢复；"
+                        + "各平台账号本身的余额与用量不受影响。")
+                .setPositiveButton("打开应用设置", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        try {
+                            android.content.Intent it = new android.content.Intent(
+                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.parse("package:" + ctx.getPackageName()));
+                            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                            ctx.startActivity(it);
+                        } catch (Throwable t) {
+                            Toast.makeText(ctx, "请手动到系统设置 → 应用 → API 管理助手 → 存储 清除数据",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+                })
+                .setNegativeButton("知道了", null)
+                .show();
     }
 }
