@@ -231,6 +231,7 @@ public class MainActivity extends Activity {
 
     /** 三个面板同页统一平移切换（API余额 / 用量统计 / 设置 动画完全一致） */
     private void showPanel(int idx) {
+        BalanceFetcher.diag(this, "showPanel " + idx);
         final View total = findViewById(R.id.total_card);
         final View cards = findViewById(R.id.cards);
         final View stats = findViewById(R.id.stats_container);
@@ -292,7 +293,7 @@ public class MainActivity extends Activity {
         if (settingsPanelBuilt) return;
         settingsPanelBuilt = true;
         new SettingsBinder(this, findViewById(R.id.settings_container), new Runnable() {
-            public void run() { refresh(false); }   // 隐藏/显示等改动后立刻重刷卡片列表
+            public void run() { applyHideLocally(); refresh(false); }   // 改动后立即重绘 + 后台刷新
         }).bind();
     }
 
@@ -317,9 +318,11 @@ public class MainActivity extends Activity {
     private void buildStats() { buildStats(true); }
 
     private void buildStats(boolean rebuildToggles) {
-        final int DAYS = statsDays;
+        // 采样精度 6 小时/点：图表按 6h 分桶（近 N 天 = N×4 个点）
+        final int SLOT_MS = 6 * 3600 * 1000;
+        final int DAYS = statsDays * 4;          // 点数 = 天数 × 4
         long now = System.currentTimeMillis();
-        long from = now - (long) DAYS * 86400000L;
+        long from = now - (long) statsDays * 86400000L;
         SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
         double rate = sp.getFloat("last_rate", 7.1f);
         // 一次性迁移：旧版默认开柱，设计稿只要折线 → 重置为关
@@ -335,10 +338,10 @@ public class MainActivity extends Activity {
         String[] labels = new String[DAYS];
         java.util.Calendar cal = java.util.Calendar.getInstance();
         for (int i = 0; i < DAYS; i++) {
-            cal.setTimeInMillis(now - (long) (DAYS - 1 - i) * 86400000L);
-            labels[i] = String.format("%02d/%02d",
-                    cal.get(java.util.Calendar.MONTH) + 1,
-                    cal.get(java.util.Calendar.DAY_OF_MONTH));
+            cal.setTimeInMillis(now - (long) (DAYS - 1 - i) * SLOT_MS);
+            labels[i] = String.format("%d日%02d时",
+                    cal.get(java.util.Calendar.DAY_OF_MONTH),
+                    cal.get(java.util.Calendar.HOUR_OF_DAY));
         }
 
         Ledger lg = Ledger.get(this);
@@ -394,7 +397,7 @@ public class MainActivity extends Activity {
             double platCharged = 0;
             for (int j = 0; j < pts.size(); j++) {
                 Ledger.Point pt = pts.get(j);
-                int idx = DAYS - 1 - (int) ((now - pt.ts) / 86400000L);
+                int idx = DAYS - 1 - (int) ((now - pt.ts) / SLOT_MS);
                 if (idx < 0 || idx >= DAYS) continue;
                 own[idx] = pt.balance * mul; cnt[idx]++;
                 consDay[idx] += pt.consumed * mul;
@@ -436,9 +439,9 @@ public class MainActivity extends Activity {
         statsLabels = labels;
         // 范围标签 / 下拉按钮文字
         TextView rl = (TextView) findViewById(R.id.stats_range_label);
-        if (rl != null) rl.setText("近 " + DAYS + " 日");
+        if (rl != null) rl.setText("近 " + statsDays + " 日（6 小时/点）");
         TextView rp = (TextView) findViewById(R.id.range_pick);
-        if (rp != null) rp.setText("近 " + DAYS + " 天 ▽");
+        if (rp != null) rp.setText("近 " + statsDays + " 天 ▽");
 
         // 每平台充值/消耗明细
         LinearLayout dbox = (LinearLayout) findViewById(R.id.stats_detail);
@@ -516,8 +519,11 @@ public class MainActivity extends Activity {
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
-                    ak.draw = on;
-                    KeyStore.update(MainActivity.this, ak);
+                    // 重新读取最新对象再写，避免用陈旧快照把 hideCard 等字段冲掉
+                    KeyStore.ApiKey fresh = KeyStore.byId(MainActivity.this, ak.id);
+                    KeyStore.ApiKey target = fresh != null ? fresh : ak;
+                    target.draw = on;
+                    KeyStore.update(MainActivity.this, target);
                     buildStats(false);   // 只重算图表，不重建开关（保留切换动画）
                     Integer nc = keyColorMap.get(ak.id);
                     gd.setColor(on && nc != null ? nc.intValue() : 0xFF9AA3B0);
@@ -745,8 +751,26 @@ public class MainActivity extends Activity {
             .show();
     }
 
+    private BalanceFetcher.Result lastResult;
+
+    /** 隐藏开关改动后：先按本地 KeyStore 立即过滤已显示卡片，再后台刷新（即时反馈） */
+    private void applyHideLocally() {
+        if (lastResult == null) return;
+        java.util.HashMap<String, Boolean> hid = new java.util.HashMap<String, Boolean>();
+        java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
+        for (int i = 0; i < aks.size(); i++) hid.put(aks.get(i).id, Boolean.valueOf(aks.get(i).hideCard));
+        for (int i = lastResult.items.size() - 1; i >= 0; i--) {
+            BalanceFetcher.Item it = lastResult.items.get(i);
+            Boolean h = hid.get(it.id);
+            if (h != null && h.booleanValue()) lastResult.items.remove(i);
+        }
+        render(lastResult);
+    }
+
     private void render(BalanceFetcher.Result r) {
+        lastResult = r;
         cards.removeAllViews();
+        BalanceFetcher.diag(this, "卡片渲染 " + r.items.size() + " 项");
 
         if (r.configured == 0) {
             tTotal.setText("—");

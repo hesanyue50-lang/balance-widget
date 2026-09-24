@@ -79,6 +79,14 @@ public final class KeyStore {
     }
 
     /** 全部 Key（跨平台） */
+    /** 按 id 取最新的 Key 对象（写回前用它，避免陈旧快照覆盖字段） */
+    public static ApiKey byId(Context c, String id) {
+        List<ApiKey> all = load(c);
+        for (int i = 0; i < all.size(); i++)
+            if (all.get(i).id.equals(id)) return all.get(i);
+        return null;
+    }
+
     public static List<ApiKey> all(Context c) {
         return load(c);
     }

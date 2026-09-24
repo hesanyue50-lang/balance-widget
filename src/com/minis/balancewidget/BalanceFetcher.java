@@ -693,7 +693,7 @@ public class BalanceFetcher {
             /* 百炼 / 魔搭是展示型：没 Key 也该出现在列表里，方便点官网 */
             boolean displayOnly = "dashscope".equals(plat) || "modelscope".equals(plat);
             if (!ak.isConfigured() && !displayOnly) continue;
-            if (ak.hideCard) continue;   // 用户在「隐藏 API」里关掉卡片显示的，不出卡片/小组件
+            if (ak.hideCard) { diag(ctx, "隐藏卡片·跳过 " + ak.id); continue; }   // 用户在「隐藏 API」里关掉卡片显示的，不出卡片/小组件
 
             Item it = new Item();
             it.id = ak.id;                       // Key id 才是唯一标识
@@ -741,6 +741,13 @@ public class BalanceFetcher {
                 if (p.id.equals(items.get(j).platform)) { already = true; break; }
             }
             if (already) continue;
+            // 用户把该展示型平台的所有 Key 都设为「在卡片中隐藏」时，不再补卡
+            boolean userHidden = false;
+            for (int k = 0; k < aks.size(); k++) {
+                KeyStore.ApiKey kk = aks.get(k);
+                if (kk.hideCard && p.id.equals(kk.platform)) { userHidden = true; break; }
+            }
+            if (userHidden) { diag(ctx, "隐藏卡片·跳过补位 " + p.id); continue; }
             Item it = new Item();
             it.id = p.id;
             it.platform = p.id;
