@@ -291,7 +291,9 @@ public class MainActivity extends Activity {
     private void buildSettingsPanel() {
         if (settingsPanelBuilt) return;
         settingsPanelBuilt = true;
-        new SettingsBinder(this, findViewById(R.id.settings_container)).bind();
+        new SettingsBinder(this, findViewById(R.id.settings_container), new Runnable() {
+            public void run() { refresh(false); }   // 隐藏/显示等改动后立刻重刷卡片列表
+        }).bind();
     }
 
     /** 当前统计范围天数（默认 7 天，可切换 30/90/180） */
