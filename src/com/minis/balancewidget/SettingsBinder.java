@@ -455,6 +455,7 @@ public class SettingsBinder {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
                     ak.hideCard = on;
                     KeyStore.update(act, ak);
+                    BalanceFetcher.diag(act, "hideCard 写 " + ak.id + " = " + on);
                     kick();
                     notifyChanged();
                 }
