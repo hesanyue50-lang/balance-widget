@@ -84,8 +84,10 @@ public class MainActivity extends Activity {
         }
         // 从设置页同级导航滑回：切到指定 Tab
         String gt0 = getIntent().getStringExtra("goto_tab");
-        if ("stats".equals(gt0)) showPanel(1);
-        else showPanel(0);   // 初次进入：定位指示块到 API 余额格
+        int gi0 = getIntent().getIntExtra("goto_tab", -1);
+        if ("stats".equals(gt0) || gi0 == 1) showPanel(1);
+        else if ("settings".equals(gt0) || gi0 == 2) showPanel(2);
+        else showPanel(0);
 
         // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
         findViewById(R.id.settings_container).postDelayed(new Runnable() {
@@ -142,8 +144,10 @@ public class MainActivity extends Activity {
     /** 修正充值弹窗：手动修正各平台充值额，防止自动匹配错误 */
     private void showFixRecharge() {
         final java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
+        // 按平台一行：充值记录写在平台的代表 Key 上（平台消耗=各 Key 之和，只应扣一次充值）
         final java.util.List<KeyStore.ApiKey> targets = new java.util.ArrayList<KeyStore.ApiKey>();
         final java.util.List<EditText> inputs = new java.util.ArrayList<EditText>();
+        java.util.HashSet<String> donePlat = new java.util.HashSet<String>();
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(20), dp(12), dp(20), 0);
@@ -152,10 +156,11 @@ public class MainActivity extends Activity {
             if (!ak.isConfigured()) continue;
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
             if (p == null || !"balance".equals(p.kind)) continue;
+            if (donePlat.contains(ak.platform)) continue;   // 同平台只出现一行
+            donePlat.add(ak.platform);
             targets.add(ak);
             TextView lb = new TextView(this);
-            String nm = p.name + ((ak.label != null && ak.label.length() > 0) ? " · " + ak.label : "");
-            lb.setText(nm + "  充值额（留空=不改）");
+            lb.setText(p.name + "  充值额（留空=不改）");
             lb.setTextColor(getColor(R.color.tx2));
             lb.setTextSize(12);
             lb.setPadding(0, dp(10), 0, dp(4));
@@ -242,6 +247,7 @@ public class MainActivity extends Activity {
         stats.setVisibility(idx == 1 ? View.VISIBLE : View.GONE);
         set.setVisibility(idx == 2 ? View.VISIBLE : View.GONE);
 
+        if (idx == 1) buildStats();            // 切到统计：立即按当前范围重算
         if (idx == 2) buildSettingsPanel();   // 自守卫，只建一次
         // 切换面板时滚动回顶部：否则沿用上一面板的滚动位置，内容会顶到导航条下（看起来像圆角缺失）
         final android.widget.ScrollView sc = (android.widget.ScrollView) findViewById(R.id.main_scroll);
@@ -303,7 +309,9 @@ public class MainActivity extends Activity {
     private java.util.List<UsageChartView.Series> statsSeries;
     private String[] statsLabels;
     /** keyId → 折线色，保证开关色点与折线同色 */
-    private final java.util.HashMap<String, Integer> keyColorMap = new java.util.HashMap<String, Integer>();
+    /** 平台 → 折线/圆点颜色、平台 → 统计显示开关 */
+    private final java.util.HashMap<String, Integer> platformColor = new java.util.HashMap<String, Integer>();
+    private final java.util.HashMap<String, Boolean> platformDraw = new java.util.HashMap<String, Boolean>();
 
     /**
      * 构建用量统计页：按当前范围（默认 7 天，可切换 30/90/180）按天聚合消耗（柱）与总余额（线）。
@@ -346,93 +354,101 @@ public class MainActivity extends Activity {
 
         Ledger lg = Ledger.get(this);
         java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
+        // 按「平台」分组：同一平台下多个 Key 合并为一条（各平台普遍不提供按 Key 查询用量）
+        java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> groups =
+                new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
+        for (int i = 0; i < aks.size(); i++) {
+            KeyStore.ApiKey k = aks.get(i);
+            if (!k.isConfigured()) continue;
+            String plat = k.platform == null ? "" : k.platform;
+            java.util.List<KeyStore.ApiKey> g = groups.get(plat);
+            if (g == null) { g = new java.util.ArrayList<KeyStore.ApiKey>(); groups.put(plat, g); }
+            g.add(k);
+        }
+
         java.util.List<UsageChartView.Series> series =
                 new java.util.ArrayList<UsageChartView.Series>();
-        keyColorMap.clear();
-        java.util.HashMap<String, Integer> seen = new java.util.HashMap<String, Integer>();
+        platformColor.clear();
+        platformDraw.clear();
         double[] consDay = new double[DAYS];
         double[] totalBal = new double[DAYS];
-        java.util.Arrays.fill(totalBal, Double.NaN);   // 无数据天=NaN，总计线断开不掉0
-        int[] totalCnt = new int[DAYS];
-        StringBuilder sum = new StringBuilder();
+        java.util.Arrays.fill(totalBal, Double.NaN);
         StringBuilder detail = new StringBuilder();
         double totalCons = 0;
         double totalCharged = 0;
-        int balIdx = 0;   // balance 类平台序号（折线/圆点配色稳定用）
+        int balIdx = 0;
 
-        for (int i = 0; i < aks.size(); i++) {
-            final KeyStore.ApiKey ak = aks.get(i);
-            if (!ak.isConfigured()) continue;
-            BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
+        for (java.util.Iterator<java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>>> it =
+                groups.entrySet().iterator(); it.hasNext(); ) {
+            java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>> e = it.next();
+            String plat = e.getKey();
+            java.util.List<KeyStore.ApiKey> ks = e.getValue();
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
             String kind = p == null ? "balance" : p.kind;
             boolean usd = p != null && "USD".equals(p.unit);
             double mul = usd ? rate : 1.0;
-            String pname = p == null ? ak.platform : p.name;
-            String lb0 = ak.label == null ? "" : ak.label.trim();
-            String name = (lb0.length() > 0 && !"默认".equals(lb0))
-                    ? pname + " · " + lb0 : pname;
-            // 重名加后缀，避免同名节点混淆（关一个像关了另一个）
-            Integer cnt0 = seen.get(name);
-            if (cnt0 == null) seen.put(name, 1);
-            else { seen.put(name, cnt0 + 1); name = name + " #" + (cnt0 + 1); }
+            String name = p == null ? plat : p.name;
+
+            boolean anyDraw = false;
+            for (int i = 0; i < ks.size(); i++) if (ks.get(i).draw) anyDraw = true;
+            platformDraw.put(plat, Boolean.valueOf(anyDraw));
 
             if (!"balance".equals(kind)) {
-                // 免费/无余额接口的平台：画一条贴 0 的直线并着色，开关有可见效果
-                if (ak.draw) {
-                    double[] zero = new double[DAYS];
+                // 免费/无余额接口的平台：贴 0 直线，开关有可见效果
+                if (anyDraw) {
                     int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
-                    keyColorMap.put(ak.id, Integer.valueOf(zc));
-                    series.add(new UsageChartView.Series(zc, zero, name, false));
+                    platformColor.put(plat, Integer.valueOf(zc));
+                    series.add(new UsageChartView.Series(zc, new double[DAYS], name, false));
                     detail.append(name).append("   无数据 · 查看控制台\n");
                     balIdx++;
                 }
                 continue;
             }
 
-            java.util.List<Ledger.Point> pts = lg.series(this, ak.id, from);
+            // 聚合该平台所有 Key 的快照（同桶求和）
             double[] own = new double[DAYS];
-            java.util.Arrays.fill(own, Double.NaN);   // 无快照的天=NaN，折线断开不从0陡升
+            java.util.Arrays.fill(own, Double.NaN);
             int[] cnt = new int[DAYS];
-            double platCons = 0;
-            double platCharged = 0;
-            for (int j = 0; j < pts.size(); j++) {
-                Ledger.Point pt = pts.get(j);
-                int idx = DAYS - 1 - (int) ((now - pt.ts) / SLOT_MS);
-                if (idx < 0 || idx >= DAYS) continue;
-                own[idx] = pt.balance * mul; cnt[idx]++;
-                consDay[idx] += pt.consumed * mul;
-                platCons += pt.consumed * mul;
-                platCharged += pt.charged * mul;
+            double platCons = 0, platCharged = 0;
+            int dataKeys = 0;
+            for (int i = 0; i < ks.size(); i++) {
+                java.util.List<Ledger.Point> pts = lg.series(this, ks.get(i).id, from);
+                if (pts.size() >= 2) dataKeys++;
+                for (int j = 0; j < pts.size(); j++) {
+                    Ledger.Point pt = pts.get(j);
+                    int idx = DAYS - 1 - (int) ((now - pt.ts) / SLOT_MS);
+                    if (idx < 0 || idx >= DAYS) continue;
+                    double v = pt.balance * mul;
+                    own[idx] = (cnt[idx] == 0 || Double.isNaN(own[idx])) ? v : own[idx] + v;
+                    cnt[idx]++;
+                    consDay[idx] += pt.consumed * mul;
+                    platCons += pt.consumed * mul;
+                    platCharged += pt.charged * mul;
+                }
             }
-            if (pts.size() < 2) {
-                if (ak.draw) detail.append(name).append("   数据积累中 · 暂无快照\n");
+            if (dataKeys == 0) {
+                if (anyDraw) detail.append(name).append("   数据积累中 · 暂无快照\n");
                 continue;
             }
-            // 无快照天延续上一日（前向填充），首个有数据天之前仍为 NaN
             for (int d = 0; d < DAYS; d++)
                 if (cnt[d] == 0) own[d] = (d > 0 && !Double.isNaN(own[d - 1])) ? own[d - 1] : Double.NaN;
+
             totalCons += platCons;
             totalCharged += platCharged;
-            if (ak.draw) {   // 明细跟随开关：打开哪个 API 才显示哪个的充值/消耗
+            if (anyDraw) {
                 detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
                       .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
-            }
-            sum.append(name).append("  消耗 ").append(String.format("%.2f", platCons)).append("\n");
-
-            if (ak.draw) {                                       // 数据源开关：隐藏的不画线不计总计
-                // 图例余额=最后一个有数据天的值
-                double lastBal = 0;
-                for (int d = DAYS - 1; d >= 0; d--) if (!Double.isNaN(own[d])) { lastBal = own[d]; break; }
-                String legendLabel = name;
                 int lineColor = CHART_PALETTE[balIdx % CHART_PALETTE.length];
-                keyColorMap.put(ak.id, Integer.valueOf(lineColor));
-                series.add(new UsageChartView.Series(lineColor, own, legendLabel, false));
+                platformColor.put(plat, Integer.valueOf(lineColor));
+                series.add(new UsageChartView.Series(lineColor, own, name, false));
                 for (int d = 0; d < DAYS; d++)
                     if (!Double.isNaN(own[d]))
                         totalBal[d] = Double.isNaN(totalBal[d]) ? own[d] : totalBal[d] + own[d];
             }
             balIdx++;
         }
+        BalanceFetcher.diag(this, "stats 构建: 平台组=" + groups.size() + " 折线=" + series.size()
+                + " 明细长=" + detail.length() + " aks=" + aks.size());
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
         chart.setData(series, showBars ? consDay : null, labels, showBars, showGrid, showLegend);
         statsSeries = series;
@@ -467,29 +483,33 @@ public class MainActivity extends Activity {
     }
 
     /** 每个 API 一个 Switch 开关数据源；总计单独一个 Switch。切换后重绘图表。 */
+    /** 统计页数据源开关：按「平台」一行（同平台多 Key 一起开/关） */
     private void buildPlatformToggles(java.util.List<KeyStore.ApiKey> aks) {
         LinearLayout box = (LinearLayout) findViewById(R.id.stats_platforms);
+        if (box == null) return;
         box.removeAllViews();
-        final SharedPreferences sp =
-                getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
-        java.util.HashMap<String, Integer> seen = new java.util.HashMap<String, Integer>();
-        int balIdx = 0;   // 与 buildStats 同序，保证圆点色=折线色
 
-
+        java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> groups =
+                new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
         for (int i = 0; i < aks.size(); i++) {
-            final KeyStore.ApiKey ak = aks.get(i);
-            if (!ak.isConfigured()) continue;
-            BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
-            if (p == null) continue;
-            boolean isBal = "balance".equals(p.kind);
-            String pname = p == null ? ak.platform : p.name;
-            String lb1 = ak.label == null ? "" : ak.label.trim();
-            String name = (lb1.length() > 0 && !"默认".equals(lb1))
-                    ? pname + " · " + lb1 : pname;
-            Integer cnt1 = seen.get(name);
-            if (cnt1 == null) seen.put(name, 1);
-            else { seen.put(name, cnt1 + 1); name = name + " #" + (cnt1 + 1); }
-            // 行：色点 + 名称 + Switch（余额类色点=折线色，其余灰点）
+            KeyStore.ApiKey k = aks.get(i);
+            if (!k.isConfigured()) continue;
+            String plat = k.platform == null ? "" : k.platform;
+            java.util.List<KeyStore.ApiKey> g = groups.get(plat);
+            if (g == null) { g = new java.util.ArrayList<KeyStore.ApiKey>(); groups.put(plat, g); }
+            g.add(k);
+        }
+
+        for (java.util.Iterator<java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>>> it =
+                groups.entrySet().iterator(); it.hasNext(); ) {
+            final java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>> e = it.next();
+            final String plat = e.getKey();
+            final java.util.List<KeyStore.ApiKey> ks = e.getValue();
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
+            String name = p == null ? plat : p.name;
+            Boolean dr = platformDraw.get(plat);
+            final boolean on0 = dr != null && dr.booleanValue();
+
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -498,19 +518,19 @@ public class MainActivity extends Activity {
             android.graphics.drawable.GradientDrawable gd =
                     new android.graphics.drawable.GradientDrawable();
             gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-            Integer lc = keyColorMap.get(ak.id);
+            Integer lc = platformColor.get(plat);
             gd.setColor(lc != null ? lc.intValue() : 0xFF9AA3B0);
             dot.setBackground(gd);
             LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(14), dp(14));
             dlp.rightMargin = dp(12);
             dot.setLayoutParams(dlp);
             row.addView(dot);
+
             android.widget.Switch sw = new android.widget.Switch(this);
             sw.setText(name);
             sw.setTextColor(getColor(R.color.tx));
             sw.setTextSize(13);
-            sw.setChecked(ak.draw);
-            // 浅色胶囊开关：浅灰轨道 + 深灰圆点，开启态清晰
+            sw.setChecked(on0);
             sw.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
                     new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
@@ -519,20 +539,22 @@ public class MainActivity extends Activity {
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
-                    // 重新读取最新对象再写，避免用陈旧快照把 hideCard 等字段冲掉
-                    KeyStore.ApiKey fresh = KeyStore.byId(MainActivity.this, ak.id);
-                    KeyStore.ApiKey target = fresh != null ? fresh : ak;
-                    target.draw = on;
-                    KeyStore.update(MainActivity.this, target);
-                    buildStats(false);   // 只重算图表，不重建开关（保留切换动画）
-                    Integer nc = keyColorMap.get(ak.id);
+                    // 平台级开关：把该平台下所有 Key 一起设置（写回前取最新对象，防覆盖其他字段）
+                    for (int i = 0; i < ks.size(); i++) {
+                        KeyStore.ApiKey fresh = KeyStore.byId(MainActivity.this, ks.get(i).id);
+                        KeyStore.ApiKey t = fresh != null ? fresh : ks.get(i);
+                        t.draw = on;
+                        KeyStore.update(MainActivity.this, t);
+                    }
+                    platformDraw.put(plat, Boolean.valueOf(on));
+                    buildStats(false);
+                    Integer nc = platformColor.get(plat);
                     gd.setColor(on && nc != null ? nc.intValue() : 0xFF9AA3B0);
                     dot.invalidate();
                 }
             });
             row.addView(sw);
             box.addView(row);
-            balIdx++;
         }
     }
 
@@ -807,12 +829,28 @@ public class MainActivity extends Activity {
                                 } else if (which == 3) {
                                     openTopup(fi);
                                 } else {
+                                    final String plat = fi.platform;
+                                    final String platName = fi.label;
                                     LockDialog.ask(MainActivity.this,
-                                        "查看「" + fi.label + "」的密钥",
+                                        "查看「" + platName + "」的全部密钥",
                                         new LockDialog.OnPass() {
                                             public void ok() {
+                                                // 显示该平台下的所有 Key（而不只是卡片对应那一个）
+                                                java.util.List<KeyStore.ApiKey> mine =
+                                                        KeyStore.get(MainActivity.this, plat);
+                                                StringBuilder sb = new StringBuilder();
+                                                for (int i = 0; i < mine.size(); i++) {
+                                                    KeyStore.ApiKey kk = mine.get(i);
+                                                    String lb = (kk.label == null || kk.label.length() == 0)
+                                                            ? "默认" : kk.label;
+                                                    sb.append(lb)
+                                                      .append(kk.isConfigured() ? "：" + kk.key : "：（未填）")
+                                                      .append("\n\n");
+                                                }
+                                                if (sb.length() == 0) sb.append("该平台下还没有 Key");
                                                 LockDialog.showKey(MainActivity.this,
-                                                    fi.label + " 的 API Key", keyOf(fi.id));
+                                                    platName + " 的密钥（共 " + mine.size() + " 条）",
+                                                    sb.toString().trim());
                                             }
                                         });
                                 }
