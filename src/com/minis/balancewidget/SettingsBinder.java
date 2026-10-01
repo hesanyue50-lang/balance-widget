@@ -418,18 +418,36 @@ public class SettingsBinder {
 
     // ---------------- 隐藏 API ----------------
 
+    /** 隐藏 API：按「平台」一行（同平台多 Key 一起设置） */
     private void renderHides() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.hide_fields);
         if (box == null) return;
         box.removeAllViews();
+
+        java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> groups =
+                new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
         List<KeyStore.ApiKey> aks = KeyStore.all(act);
         for (int i = 0; i < aks.size(); i++) {
-            final KeyStore.ApiKey ak = aks.get(i);
-            if (!ak.isConfigured()) continue;
-            BalanceFetcher.Preset p = BalanceFetcher.presetOf(ak.platform);
-            String pname = p == null ? ak.platform : p.name;
-            String lb = ak.label == null ? "" : ak.label.trim();
-            String name = (lb.length() > 0 && !"默认".equals(lb)) ? pname + " · " + lb : pname;
+            KeyStore.ApiKey k = aks.get(i);
+            if (!k.isConfigured()) continue;
+            String plat = k.platform == null ? "" : k.platform;
+            java.util.List<KeyStore.ApiKey> g = groups.get(plat);
+            if (g == null) { g = new java.util.ArrayList<KeyStore.ApiKey>(); groups.put(plat, g); }
+            g.add(k);
+        }
+
+        for (java.util.Iterator<java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>>> it =
+                groups.entrySet().iterator(); it.hasNext(); ) {
+            final java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>> e = it.next();
+            final String plat = e.getKey();
+            final java.util.List<KeyStore.ApiKey> ks = e.getValue();
+            BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
+            String name = p == null ? plat : p.name;
+            boolean hideCard = false, drawOff = false;
+            for (int i = 0; i < ks.size(); i++) {
+                if (ks.get(i).hideCard) hideCard = true;
+                if (!ks.get(i).draw) drawOff = true;
+            }
 
             LinearLayout row = new LinearLayout(act);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -446,16 +464,20 @@ public class SettingsBinder {
             swCard.setText("卡片");
             swCard.setTextSize(11);
             swCard.setTextColor(color(R.color.tx2));
-            swCard.setChecked(ak.hideCard);
+            swCard.setChecked(hideCard);
             swCard.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
                     new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
             swCard.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
             swCard.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
-                    ak.hideCard = on;
-                    KeyStore.update(act, ak);
-                    BalanceFetcher.diag(act, "hideCard 写 " + ak.id + " = " + on);
+                    for (int i = 0; i < ks.size(); i++) {
+                        KeyStore.ApiKey fresh = KeyStore.byId(act, ks.get(i).id);
+                        KeyStore.ApiKey t = fresh != null ? fresh : ks.get(i);
+                        t.hideCard = on;
+                        KeyStore.update(act, t);
+                    }
+                    BalanceFetcher.diag(act, "hideCard(平台) " + plat + " = " + on);
                     kick();
                     notifyChanged();
                 }
@@ -466,15 +488,19 @@ public class SettingsBinder {
             swStat.setText("统计");
             swStat.setTextSize(11);
             swStat.setTextColor(color(R.color.tx2));
-            swStat.setChecked(!ak.draw);
+            swStat.setChecked(drawOff);
             swStat.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
                     new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
             swStat.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
             swStat.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
-                    ak.draw = !on;
-                    KeyStore.update(act, ak);
+                    for (int i = 0; i < ks.size(); i++) {
+                        KeyStore.ApiKey fresh = KeyStore.byId(act, ks.get(i).id);
+                        KeyStore.ApiKey t = fresh != null ? fresh : ks.get(i);
+                        t.draw = !on;
+                        KeyStore.update(act, t);
+                    }
                     notifyChanged();
                 }
             });
