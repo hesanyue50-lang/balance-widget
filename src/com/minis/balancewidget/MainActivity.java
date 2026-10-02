@@ -405,26 +405,37 @@ public class MainActivity extends Activity {
                 continue;
             }
 
-            // 聚合该平台所有 Key 的快照（同桶求和）
+            // 聚合该平台所有 Key（同一账户多密钥余额相同 → 取最大值，避免重复计算）
             double[] own = new double[DAYS];
             java.util.Arrays.fill(own, Double.NaN);
+            double[] dayCons = new double[DAYS];      // 平台每日消耗（跨 Key 取最大）
+            java.util.Arrays.fill(dayCons, Double.NaN);
             int[] cnt = new int[DAYS];
             double platCons = 0, platCharged = 0;
             int dataKeys = 0;
             for (int i = 0; i < ks.size(); i++) {
                 java.util.List<Ledger.Point> pts = lg.series(this, ks.get(i).id, from);
                 if (pts.size() >= 2) dataKeys++;
+                double kCons = 0, kCharged = 0;
+                double[] kDay = new double[DAYS];
+                boolean[] hasDay = new boolean[DAYS];
                 for (int j = 0; j < pts.size(); j++) {
                     Ledger.Point pt = pts.get(j);
                     int idx = DAYS - 1 - (int) ((now - pt.ts) / SLOT_MS);
                     if (idx < 0 || idx >= DAYS) continue;
                     double v = pt.balance * mul;
-                    own[idx] = (cnt[idx] == 0 || Double.isNaN(own[idx])) ? v : own[idx] + v;
+                    own[idx] = (cnt[idx] == 0 || Double.isNaN(own[idx])) ? v : Math.max(own[idx], v);
                     cnt[idx]++;
-                    consDay[idx] += pt.consumed * mul;
-                    platCons += pt.consumed * mul;
-                    platCharged += pt.charged * mul;
+                    kDay[idx] += pt.consumed * mul;
+                    hasDay[idx] = true;
+                    kCons += pt.consumed * mul;
+                    kCharged += pt.charged * mul;
                 }
+                platCons = Math.max(platCons, kCons);
+                platCharged = Math.max(platCharged, kCharged);
+                for (int d = 0; d < DAYS; d++)
+                    if (hasDay[d])
+                        dayCons[d] = Double.isNaN(dayCons[d]) ? kDay[d] : Math.max(dayCons[d], kDay[d]);
             }
             if (dataKeys == 0) {
                 if (anyDraw) detail.append(name).append("   数据积累中 · 暂无快照\n");
@@ -436,6 +447,8 @@ public class MainActivity extends Activity {
             totalCons += platCons;
             totalCharged += platCharged;
             if (anyDraw) {
+                for (int d = 0; d < DAYS; d++)
+                    if (!Double.isNaN(dayCons[d])) consDay[d] += dayCons[d];
                 detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
                       .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
                 int lineColor = CHART_PALETTE[balIdx % CHART_PALETTE.length];
