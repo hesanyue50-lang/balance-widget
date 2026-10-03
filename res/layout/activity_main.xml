@@ -1,186 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 结构：FrameLayout + 浮动顶部栏
-     —— ScrollView 铺满全屏，顶部栏浮在其上且半透明，
-        内容滚过时从顶部栏下方透出，形成毛玻璃层次。
-     —— 顶部栏的 paddingTop 由代码按状态栏/刘海高度设置（见 MainActivity）。 -->
+<!-- 结构：FrameLayout + 浮动顶部栏 + 横向分页
+     —— PanelPager（HorizontalScrollView）铺满全屏，里面并排三页，各自独立滚动；
+        左右滑动切换页面，松手自动吸附到整页。
+     —— 顶部栏浮在最上层，不随页面平移；滚动过程中它的导航滑块会跟着滑动进度走。
+     —— 顶部栏的 paddingTop 由代码按状态栏/刘海高度设置（见 UiInsets）。 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg">
+    android:background="@color/bg"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
 
-    <com.minis.balancewidget.PullScrollView
-        android:id="@+id/main_scroll"
+    <com.minis.balancewidget.PanelPager
+        android:id="@+id/panel_pager"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingLeft="14dp"
-        android:paddingRight="14dp"
-        android:paddingBottom="20dp"
-        android:scrollbars="none"
-        android:overScrollMode="never">
+        android:layout_height="match_parent">
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:id="@+id/pages"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
 
-            <!-- 总资产 -->
-            <LinearLayout
-                android:id="@+id/total_card"
+            <!-- ① API 余额页 -->
+            <com.minis.balancewidget.PullScrollView
+                android:id="@+id/scroll_api"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/total_bg"
-                android:padding="31dp"
-                android:layout_marginBottom="13dp">
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingLeft="14dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="20dp"
+                android:scrollbars="none"
+                android:overScrollMode="never">
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/main_total_label"
-                    android:textColor="@color/tx2"
-                    android:textSize="12sp" />
+                <include layout="@layout/page_api" />
+            </com.minis.balancewidget.PullScrollView>
 
-                <TextView
-                    android:id="@+id/t_total"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="—"
-                    android:textColor="@color/tx"
-                    android:textSize="32sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/t_sub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="@string/tap_refresh"
-                    android:textColor="@color/tx3"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <!-- 设置面板（第三块，与 API/统计同层，include 同一份设置主体） -->
-            <LinearLayout
-                android:id="@+id/settings_container"
+            <!-- ② 用量统计页 -->
+            <com.minis.balancewidget.PullScrollView
+                android:id="@+id/scroll_stats"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-                <include layout="@layout/settings_body" />
-            </LinearLayout>
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingLeft="14dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="20dp"
+                android:scrollbars="none"
+                android:overScrollMode="never">
 
-            <!-- 平台卡片容器（动态填充） -->
-            <LinearLayout
-                android:id="@+id/cards"
+                <include layout="@layout/page_stats" />
+            </com.minis.balancewidget.PullScrollView>
+
+            <!-- ③ 设置页 -->
+            <com.minis.balancewidget.PullScrollView
+                android:id="@+id/scroll_settings"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingLeft="14dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="20dp"
+                android:scrollbars="none"
+                android:overScrollMode="never">
 
-            <!-- 用量统计页（Tab 切换显示，默认隐藏） -->
-            <LinearLayout
-                android:id="@+id/stats_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <!-- ① 图表 + 日期颗粒度（叠在 X 轴行右端，与日期轴同一行） -->
-                <com.minis.balancewidget.UsageChartView
-                    android:id="@+id/usage_chart"
-                    android:layout_width="match_parent"
-                    android:layout_height="260dp"
-                    android:background="@drawable/card_bg"
-                    android:padding="18dp" />
-
-                <!-- ② 日期颗粒度：表格之外右下角 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="right"
-                    android:layout_marginTop="6dp">
-                    <TextView android:id="@+id/range_pick" android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" android:gravity="center"
-                        android:background="@drawable/mini_btn_border" android:paddingLeft="12dp" android:paddingRight="12dp"
-                        android:paddingTop="4dp" android:paddingBottom="4dp"
-                        android:text="近 7 天 ▽" android:textColor="@color/tx" android:textSize="11sp" />
-                </LinearLayout>
-
-                <!-- ③ 平台数据源开关（圆点+名称+Switch） -->
-                <LinearLayout
-                    android:id="@+id/stats_platforms"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="6dp" />
-
-                <!-- API 列表 与 余额总结 之间的分割线 -->
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="12dp"
-                    android:layout_marginBottom="4dp"
-                    android:background="@color/neu_dark" />
-
-                <!-- ④ 近 N 日 -->
-                <TextView
-                    android:id="@+id/stats_range_label"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="近 7 日"
-                    android:textColor="@color/tx"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <!-- ⑤ 每平台充值/消耗明细 -->
-                <LinearLayout
-                    android:id="@+id/stats_detail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical" />
-
-                <TextView
-                    android:id="@+id/btn_fix_recharge"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="right"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/mini_btn_border"
-                    android:paddingLeft="14dp"
-                    android:paddingRight="14dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:text="修正充值"
-                    android:textColor="@color/tx"
-                    android:textSize="12sp" />
-
-                <!-- ⑥ 总充值 / 总消耗 -->
-                <TextView
-                    android:id="@+id/stats_totals"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:textColor="@color/tx"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <!-- ⑦ 清理数据（红） -->
-                <TextView android:id="@+id/stats_clean" android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" android:layout_gravity="right"
-                    android:layout_marginTop="12dp"
-                    android:layout_marginBottom="28dp" android:gravity="center"
-                    android:background="@drawable/mini_btn_border" android:paddingLeft="14dp" android:paddingRight="14dp"
-                    android:paddingTop="6dp" android:paddingBottom="6dp"
-                    android:text="清理数据" android:textColor="@color/danger" android:textSize="12sp" />
-            </LinearLayout>
+                <include layout="@layout/page_settings" />
+            </com.minis.balancewidget.PullScrollView>
         </LinearLayout>
-    </com.minis.balancewidget.PullScrollView>
+    </com.minis.balancewidget.PanelPager>
 
-    <!-- 下拉刷新指示器：顶部栏正下方的小胶囊。
+    <!-- 下拉刷新指示器：顶部栏正下方的小胶囊（三页共用，同一时刻只有一个页面在下拉）。
          topMargin 由 PullScrollView 按顶部栏高度同步（见 applyIndicatorTop），
          所以它不会压到顶部栏，也不会浮在状态栏上。 -->
     <LinearLayout
@@ -227,55 +117,67 @@
         android:paddingTop="12dp"
         android:paddingBottom="14dp">
 
-        <!-- 分段导航：三按钮等宽，选中项背景高亮（无浮动指示块，避免错位/圆角问题） -->
-        <LinearLayout
+        <!-- 分段导航：三个等宽按钮 + 一个会滑动的选中滑块。
+             滑块在文字**下层**（FrameLayout 先画的在下），文字颜色随滑动进度渐变。 -->
+        <FrameLayout
             android:id="@+id/seg_wrap"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
             android:background="@drawable/seg_bg"
             android:padding="5dp"
             android:layout_marginTop="10dp"
             android:layout_marginBottom="6dp">
 
-            <TextView
-                android:id="@+id/tab_api"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@drawable/seg_sel"
-                android:gravity="center"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:text="API 余额"
-                android:textColor="@color/accent"
-                android:textSize="13sp" />
+            <View
+                android:id="@+id/seg_slider"
+                android:layout_width="40dp"
+                android:layout_height="1dp"
+                android:background="@drawable/seg_sel" />
 
-            <TextView
-                android:id="@+id/tab_stats"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:id="@+id/seg_tabs"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:text="用量统计"
-                android:textColor="@color/tx2"
-                android:textSize="13sp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <TextView
-                android:id="@+id/btn_settings"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:text="⚙ 设置"
-                android:textColor="@color/tx2"
-                android:textSize="13sp" />
-        </LinearLayout>
+                <TextView
+                    android:id="@+id/tab_api"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="API 余额"
+                    android:textColor="@color/accent"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tab_stats"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="用量统计"
+                    android:textColor="@color/tx2"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/btn_settings"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="⚙ 设置"
+                    android:textColor="@color/tx2"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 
     <!-- 加载遮罩：切面板 / 重建统计 / 保存密钥这些活儿虽然现在快多了，

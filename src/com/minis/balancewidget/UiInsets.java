@@ -18,8 +18,13 @@ public final class UiInsets {
 
     private UiInsets() { }
 
-    public static void apply(final Activity act, int headerId, int scrollId,
-                             final int baseTopDp, final int baseBottomDp) {
+    /**
+     * @param scrollIds 需要按顶部栏高度留出上边距的滚动区。三面板分页后有多页，
+     *                  每一页都得同步，否则切过去会被顶部栏盖住。
+     */
+    public static void apply(final Activity act, int headerId,
+                             final int baseTopDp, final int baseBottomDp,
+                             int... scrollIds) {
         // ① 内容延伸到系统栏后
         try {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -33,8 +38,10 @@ public final class UiInsets {
         } catch (Throwable ignored) { }
 
         final View header = act.findViewById(headerId);
-        final View scroll = act.findViewById(scrollId);
-        if (header == null || scroll == null) return;
+        if (header == null) return;
+        final View[] scrolls = new View[scrollIds.length];
+        for (int i = 0; i < scrollIds.length; i++) scrolls[i] = act.findViewById(scrollIds[i]);
+        for (int i = 0; i < scrolls.length; i++) if (scrolls[i] == null) return;
 
         final int baseTop = dp(act, baseTopDp);
         final int baseBottom = dp(act, baseBottomDp);
@@ -54,11 +61,14 @@ public final class UiInsets {
                 // ② 顶部栏：背景铺满状态栏区域，内容下移
                 v.setPadding(v.getPaddingLeft(), baseTop + top,
                              v.getPaddingRight(), v.getPaddingBottom());
-                // ④ 滚动区底部让开手势条
-                scroll.setPadding(scroll.getPaddingLeft(), scroll.getPaddingTop(),
-                                  scroll.getPaddingRight(), baseBottom + bottom);
-                // ③ 顶部栏高度随 insets 变化，同步滚动区上留白
-                syncScrollTop(header, scroll);
+                // ④ 每个滚动区底部都让开手势条
+                for (int i = 0; i < scrolls.length; i++) {
+                    View sc = scrolls[i];
+                    sc.setPadding(sc.getPaddingLeft(), sc.getPaddingTop(),
+                                  sc.getPaddingRight(), baseBottom + bottom);
+                }
+                // ③ 顶部栏高度随 insets 变化，同步各滚动区上留白
+                syncScrollTops(header, scrolls);
                 return insets;
             }
         });
@@ -67,20 +77,24 @@ public final class UiInsets {
         header.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
             public void onLayoutChange(View v, int l, int t, int r, int b,
                                        int ol, int ot, int or, int ob) {
-                if ((b - t) != (ob - ot)) syncScrollTop(header, scroll);
+                if ((b - t) != (ob - ot)) syncScrollTops(header, scrolls);
             }
         });
 
         try { header.requestApplyInsets(); } catch (Throwable ignored) { }
     }
 
-    private static void syncScrollTop(final View header, final View scroll) {
+    private static void syncScrollTops(final View header, final View[] scrolls) {
         header.post(new Runnable() {
             public void run() {
                 int h = header.getHeight();
-                if (h > 0 && scroll.getPaddingTop() != h) {
-                    scroll.setPadding(scroll.getPaddingLeft(), h,
-                                      scroll.getPaddingRight(), scroll.getPaddingBottom());
+                if (h <= 0) return;
+                for (int i = 0; i < scrolls.length; i++) {
+                    View sc = scrolls[i];
+                    if (sc.getPaddingTop() != h) {
+                        sc.setPadding(sc.getPaddingLeft(), h,
+                                      sc.getPaddingRight(), sc.getPaddingBottom());
+                    }
                 }
             }
         });
