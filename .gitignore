@@ -17,6 +17,3 @@ Thumbs.db
 diag.log
 *.keystore
 *.jks
-
-# 本地构建计数（版本号自增用，属本地状态）
-.buildcount
