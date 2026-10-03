@@ -53,6 +53,7 @@ public class PanelPager extends HorizontalScrollView {
     private void init() {
         setHorizontalScrollBarEnabled(false);
         setOverScrollMode(OVER_SCROLL_NEVER);
+        touchSlop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
     }
 
     public void setListener(Listener l) { this.listener = l; }
@@ -103,13 +104,30 @@ public class PanelPager extends HorizontalScrollView {
     }
 
     public int getPage() { return currentPage; }
-    public int pageCount() { return getChildCount() == 0 ? 0 : ((ViewGroup) getChildAt(0)).getChildCount(); }
 
-    /** 取某一页（0=API 余额 / 1=统计 / 2=设置） */
+    /** 可见页数量（被隐藏的页面 GONE，不计入） */
+    public int pageCount() {
+        if (getChildCount() == 0) return 0;
+        ViewGroup row = (ViewGroup) getChildAt(0);
+        int c = 0;
+        for (int i = 0; i < row.getChildCount(); i++) {
+            if (row.getChildAt(i).getVisibility() != View.GONE) c++;
+        }
+        return c;
+    }
+
+    /** 第 i 个**可见**页（隐藏页会被跳过，索引与导航条一一对应） */
     public View pageAt(int i) {
         if (getChildCount() == 0) return null;
         ViewGroup row = (ViewGroup) getChildAt(0);
-        return (i < 0 || i >= row.getChildCount()) ? null : row.getChildAt(i);
+        int seen = 0;
+        for (int k = 0; k < row.getChildCount(); k++) {
+            View v = row.getChildAt(k);
+            if (v.getVisibility() == View.GONE) continue;
+            if (seen == i) return v;
+            seen++;
+        }
+        return null;
     }
 
     // ---------- 尺寸 ----------
@@ -135,12 +153,22 @@ public class PanelPager extends HorizontalScrollView {
         if (w > 0 && getChildCount() > 0 && getChildAt(0) instanceof ViewGroup) {
             ViewGroup row = (ViewGroup) getChildAt(0);
             int n = row.getChildCount();
+            int shown = 0;
             for (int i = 0; i < n; i++) {
-                ViewGroup.LayoutParams lp = row.getChildAt(i).getLayoutParams();
+                View p = row.getChildAt(i);
+                ViewGroup.LayoutParams lp = p.getLayoutParams();
+                if (p.getVisibility() == View.GONE) {
+                    /* 被隐藏的页面宽度必须归 0：GONE 的子项在 LinearLayout 里本来就
+                       不占位，但**我们在这里显式设过宽度**，如果不跳过，
+                       隐藏页仍会占掉一整屏，吸附位置就整体错位。 */
+                    if (lp != null && lp.width != 0) lp.width = 0;
+                    continue;
+                }
+                shown++;
                 if (lp != null && lp.width != w) lp.width = w;
             }
             ViewGroup.LayoutParams rlp = row.getLayoutParams();
-            if (rlp != null && rlp.width != w * n) rlp.width = w * n;
+            if (rlp != null && rlp.width != w * shown) rlp.width = w * shown;
             pageWidth = w;
         }
         super.onMeasure(widthSpec, heightSpec);
@@ -241,6 +269,60 @@ public class PanelPager extends HorizontalScrollView {
     }
 
     // ---------- 手势 ----------
+
+    /* 手势方向判定（死区）。
+     *
+     * 为什么需要：HorizontalScrollView 默认的拦截逻辑**只看水平位移有没有超过
+     * touchSlop，完全不看垂直**。所以下拉刷新时手指只要有一点点水平抖动，
+     * 翻页容器就把手势抢走 —— 表现就是「下拉怎么都刷不出来」。
+     *
+     * 解法是给水平滑动设一道"死区"：先判方向，只有水平**明显占优**才归翻页，
+     * 垂直占优的一律让给子页（垂直滚动 / 下拉刷新）。
+     * 判定只做一次（首个意图定胜负），中途不会来回切换，手感才稳定。
+     */
+    /** 水平要超过 touchSlop 的几倍才认作翻页意图（死区） */
+    private static final float H_DEAD_ZONE = 2.0f;
+    /** 垂直方向只要占优到这个比例，就把手势让给子页 */
+    private static final float V_RATIO = 1.2f;
+    /** 水平方向要占优到这个比例，才认作翻页 */
+    private static final float H_RATIO = 1.5f;
+
+    /** 手势抖动阈值：由 ViewConfiguration 给出，随设备密度变化 */
+    private int touchSlop;
+    private float downX, downY;
+    /** 0=未判定  1=已让给子页（垂直）  2=归自己翻页（水平） */
+    private int gestureMode;
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent e) {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                downX = e.getX();
+                downY = e.getY();
+                gestureMode = 0;
+                break;
+            case MotionEvent.ACTION_MOVE:
+                /* 已判定让给子页：全程不打断（否则下拉到一半会被抢走，前功尽弃） */
+                if (gestureMode == 1) return false;
+                if (gestureMode == 0) {
+                    float dx = Math.abs(e.getX() - downX);
+                    float dy = Math.abs(e.getY() - downY);
+                    if (dy > touchSlop && dy > dx * V_RATIO) {
+                        gestureMode = 1;      // 垂直占优 → 让给子页（下拉刷新走这条）
+                        return false;
+                    }
+                    if (dx > touchSlop * H_DEAD_ZONE && dx > dy * H_RATIO) {
+                        gestureMode = 2;      // 水平明显占优 → 翻页
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                gestureMode = 0;
+                break;
+        }
+        return super.onInterceptTouchEvent(e);
+    }
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {

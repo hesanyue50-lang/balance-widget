@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 网络加速（Clash）独立页
+     它是本应用里唯一「重度」的功能区：订阅、启停、策略组、节点列表、逐个测速，
+     塞在设置里会把设置页撑得很长，所以单独成页。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vpn_page"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <!-- ========== 订阅管理 ========== -->
+    <LinearLayout
+        style="@style/SectionCard"
+        android:layout_marginTop="13dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="VPN 订阅管理" />
+
+            <TextView
+                android:id="@+id/btn_add_sub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:paddingTop="7dp"
+                android:paddingBottom="7dp"
+                android:text="＋ 新增"
+                android:textColor="@color/accent"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/FieldHint"
+            android:layout_marginTop="4dp"
+            android:text="可同时保存多个机场订阅。点一行即启用它；长按可重命名或删除。" />
+
+        <LinearLayout
+            android:id="@+id/sub_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <!-- ========== 启用中的订阅（配置） ========== -->
+    <LinearLayout style="@style/SectionCard">
+
+        <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="0"
+            android:text="当前订阅配置" />
+
+        <TextView
+            style="@style/FieldHint"
+            android:layout_marginTop="4dp"
+            android:text="这里显示启用中的订阅地址。换订阅请到上面的「VPN 订阅管理」里点选。" />
+
+        <EditText
+            android:id="@+id/e_sub_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/input_bg"
+            android:hint="https://...  订阅链接"
+            android:inputType="textUri"
+            android:paddingLeft="20dp"
+            android:paddingRight="20dp"
+            android:paddingTop="18dp"
+            android:paddingBottom="18dp"
+            android:singleLine="true"
+            android:textColor="@color/tx"
+            android:textColorHint="@color/hint_c"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btn_import_sub"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingTop="11dp"
+                android:paddingBottom="11dp"
+                android:text="更新配置"
+                android:textColor="@color/accent"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/btn_proxy_run"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingTop="11dp"
+                android:paddingBottom="11dp"
+                android:text="启动加速"
+                android:textColor="@color/accent"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/proxy_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:lineSpacingExtra="3dp"
+            android:text="状态：未启动"
+            android:textColor="@color/tx3"
+            android:textSize="11.5sp" />
+    </LinearLayout>
+
+    <!-- ========== 代理模式 ==========
+         放在「节点」正上方：先定代理范围，再挑具体节点，顺序符合使用逻辑。 -->
+    <LinearLayout style="@style/SectionCard" android:layout_marginTop="13dp">
+
+        <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="0"
+            android:text="代理模式" />
+
+        <TextView
+            style="@style/FieldHint"
+            android:layout_marginTop="4dp"
+            android:text="决定哪些流量走代理。前两种只影响本应用、无需授权；「系统全局」会建立系统 VPN 接管整机。" />
+
+        <LinearLayout
+            android:id="@+id/mode_box"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <!-- ========== 节点 ========== -->
+    <LinearLayout
+        android:id="@+id/node_card"
+        style="@style/SectionCard"
+        android:layout_marginTop="13dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="节点"
+                android:textColor="@color/tx"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btn_test_all"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:paddingTop="7dp"
+                android:paddingBottom="7dp"
+                android:text="全部测速"
+                android:textColor="@color/accent"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 策略组选择（订阅里通常有「节点选择」这类组） -->
+        <TextView
+            android:id="@+id/group_pick"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/mini_btn_border"
+            android:gravity="center"
+            android:paddingTop="9dp"
+            android:paddingBottom="9dp"
+            android:text="策略组：—"
+            android:textColor="@color/tx"
+            android:textSize="12.5sp" />
+
+        <TextView
+            android:id="@+id/node_hint"
+            style="@style/FieldHint"
+            android:layout_marginTop="10dp"
+            android:text="点节点即切换；点右侧延迟数字可单独重测该节点。" />
+
+        <LinearLayout
+            android:id="@+id/node_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <!-- ========== 分流开关 ========== -->
+    <LinearLayout
+        android:id="@+id/route_card"
+        style="@style/SectionCard"
+        android:layout_marginTop="13dp">
+
+        <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="0"
+            android:text="以下平台走代理" />
+
+        <TextView
+            style="@style/FieldHint"
+            android:layout_marginTop="4dp"
+            android:text="未勾选的平台一律直连 —— 国内平台直连更快，也不浪费机场流量。" />
+
+        <LinearLayout
+            android:id="@+id/proxy_plats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+</LinearLayout>

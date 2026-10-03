@@ -53,7 +53,22 @@
                 <include layout="@layout/page_stats" />
             </com.minis.balancewidget.PullScrollView>
 
-            <!-- ③ 设置页 -->
+            <!-- ③ 网络加速页 -->
+            <com.minis.balancewidget.PullScrollView
+                android:id="@+id/scroll_vpn"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingLeft="14dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="20dp"
+                android:scrollbars="none"
+                android:overScrollMode="never">
+
+                <include layout="@layout/page_vpn" />
+            </com.minis.balancewidget.PullScrollView>
+
+            <!-- ④ 设置页 -->
             <com.minis.balancewidget.PullScrollView
                 android:id="@+id/scroll_settings"
                 android:layout_width="match_parent"
@@ -151,7 +166,7 @@
                     android:paddingBottom="8dp"
                     android:text="API 余额"
                     android:textColor="@color/accent"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/tab_stats"
@@ -163,7 +178,19 @@
                     android:paddingBottom="8dp"
                     android:text="用量统计"
                     android:textColor="@color/tx2"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tab_vpn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="网络加速"
+                    android:textColor="@color/tx2"
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/btn_settings"
@@ -175,7 +202,7 @@
                     android:paddingBottom="8dp"
                     android:text="⚙ 设置"
                     android:textColor="@color/tx2"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
         </FrameLayout>
     </LinearLayout>

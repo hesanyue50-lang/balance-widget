@@ -56,8 +56,17 @@ aapt2x link -o "$OUT/base.apk" -I "$AJ" \
   --auto-add-overlay
 
 echo "[4/7] javac"
-javac -source 8 -target 8 -bootclasspath "$AJ" -d "$OUT/classes" \
-  $(find "$SRC/src" "$OUT/gen" -name '*.java') 2>&1 | grep -v 'warning:' || true
+# ⚠️ 必须看 javac 的**退出码**，不能只看「有没有 class 产出」。
+#    曾经的写法是 `javac ... | grep -v warning || true` 再数 class 个数 ——
+#    管道把退出码换成了 grep 的，于是「部分文件编译失败」会被静默放过：
+#    产出里确实有 class（其他类编出来了），但缺掉的那个类一运行就
+#    NoClassDefFoundError 闪退。真机上排查这种崩溃非常费劲，这里必须堵死。
+if ! javac -source 8 -target 8 -bootclasspath "$AJ" -d "$OUT/classes" \
+      $(find "$SRC/src" "$OUT/gen" -name '*.java') > "$OUT/javac.log" 2>&1; then
+  echo "❌ javac 编译失败："
+  grep -v '^Note:\|warning:' "$OUT/javac.log" | head -30
+  exit 1
+fi
 CNT=$(find "$OUT/classes" -name '*.class' | wc -l)
 [ "$CNT" -gt 0 ] || { echo "编译失败：无 class 产出"; exit 1; }
 echo "      class 数: $CNT"
@@ -69,6 +78,24 @@ d8x --lib "$AJ" --min-api 24 --output "$OUT" $(find "$OUT/classes" -name '*.clas
 echo "[6/7] 打包 + 对齐"
 cp "$OUT/base.apk" "$OUT/unaligned.apk"
 ( cd "$OUT" && zip -q -j unaligned.apk classes.dex )
+
+# ---- 内置 Clash 内核（mihomo）----
+# 必须以 lib/<abi>/xxx.so 的形式放进 APK：Android 10 起应用**不能执行私有可写目录**
+# 里的文件，唯一可执行的位置就是系统从 APK 释放出来的 nativeLibraryDir。
+# 所以内核借用了 .so 这个身份，运行时按 nativeLibraryDir + "/libmihomo.so" 拼路径执行。
+# 内核本体不放在工程目录里（61MB，会拖垮同步与 git），放沙盒共享区按需取。
+LIBSO=/var/minis/shared/clash/libmihomo.so
+if [ -f "$LIBSO" ]; then
+  mkdir -p "$OUT/lib/arm64-v8a"
+  cp "$LIBSO" "$OUT/lib/arm64-v8a/libmihomo.so"
+  # -1 快速压缩：61MB 的二进制用 -9 压要多花几十秒，而体积只差几 MB；
+  # extractNativeLibs 打开时系统会在安装阶段解压，所以压缩存储没有副作用。
+  ( cd "$OUT" && zip -q -1 unaligned.apk lib/arm64-v8a/libmihomo.so )
+  echo "      已打入 Clash 内核 arm64-v8a ($(du -h "$LIBSO" | cut -f1))"
+else
+  echo "      ⚠️ 未找到 $LIBSO —— 本次产物不含 Clash 内核（代理功能不可用）"
+fi
+
 zipalignx -f 4 "$OUT/unaligned.apk" "$OUT/aligned.apk"
 
 echo "[7/7] 签名"

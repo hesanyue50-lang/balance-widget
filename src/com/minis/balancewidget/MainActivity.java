@@ -14,7 +14,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -57,6 +59,25 @@ public class MainActivity extends Activity {
             sendBroadcast(kick);
         } catch (Throwable ignored) { }
 
+        /* 上次开着加速就自动拉起内核（约 1~2 秒）。放后台线程，别拖慢启动；
+           内核是本应用的子进程，应用进程一死它就跟着走 —— 不会后台偷跑。 */
+        if (Clash.enabled(this) && !Clash.isRunning()) {
+            final Context c0 = this;
+            new Thread(new Runnable() {
+                public void run() {
+                    try {
+                        String sub = readText(new java.io.File(Clash.workDir(c0), "sub.yaml"));
+                        if (sub.length() > 0) {
+                            String err = Clash.start(c0, Clash.buildConfig(sub));
+                            BalanceFetcher.diag(c0, "自动启动加速：" + (err == null ? "成功" : err));
+                        }
+                    } catch (Throwable t) {
+                        BalanceFetcher.diag(c0, "自动启动加速异常 " + t);
+                    }
+                }
+            }).start();
+        }
+
         cards = (LinearLayout) findViewById(R.id.cards);
         tTotal = (TextView) findViewById(R.id.t_total);
         tSub = (TextView) findViewById(R.id.t_sub);
@@ -68,15 +89,8 @@ public class MainActivity extends Activity {
         bindPullToRefresh();
 
         findViewById(R.id.total_card).setOnClickListener(refreshClick);
-        findViewById(R.id.btn_settings).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { showPanel(2); }
-        });
-        findViewById(R.id.tab_api).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { showTab(true); }
-        });
-        findViewById(R.id.tab_stats).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { showTab(false); }   // 统计页重算在停稳回调里统一做
-        });
+        /* 导航标签改由 rebuildNav() 动态创建（页面可隐藏，数量会变），
+           这里不再对布局里的固定 id 设点击 —— 那些 id 已经删掉了。 */
 
         // 日期范围下拉（5/7/14/30/90/180 天）
         findViewById(R.id.range_pick).setOnClickListener(new View.OnClickListener() {
@@ -96,9 +110,19 @@ public class MainActivity extends Activity {
         // 从设置页同级导航滑回：切到指定 Tab
         String gt0 = getIntent().getStringExtra("goto_tab");
         int gi0 = getIntent().getIntExtra("goto_tab", -1);
-        if ("stats".equals(gt0) || gi0 == 1) showPanel(1);
-        else if ("settings".equals(gt0) || gi0 == 2) showPanel(2);
-        else showPanel(0);
+        if (gt0 != null || gi0 >= 0) {
+            /* 显式指定了目标页（通知、快捷方式等）：按 key 找它在当前可见页里的位置 */
+            if ("stats".equals(gt0) || gi0 == 1) showPanel(indexOfPage(PageStore.K_STATS));
+            else if ("vpn".equals(gt0) || gi0 == 2) showPanel(indexOfPage(PageStore.K_VPN));
+            else if ("settings".equals(gt0) || gi0 == 3) showPanel(indexOfPage(PageStore.K_SETTINGS));
+            else showPanel(indexOfPage(PageStore.K_API));
+        } else {
+            /* 没指定就落到「主页面」（用户自己设的，可能是任意一页） */
+            showPanel(PageStore.homeIndex(this));
+        }
+
+        /* 机场网页点「导入 Clash」跳进来：确认后自动添加订阅并下载 */
+        handleImportIntent(getIntent());
 
         // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
         findViewById(R.id.settings_container).postDelayed(new Runnable() {
@@ -150,9 +174,7 @@ public class MainActivity extends Activity {
                             public void onClick(android.content.DialogInterface d, int which) {
                                 statsDays = days[which];
                                 d.dismiss();
-                                Busy.run(MainActivity.this, "正在统计…", new Runnable() {
-                                    public void run() { buildStats(); }
-                                });
+                                buildStats();   // 只换时间范围，重算很快，不必盖遮罩
                             }
                         })
                 .setNegativeButton("取消", null)
@@ -214,9 +236,7 @@ public class MainActivity extends Activity {
                         android.widget.Toast.makeText(MainActivity.this,
                                 n > 0 ? ("已修正 " + n + " 条充值记录") : "没有修改",
                                 android.widget.Toast.LENGTH_SHORT).show();
-                        Busy.run(MainActivity.this, "正在重算…", new Runnable() {
-                            public void run() { buildStats(); }
-                        });
+                        buildStats();   // 同上：重算很快，遮罩反而显得卡
                     }
                 })
                 .setNegativeButton("取消", null)
@@ -253,35 +273,64 @@ public class MainActivity extends Activity {
                 new Runnable() {
                     public void run() { applyHideLocally(); refresh(false); }
                 });
+        /* 页面顺序 / 隐藏 / 主页面 改动后：重建导航条与页面排布 */
+        settingsBinder.onPagesChanged = new Runnable() {
+            public void run() {
+                /* 按 **key** 找回原来那一页 —— 用下标不行：
+                   重排之后同一个下标已经是另一页了，用户会觉得"跳页了"。 */
+                String keep = curKey;
+                rebuildNav();
+                int idx = indexOfPage(keep);
+                if (idx < 0) idx = PageStore.homeIndex(MainActivity.this);   // 那一页被隐藏了
+                showPanel(Math.max(0, idx));
+            }
+        };
         settingsBinder.bind();
     }
 
-    private void showTab(boolean api) { showPanel(api ? 0 : 1); }
-
-    /** 面板序号（0=API 余额, 1=用量统计, 2=设置） */
+    /** 当前页在**可见页**里的下标。具体对应哪一页由用户设置的顺序决定，
+        所以索引只在运行时相对有效 —— 需要按 key 定位时用 indexOfPage()。 */
     private int curPanel = 0;
     /** 横向分页容器（左右滑动切换） */
     private PanelPager pager;
     /** 导航栏的滑动滑块 */
     private View segSlider;
+    /** 分页数量：API 余额 / 用量统计 / 网络加速 / 设置 */
+    private static final int TAB_COUNT = 4;
+    /** 网络加速页控制器 */
+    private VpnBinder vpnBinder;
 
     /** 三页的滚动容器，按页序排列 */
     private PullScrollView[] scrolls;
 
+    /** 页面 key → 它的滚动容器（隐藏时也保留引用，切换可见要复原） */
+    private final java.util.LinkedHashMap<String, PullScrollView> pageScrolls =
+            new java.util.LinkedHashMap<String, PullScrollView>();
+    /** 页面 key → 导航标签 */
+    private final java.util.LinkedHashMap<String, TextView> navTabs =
+            new java.util.LinkedHashMap<String, TextView>();
+
     /**
-     * 初始化左右滑动分页。
+     * 初始化分页。
      *
-     * 导航栏的动画不用动画器，而是**直接由滚动进度驱动** ——
-     * 手指拖到哪、滑块就在哪，跟手才不会有"动画追不上手指"的割裂感。
+     * 导航条是**代码动态构建**的（而不是布局里写死四个 TextView）——
+     * 因为页面可以隐藏，标签数量会变；同时顺序也由用户决定。
+     *
+     * 导航栏的滑块动画不用动画器，直接由滚动进度驱动（见 applyNavProgress），
+     * 手指拖到哪滑块就在哪，比播放动画跟手。
      */
     private void setupPager() {
         pager = (PanelPager) findViewById(R.id.panel_pager);
         segSlider = findViewById(R.id.seg_slider);
-        scrolls = new PullScrollView[] {
-            (PullScrollView) findViewById(R.id.scroll_api),
-            (PullScrollView) findViewById(R.id.scroll_stats),
-            (PullScrollView) findViewById(R.id.scroll_settings),
-        };
+
+        /* 先把四个页面按 id 收好 —— 一旦从容器里挪动位置，
+           activity 级 findViewById 就找不到它们了，所以引用要提前拿住。 */
+        pageScrolls.put(PageStore.K_API, (PullScrollView) findViewById(R.id.scroll_api));
+        pageScrolls.put(PageStore.K_STATS, (PullScrollView) findViewById(R.id.scroll_stats));
+        pageScrolls.put(PageStore.K_VPN, (PullScrollView) findViewById(R.id.scroll_vpn));
+        pageScrolls.put(PageStore.K_SETTINGS, (PullScrollView) findViewById(R.id.scroll_settings));
+
+        rebuildNav();
 
         final View wrap = findViewById(R.id.seg_wrap);
         if (wrap != null) {
@@ -297,13 +346,9 @@ public class MainActivity extends Activity {
                 public void onPagerScroll(float progress) { applyNavProgress(progress); }
                 public void onPageSettled(int page) { onPanelSettled(page); }
             });
-            /* 首帧之后补一次初始化：滑块宽度要等布局量完才知道，
-               下拉开关也要按当前页设一遍（否则设置页默认还是允许下拉）。 */
             pager.post(new Runnable() {
                 public void run() {
                     layoutSlider();
-                    /* 显式对齐一次：布局过程中任何子视图获焦都可能让容器挪位，
-                       这里把位置钉死在当前页（无动画，避免开屏就动一下）。 */
                     pager.setPage(curPanel, false);
                     onPanelSettled(curPanel);
                 }
@@ -312,18 +357,114 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 滑块尺寸 = 三等分内宽 × 标签行高（都得等布局完成后再量）。
+     * 按存档重建：页面顺序、隐藏状态、导航标签。
+     *
+     * 页面**不销毁重建**，只是调换在容器里的次序 + 置 GONE。
+     * 这样各页的状态（滚动位置、已渲染内容）都还在，切回来是瞬时的。
+     */
+    private void rebuildNav() {
+        List<String> vis = PageStore.visibleOrder(this);
+        if (vis.isEmpty()) vis.add(PageStore.K_API);
+
+        /* 1) 页面重排。
+              ⚠️ 必须按 **vis（用户排好的顺序）** 来加，不能按 PageStore.allKeys()
+                 那个内置固定顺序 —— 之前就是这里写错了，导致导航栏文字顺序变了、
+                 但页面内容还是老次序（用户看到的正是这个症状）。 */
+        if (pager != null && pager.getChildCount() > 0) {
+            LinearLayout row = (LinearLayout) pager.getChildAt(0);
+            row.removeAllViews();
+            for (int i = 0; i < vis.size(); i++) {
+                PullScrollView v = pageScrolls.get(vis.get(i));
+                if (v == null) continue;
+                v.setVisibility(View.VISIBLE);
+                row.addView(v);
+            }
+            /* 被隐藏的页面从容器里摘出去（不是只置 GONE）——
+                 摘掉之后 PanelPager 的宽度计算天然就是对的。 */
+            for (int i = 0; i < PageStore.allKeys().length; i++) {
+                String k = PageStore.allKeys()[i];
+                if (vis.contains(k)) continue;
+                PullScrollView v = pageScrolls.get(k);
+                if (v != null) v.setVisibility(View.GONE);
+            }
+        }
+
+        // 2) 滚动区数组（顺序已按可见页）
+        List<PullScrollView> scs = new ArrayList<PullScrollView>();
+        for (int i = 0; i < vis.size(); i++) {
+            PullScrollView v = pageScrolls.get(vis.get(i));
+            if (v != null) scs.add(v);
+        }
+        scrolls = scs.toArray(new PullScrollView[0]);
+
+        // 3) 导航标签重建
+        LinearLayout tabs = (LinearLayout) findViewById(R.id.seg_tabs);
+        navTabs.clear();
+        if (tabs != null) {
+            tabs.removeAllViews();
+            for (int i = 0; i < vis.size(); i++) {
+                final String key = vis.get(i);
+                TextView t = new TextView(this);
+                t.setText(PageStore.nameOf(key));
+                t.setTextSize(12);
+                t.setGravity(android.view.Gravity.CENTER);
+                t.setPadding(0, dp(8), 0, dp(8));
+                t.setLayoutParams(new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1f / vis.size() * vis.size() / (float) vis.size()));
+                /* weight 必须是 1，均分由 count 决定；上面那行是为了可读性写成等价形式，
+                   这里直接覆盖成 1f 更稳妥 */
+                t.setLayoutParams(new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                t.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) { showPanel(indexOfPage(key)); }
+                });
+                navTabs.put(key, t);
+                tabs.addView(t);
+            }
+        }
+        /* scrolls 数组换了，下拉监听要重新挂 —— 否则重排后的页面下拉失效 */
+        applyPullListeners();
+        applyNavProgress(0f);
+        layoutSlider();
+    }
+
+    /** 某个 key 在当前可见页里的下标（找不到返回 -1） */
+    private int indexOfPage(String key) {
+        List<String> vis = PageStore.visibleOrder(this);
+        return vis.indexOf(key);
+    }
+
+    /** 当前可见页第 i 个对应的 key（越界返回空串） */
+    private String keyOfIndex(int i) {
+        List<String> vis = PageStore.visibleOrder(this);
+        return (i < 0 || i >= vis.size()) ? "" : vis.get(i);
+    }
+
+    /** 当前页的 key（供重排后定位） */
+    private String curKey = PageStore.K_API;
+
+    /**
+     * 按滑动进度刷新导航栏：滑块位置 + 三个标签的颜色渐变。
+     * progress 可能是小数（正处在两页之间），所以颜色要按距离插值，
+     * 而不是简单地"选中/未选中"二选一 —— 那会在滑动中间出现突兀的跳变。
+     */
+    /**
+     * 滑块尺寸 = 等分内宽 × 标签行高（都得等布局完成后再量）。
      *
      * 高度必须由代码设：滑块是无内容的纯 View，若在 XML 里写 match_parent，
      * 父容器处于 AT_MOST 约束时 View.getDefaultSize() 会直接返回上限值 ——
      * 滑块会一路撑到整屏高，把顶栏和下面所有内容都挤没（踩过）。
+     *
+     * 等分数按**当前可见页数**算，隐藏页面后滑块会自动变宽，不用改代码。
      */
     private void layoutSlider() {
         View wrap = findViewById(R.id.seg_wrap);
         View tabs = findViewById(R.id.seg_tabs);
         if (wrap == null || segSlider == null) return;
         int inner = wrap.getWidth() - wrap.getPaddingLeft() - wrap.getPaddingRight();
-        int w = inner / 3;
+        int n = Math.max(1, navTabs.size());
+        int w = inner / n;
         int h = (tabs != null) ? tabs.getHeight() : 0;
         android.view.ViewGroup.LayoutParams lp = segSlider.getLayoutParams();
         boolean need = false;
@@ -335,8 +476,8 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 按滑动进度刷新导航栏：滑块位置 + 三个标签的颜色渐变。
-     * progress 可能是小数（正处在两页之间），所以颜色要按距离插值，
+     * 按滑动进度刷新导航栏：滑块位置 + 各标签的颜色渐变。
+     * progress 可能是小数（正处在两页之间），所以颜色按距离插值，
      * 而不是简单地"选中/未选中"二选一 —— 那会在滑动中间出现突兀的跳变。
      */
     private void applyNavProgress(float progress) {
@@ -344,15 +485,15 @@ public class MainActivity extends Activity {
         if (wrap == null || segSlider == null) return;
         int inner = wrap.getWidth() - wrap.getPaddingLeft() - wrap.getPaddingRight();
         if (inner <= 0) return;
-        float step = inner / 3f;
+        float step = inner / (float) Math.max(1, navTabs.size());
         segSlider.setTranslationX(progress * step);
 
-        int[] ids = { R.id.tab_api, R.id.tab_stats, R.id.btn_settings };
+        /* 用当前的标签列表，而不是写死的四个 id —— 隐藏页面后标签会变少 */
         int on = getColor(R.color.accent);
         int off = getColor(R.color.tx2);
-        for (int i = 0; i < ids.length; i++) {
-            TextView t = (TextView) findViewById(ids[i]);
-            if (t == null) continue;
+        int i = 0;
+        for (java.util.Iterator<TextView> it = navTabs.values().iterator(); it.hasNext(); i++) {
+            TextView t = it.next();
             float t01 = Math.max(0f, 1f - Math.abs(progress - i));
             t.setTextColor(blendColor(off, on, t01));
             t.setTypeface(null, t01 > 0.5f
@@ -389,23 +530,28 @@ public class MainActivity extends Activity {
     /** 某页停稳后：建内容、切下拉开关、把该页滚回顶部 */
     private void onPanelSettled(int page) {
         curPanel = page;
+        curKey = keyOfIndex(page);      // 记住 key：页面重排后靠它找回同一页
         // 下拉刷新：设置页不给下拉（那里没什么好刷的）
+        /* 下拉刷新只在「会联网」的两页有意义（API 余额 / 用量统计），
+           加速页与设置页关掉。这里用 key 判断而不是下标 —— 页面顺序用户可以改。 */
+        boolean pullOk = PageStore.K_API.equals(curKey) || PageStore.K_STATS.equals(curKey);
         if (scrolls != null) {
             for (int i = 0; i < scrolls.length; i++) {
-                if (scrolls[i] != null) scrolls[i].setPullEnabled(i != 2);
+                if (scrolls[i] != null) scrolls[i].setPullEnabled(i == page && pullOk);
             }
         }
+        /* 这两处**故意不加加载遮罩**：数据早已在内存/缓存里，重算只要几十毫秒，
+           盖一层遮罩反而让人以为「卡了一下」，割裂感比省下的那点等待更明显。
+           遮罩只留给真正可能耗时的操作（保存密钥要过 Keystore 加密、清理数据要删库）。 */
         if (page == 1) {
-            Busy.run(this, "正在统计…", new Runnable() {
-                public void run() { buildStats(); }
-            });
+            buildStats();
         } else if (page == 2) {
-            Busy.run(this, "正在打开设置…", new Runnable() {
-                public void run() {
-                    buildSettingsPanel();
-                    dropEditFocus();     // 设置页里有输入框，别让它一进来就抢焦点弹键盘
-                }
-            });
+            if (vpnBinder == null) vpnBinder = new VpnBinder(this, findViewById(R.id.vpn_page));
+            vpnBinder.bind();
+            dropEditFocus();
+        } else if (page == 3) {
+            buildSettingsPanel();
+            dropEditFocus();     // 设置页里有输入框，别让它一进来就抢焦点弹键盘
         }
         // 回到该页顶部：沿用上一页的滚动位置会让人以为内容没加载
         if (scrolls != null && page >= 0 && page < scrolls.length && scrolls[page] != null) {
@@ -943,11 +1089,27 @@ public class MainActivity extends Activity {
     /** 刘海 / 状态栏 / 手势条适配（与设置界面共用同一套逻辑） */
     private void applyWindowInsets() {
         UiInsets.apply(this, R.id.app_header, 12, 20,
-                R.id.scroll_api, R.id.scroll_stats, R.id.scroll_settings);
+                R.id.scroll_api, R.id.scroll_stats, R.id.scroll_vpn, R.id.scroll_settings);
     }
 
     private int dp(float v) {
         return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        /* singleTask 模式下应用已在运行时会走到这里，而不是重新 onCreate */
+        setIntent(intent);
+        handleImportIntent(intent);
+    }
+
+    /** 处理 clash://install-config 导入请求 */
+    private void handleImportIntent(Intent it) {
+        if (!ClashImport.isImport(it)) return;
+        /* 弹确认框的同时切到加速页 —— 导入完成后用户正好能看见节点在下载 */
+        showPanel(indexOfPage(PageStore.K_VPN));
+        ClashImport.handle(this, it, null);
     }
 
     @Override
@@ -987,13 +1149,24 @@ public class MainActivity extends Activity {
      * 设置页没什么好刷的，所以切到设置面板时直接关掉下拉。
      */
     private void bindPullToRefresh() {
+        applyPullListeners();
+    }
+
+    /**
+     * 给当前所有**可见**页面挂上下拉刷新监听。
+     *
+     * 必须能在 rebuildNav() 之后**重复调用** —— 页面重排/隐藏后 scrolls 数组变了，
+     * 只在 onCreate 绑一次的话，新换进来的页面就没有下拉刷新。
+     * 而且这样还能天然实现「只有当前页能下拉」：下面每次都被重新设一遍。
+     */
+    private void applyPullListeners() {
         if (scrolls == null) return;
         View box = findViewById(R.id.pull_box);
         TextView label = (TextView) findViewById(R.id.pull_text);
         for (int i = 0; i < scrolls.length; i++) {
             final PullScrollView ps = scrolls[i];
             if (ps == null) continue;
-            /* 三页共用同一个指示器胶囊 —— 同一时刻只可能有一页在下拉，不会打架。
+            /* 所有页共用同一个指示器胶囊 —— 同一时刻只可能有一页在下拉，不会打架。
                它按容器 paddingTop（= 顶部栏高度）定位，所以永远贴在顶部栏正下方。 */
             ps.attachIndicator(box, label);
             ps.setListener(new PullScrollView.Listener() {
@@ -1004,11 +1177,33 @@ public class MainActivity extends Activity {
                     /* 正好有自动刷新在跑：不用另起一次，它收尾时会把指示器收掉，
                        数据也才刚刚拉过，没必要重复请求。 */
                     if (loading) return;
-                    /* 统计页刷完还要重算图表（曲线/明细都基于账本），API 页只要卡片 */
-                    statsRebuildAfterRefresh = (curPanel == 1);
+                    /* 只在会联网的两页有意义；当前页是统计页时刷完还要重算图表 */
+                    String k = curKey;
+                    if (!PageStore.K_API.equals(k) && !PageStore.K_STATS.equals(k)) return;
+                    statsRebuildAfterRefresh = PageStore.K_STATS.equals(k);
                     refresh(false);
                 }
             });
+        }
+    }
+
+    /** 读文本文件（订阅配置），没有就返回空串 */
+    private static String readText(java.io.File f) {
+        try {
+            if (!f.exists()) return "";
+            byte[] buf = new byte[(int) f.length()];
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            try {
+                int off = 0;
+                while (off < buf.length) {
+                    int r = in.read(buf, off, buf.length - off);
+                    if (r <= 0) break;
+                    off += r;
+                }
+            } finally { in.close(); }
+            return new String(buf, "UTF-8");
+        } catch (Throwable t) {
+            return "";
         }
     }
 
