@@ -23,6 +23,10 @@ public class MainActivity extends Activity {
     private TextView tTotal;
     private TextView tSub;
     private boolean loading = false;
+    /** 下拉刷新容器（API 余额页 / 统计页共用同一个滚动区） */
+    private PullScrollView pullView;
+    /** 这次下拉刷新结束后要不要重算统计图表 */
+    private boolean statsRebuildAfterRefresh = false;
 
     private final Handler autoHandler = new Handler();
     private final Runnable autoTask = new Runnable() {
@@ -55,6 +59,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.total_card).setOnClickListener(refreshClick);
 
         applyWindowInsets();
+        bindPullToRefresh();
 
         findViewById(R.id.total_card).setOnClickListener(refreshClick);
         findViewById(R.id.btn_settings).setOnClickListener(new View.OnClickListener() {
@@ -105,10 +110,15 @@ public class MainActivity extends Activity {
                                 new android.content.DialogInterface.OnClickListener() {
                                     public void onClick(android.content.DialogInterface d, int which) {
                                         int days = keep[which];
-                                        Ledger.get(MainActivity.this)
-                                                .prune(MainActivity.this, days);
-                                        buildStats();
+                                        final int dd = days;
                                         d.dismiss();
+                                        Busy.run(MainActivity.this, "正在清理并重算…", new Runnable() {
+                                            public void run() {
+                                                Ledger.get(MainActivity.this)
+                                                        .prune(MainActivity.this, dd);
+                                                buildStats();
+                                            }
+                                        });
                                         android.widget.Toast.makeText(MainActivity.this,
                                                 "已删除 " + days + " 天前的记录",
                                                 android.widget.Toast.LENGTH_SHORT).show();
@@ -134,7 +144,9 @@ public class MainActivity extends Activity {
                             public void onClick(android.content.DialogInterface d, int which) {
                                 statsDays = days[which];
                                 d.dismiss();
-                                buildStats();
+                                Busy.run(MainActivity.this, "正在统计…", new Runnable() {
+                                    public void run() { buildStats(); }
+                                });
                             }
                         })
                 .setNegativeButton("取消", null)
@@ -143,6 +155,10 @@ public class MainActivity extends Activity {
 
     /** 修正充值弹窗：手动修正各平台充值额，防止自动匹配错误 */
     private void showFixRecharge() {
+        Busy.run(this, "正在读取密钥…", new Runnable() { public void run() { showFixRechargeNow(); } });
+    }
+
+    private void showFixRechargeNow() {
         final java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
         // 按平台一行：充值记录写在平台的代表 Key 上（平台消耗=各 Key 之和，只应扣一次充值）
         final java.util.List<KeyStore.ApiKey> targets = new java.util.ArrayList<KeyStore.ApiKey>();
@@ -192,7 +208,9 @@ public class MainActivity extends Activity {
                         android.widget.Toast.makeText(MainActivity.this,
                                 n > 0 ? ("已修正 " + n + " 条充值记录") : "没有修改",
                                 android.widget.Toast.LENGTH_SHORT).show();
-                        buildStats();
+                        Busy.run(MainActivity.this, "正在重算…", new Runnable() {
+                            public void run() { buildStats(); }
+                        });
                     }
                 })
                 .setNegativeButton("取消", null)
@@ -247,7 +265,13 @@ public class MainActivity extends Activity {
         stats.setVisibility(idx == 1 ? View.VISIBLE : View.GONE);
         set.setVisibility(idx == 2 ? View.VISIBLE : View.GONE);
 
-        if (idx == 1) buildStats();            // 切到统计：立即按当前范围重算
+        // 切到统计：重算可能占住主线程几百毫秒（多次 SQLite 查询 + 图表重建），加遮罩
+        if (pullView != null) pullView.setPullEnabled(idx != 2);   // 设置页不给下拉
+        if (idx == 1) {
+            Busy.run(this, "正在统计…", new Runnable() {
+                public void run() { buildStats(); }
+            });
+        }
         if (idx == 2) buildSettingsPanel();   // 自守卫，只建一次
         // 切换面板时滚动回顶部：否则沿用上一面板的滚动位置，内容会顶到导航条下（看起来像圆角缺失）
         final android.widget.ScrollView sc = (android.widget.ScrollView) findViewById(R.id.main_scroll);
@@ -293,14 +317,17 @@ public class MainActivity extends Activity {
 
     /** 设置面板是否已构建（避免重复绑定） */
     private boolean settingsPanelBuilt = false;
+    /** 设置面板绑定器：从 MiMo 登录页回来后要靠它刷新「登录状态」那行字 */
+    private SettingsBinder settingsBinder;
 
     /** 设置面板：直接绑定与设置页相同的设置主体（同层，无跳转） */
     private void buildSettingsPanel() {
         if (settingsPanelBuilt) return;
         settingsPanelBuilt = true;
-        new SettingsBinder(this, findViewById(R.id.settings_container), new Runnable() {
+        settingsBinder = new SettingsBinder(this, findViewById(R.id.settings_container), new Runnable() {
             public void run() { applyHideLocally(); refresh(false); }   // 改动后立即重绘 + 后台刷新
-        }).bind();
+        });
+        settingsBinder.bind();
     }
 
     /** 当前统计范围天数（默认 7 天，可切换 30/90/180） */
@@ -354,6 +381,15 @@ public class MainActivity extends Activity {
 
         Ledger lg = Ledger.get(this);
         java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
+
+        /* 当前一轮的余额（卡片缓存里就是刚才拉到的实时值）：
+           用来给「还没有历史快照」的平台补上当前这个点。 */
+        final java.util.List<BalanceFetcher.Item> liveItems;
+        {
+            BalanceFetcher.Result lr = lastResult != null ? lastResult : WidgetCache.read(this);
+            liveItems = (lr != null && lr.items != null)
+                    ? lr.items : new java.util.ArrayList<BalanceFetcher.Item>();
+        }
         // 按「平台」分组：同一平台下多个 Key 合并为一条（各平台普遍不提供按 Key 查询用量）
         java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> groups =
                 new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
@@ -364,6 +400,28 @@ public class MainActivity extends Activity {
             java.util.List<KeyStore.ApiKey> g = groups.get(plat);
             if (g == null) { g = new java.util.ArrayList<KeyStore.ApiKey>(); groups.put(plat, g); }
             g.add(k);
+        }
+
+        /* 按用户排好的顺序重排分组。LinkedHashMap 的迭代顺序就是后面的绘制顺序，
+           而 Sequence 的顺序决定图例和折线的前后，所以这里重排就够了。 */
+        java.util.List<String> platIds =
+                OrderStore.apply(this, OrderStore.STATS, new java.util.ArrayList<String>(groups.keySet()));
+        if (platIds.size() == groups.size()) {
+            java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> sorted =
+                    new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
+            for (int i = 0; i < platIds.size(); i++) sorted.put(platIds.get(i), groups.get(platIds.get(i)));
+            groups = sorted;
+        }
+
+        /* 登录型平台（小米 MiMo）：凭据是账号会话音，KeyStore 里可能一条 Key 都没有，
+           但卡片和账本里其实是有它的数据的（fetch 补位时用平台 id 当条目 id）。
+           以前只遍历 KeyStore，结果就是「卡片上有余额、统计页却没这条线」。 */
+        for (int i = 0; i < BalanceFetcher.PRESETS.length; i++) {
+            BalanceFetcher.Preset p = BalanceFetcher.PRESETS[i];
+            if (!"balance".equals(p.kind)) continue;
+            if (groups.containsKey(p.id)) continue;
+            if (!BalanceFetcher.platformUsable(this, p.id)) continue;
+            groups.put(p.id, new java.util.ArrayList<KeyStore.ApiKey>());
         }
 
         java.util.List<UsageChartView.Series> series =
@@ -388,6 +446,16 @@ public class MainActivity extends Activity {
             boolean usd = p != null && "USD".equals(p.unit);
             double mul = usd ? rate : 1.0;
             String name = p == null ? plat : p.name;
+            if (p == null && plat.startsWith("custom")) {
+                /* 自定义平台没有 Preset，名字得去 custom_json 里找 —— 否则图例上写的是 "custom:0" */
+                try {
+                    String n = plat.startsWith("custom:") ? plat.substring(7) : plat.substring(6);
+                    int ci = Integer.parseInt(n);
+                    java.util.List<BalanceFetcher.Custom> cs0 = BalanceFetcher.loadCustom(this);
+                    if (ci >= 0 && ci < cs0.size() && cs0.get(ci).name != null
+                            && cs0.get(ci).name.length() > 0) name = cs0.get(ci).name;
+                } catch (Throwable ignored) { }
+            }
 
             boolean anyDraw = false;
             for (int i = 0; i < ks.size(); i++) if (ks.get(i).draw) anyDraw = true;
@@ -412,10 +480,14 @@ public class MainActivity extends Activity {
             java.util.Arrays.fill(dayCons, Double.NaN);
             int[] cnt = new int[DAYS];
             double platCons = 0, platCharged = 0;
-            int dataKeys = 0;
-            for (int i = 0; i < ks.size(); i++) {
-                java.util.List<Ledger.Point> pts = lg.series(this, ks.get(i).id, from);
-                if (pts.size() >= 2) dataKeys++;
+            /* 组里没有 Key（MiMo 这种靠登录态的）就拿平台 id 当账本 key —— 与 fetch 补位时
+               写入的快照 id 一致。以前这里直接跳过，所以新平台一条线都出不来。 */
+            int srcN = ks.isEmpty() ? 1 : ks.size();
+            int ptsAny = 0;                 // 只要有 1 个点就出线（至少能看到最新余额）
+            for (int i = 0; i < srcN; i++) {
+                String kid = ks.isEmpty() ? plat : ks.get(i).id;
+                java.util.List<Ledger.Point> pts = lg.series(this, kid, from);
+                if (pts.size() > 0) ptsAny++;
                 double kCons = 0, kCharged = 0;
                 double[] kDay = new double[DAYS];
                 boolean[] hasDay = new boolean[DAYS];
@@ -437,12 +509,45 @@ public class MainActivity extends Activity {
                     if (hasDay[d])
                         dayCons[d] = Double.isNaN(dayCons[d]) ? kDay[d] : Math.max(dayCons[d], kDay[d]);
             }
-            if (dataKeys == 0) {
-                if (anyDraw) detail.append(name).append("   数据积累中 · 暂无快照\n");
+            if (ptsAny == 0) {
+                if (anyDraw) {
+                    boolean needLogin = "mimo".equals(plat)
+                            && BalanceFetcher.mimoSession(this).length() == 0;
+                    /* 没历史数据也别留白 —— 把「当前余额」当成最新那一个点打上去。
+                       否则新加的平台在图上什么都没有，用户根本分不清
+                       「平台没加进来」和「数据还在积累」。 */
+                    double live = liveBalanceOf(liveItems, plat, ks);
+                    double[] empty = new double[DAYS];
+                    java.util.Arrays.fill(empty, Double.NaN);
+                    if (!Double.isNaN(live)) {
+                        empty[DAYS - 1] = live * mul;      // 最新一个槽位 = 现在
+                        detail.append(name).append("   当前 ").append(String.format("%.2f", live * mul))
+                              .append("   历史数据积累中\n");
+                    } else {
+                        detail.append(name).append(needLogin
+                                ? "   未登录 · 点卡片登录后开始积累\n"
+                                : "   数据积累中 · 暂无快照\n");
+                    }
+                    int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                    platformColor.put(plat, Integer.valueOf(zc));
+                    series.add(new UsageChartView.Series(zc, empty, name, false));
+                    if (!Double.isNaN(empty[DAYS - 1])) {
+                        totalBal[DAYS - 1] = Double.isNaN(totalBal[DAYS - 1])
+                                ? empty[DAYS - 1] : totalBal[DAYS - 1] + empty[DAYS - 1];
+                    }
+                    balIdx++;
+                }
                 continue;
             }
             for (int d = 0; d < DAYS; d++)
                 if (cnt[d] == 0) own[d] = (d > 0 && !Double.isNaN(own[d - 1])) ? own[d - 1] : Double.NaN;
+
+            /* 有历史但最新那个槽位还空着（恰好还没到采样点）→ 用当前余额补上，
+               不然用户点进来会觉得「刚才的余额没进去」。 */
+            if (Double.isNaN(own[DAYS - 1])) {
+                double live = liveBalanceOf(liveItems, plat, ks);
+                if (!Double.isNaN(live)) own[DAYS - 1] = live * mul;
+            }
 
             totalCons += platCons;
             totalCharged += platCharged;
@@ -502,6 +607,12 @@ public class MainActivity extends Activity {
         if (box == null) return;
         box.removeAllViews();
 
+        /* 隐藏项先收进这个容器（稍后整体塞进折叠区）；可见项直接进 box */
+        final LinearLayout hiddenContainer = new LinearLayout(this);
+        hiddenContainer.setOrientation(LinearLayout.VERTICAL);
+
+        /* 分组口径必须和 buildStats 一致：只用 KeyStore 的话，
+           登录型平台（MiMo 没有 Key）在图表里有线、开关列表里却没它，对不上。 */
         java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> groups =
                 new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
         for (int i = 0; i < aks.size(); i++) {
@@ -512,6 +623,30 @@ public class MainActivity extends Activity {
             if (g == null) { g = new java.util.ArrayList<KeyStore.ApiKey>(); groups.put(plat, g); }
             g.add(k);
         }
+        for (int i = 0; i < BalanceFetcher.PRESETS.length; i++) {
+            BalanceFetcher.Preset pp = BalanceFetcher.PRESETS[i];
+            if (!"balance".equals(pp.kind)) continue;
+            if (groups.containsKey(pp.id)) continue;
+            if (!BalanceFetcher.platformUsable(this, pp.id)) continue;
+            groups.put(pp.id, new java.util.ArrayList<KeyStore.ApiKey>());
+        }
+        /* 顺序沿用用户在统计页排好的那套 */
+        java.util.List<String> orderIds = OrderStore.apply(this, OrderStore.STATS,
+                new java.util.ArrayList<String>(groups.keySet()));
+        if (orderIds.size() == groups.size()) {
+            java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> sortedGroups =
+                    new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
+            for (int i = 0; i < orderIds.size(); i++) {
+                sortedGroups.put(orderIds.get(i), groups.get(orderIds.get(i)));
+            }
+            groups = sortedGroups;
+        }
+
+        /* 隐藏的（draw=false）平台不铺在主列表里，收进下面那块折叠区 ——
+           关掉的 API 通常会越来越多，全摊开的话主列表会被淹没。 */
+        final java.util.List<String> hiddenIds = new java.util.ArrayList<String>();
+        /* 匿名内部类要用，得是 final（groups 后面还有可能被重排赋值） */
+        final java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>> gmap = groups;
 
         for (java.util.Iterator<java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>>> it =
                 groups.entrySet().iterator(); it.hasNext(); ) {
@@ -520,8 +655,19 @@ public class MainActivity extends Activity {
             final java.util.List<KeyStore.ApiKey> ks = e.getValue();
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
             String name = p == null ? plat : p.name;
+            if (p == null && plat.startsWith("custom")) {
+                try {
+                    String n0 = plat.startsWith("custom:") ? plat.substring(7) : plat.substring(6);
+                    int ci0 = Integer.parseInt(n0);
+                    java.util.List<BalanceFetcher.Custom> cs1 = BalanceFetcher.loadCustom(this);
+                    if (ci0 >= 0 && ci0 < cs1.size() && cs1.get(ci0).name != null
+                            && cs1.get(ci0).name.length() > 0) name = cs1.get(ci0).name;
+                } catch (Throwable ignored) { }
+            }
+            final String finalName = name;
             Boolean dr = platformDraw.get(plat);
             final boolean on0 = dr != null && dr.booleanValue();
+            if (!on0) hiddenIds.add(plat);
 
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -560,15 +706,124 @@ public class MainActivity extends Activity {
                         KeyStore.update(MainActivity.this, t);
                     }
                     platformDraw.put(plat, Boolean.valueOf(on));
-                    buildStats(false);
                     Integer nc = platformColor.get(plat);
                     gd.setColor(on && nc != null ? nc.intValue() : 0xFF9AA3B0);
                     dot.invalidate();
+                    /* 图表先按新状态重算（不重建开关列表，免得把正在拨的这个 Switch 拆了）；
+                       再把开关列表的重建推到下一帧 —— 因为这一行可能要换组：
+                       关掉 → 收进「已隐藏的 API」，打开 → 回到主列表，计数也得跟着变。 */
+                    buildStats(false);
+                    box.post(new Runnable() {
+                        public void run() { buildStats(true); }
+                    });
                 }
             });
             row.addView(sw);
-            box.addView(row);
+            /* 长按行（非开关区）进排序；开关本身的长按不吃，免得误触 */
+            row.setOnLongClickListener(new android.view.View.OnLongClickListener() {
+                public boolean onLongClick(android.view.View v) {
+                    java.util.List<String> ids = new java.util.ArrayList<String>(gmap.keySet());
+                    java.util.List<String> names = new java.util.ArrayList<String>();
+                    for (int i = 0; i < ids.size(); i++) names.add(labelOfPlatform(ids.get(i)));
+                    showStatsOrder(ids, names);
+                    return true;
+                }
+            });
+            if (on0) box.addView(row); else hiddenContainer.addView(row);
         }
+
+        /* 隐藏的 API 折叠区：标题可点，展开后才列出 —— 主列表保持干净 */
+        if (!hiddenIds.isEmpty()) {
+            LinearLayout wrap = new LinearLayout(this);
+            wrap.setOrientation(LinearLayout.VERTICAL);
+            wrap.setPadding(dp(2), dp(10), dp(2), 0);
+
+            final TextView head = new TextView(this);
+            head.setTextSize(12.5f);
+            head.setTextColor(getColor(R.color.tx3));
+            head.setPadding(dp(6), dp(8), dp(6), dp(8));
+            head.setBackgroundResource(R.drawable.mini_btn_border);
+            wrap.addView(head);
+
+            final boolean[] open = { getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                    .getBoolean("stats_hidden_open", false) };
+            final int hn = hiddenIds.size();
+            final Runnable sync = new Runnable() {
+                public void run() {
+                    head.setText((open[0] ? "已隐藏的 API (" + hn + ")  ▴"
+                                          : "已隐藏的 API (" + hn + ")  ▾"));
+                    hiddenContainer.setVisibility(open[0] ? android.view.View.VISIBLE
+                                                          : android.view.View.GONE);
+                }
+            };
+            sync.run();
+            head.setOnClickListener(new android.view.View.OnClickListener() {
+                public void onClick(android.view.View v) {
+                    open[0] = !open[0];
+                    sync.run();
+                    getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                            .edit().putBoolean("stats_hidden_open", open[0]).apply();
+                }
+            });
+            wrap.addView(hiddenContainer);
+            box.addView(wrap);
+        }
+
+        /* 长按任意一行 → 调整统计顺序（图表折线顺序跟着变） */
+        final java.util.List<String> allIds = new java.util.ArrayList<String>(groups.keySet());
+        final java.util.List<String> allNames = new java.util.ArrayList<String>();
+        for (int i = 0; i < allIds.size(); i++) allNames.add(labelOfPlatform(allIds.get(i)));
+        hideHintRow(box, allIds, allNames);
+    }
+
+    /**
+     * 取某平台「当前余额」（原币种，未折算）。卡片同平台多 Key 是取最大值，
+     * 这里沿用同一口径，免得图上这个点跟卡片上的数字对不上。
+     * 没有当前数据（未登录 / 上一轮失败）返回 NaN。
+     */
+    private double liveBalanceOf(java.util.List<BalanceFetcher.Item> liveItems,
+                                 String plat, java.util.List<KeyStore.ApiKey> ks) {
+        double best = Double.NaN;
+        for (int i = 0; i < liveItems.size(); i++) {
+            BalanceFetcher.Item it = liveItems.get(i);
+            if (it.noData || !it.ok) continue;
+            if (!"balance".equals(it.kind)) continue;
+            if (!plat.equals(it.platform)) continue;
+            if (Double.isNaN(best) || it.bal > best) best = it.bal;
+        }
+        return best;
+    }
+
+    /** 平台显示名（自定义平台去 custom_json 里取，别露出 custom:0） */
+    private String labelOfPlatform(String plat) {
+        BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
+        if (p != null) return p.name;
+        if (plat != null && plat.startsWith("custom")) {
+            try {
+                String n = plat.startsWith("custom:") ? plat.substring(7) : plat.substring(6);
+                int ci = Integer.parseInt(n);
+                java.util.List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(this);
+                if (ci >= 0 && ci < cs.size() && cs.get(ci).name != null
+                        && cs.get(ci).name.length() > 0) return cs.get(ci).name;
+            } catch (Throwable ignored) { }
+        }
+        return plat == null ? "" : plat;
+    }
+
+    /** 底部提示行：长按可排序（点它也能进排序，省得去猜手势） */
+    private void hideHintRow(LinearLayout box, final java.util.List<String> ids,
+                             final java.util.List<String> names) {
+        if (ids == null || ids.size() < 2) return;      // 一项都没有就别摆提示
+        TextView hint = new TextView(this);
+        hint.setText("长按任意一行可调整顺序");
+        hint.setTextSize(11.5f);
+        hint.setTextColor(getColor(R.color.tx3));
+        hint.setGravity(android.view.Gravity.CENTER);
+        hint.setPadding(dp(6), dp(10), dp(6), dp(4));
+        hint.setOnClickListener(new android.view.View.OnClickListener() {
+            public void onClick(android.view.View v) { showStatsOrder(ids, names); }
+        });
+        box.addView(hint);
     }
 
     /** 刘海 / 状态栏 / 手势条适配（与设置界面共用同一套逻辑） */
@@ -586,6 +841,10 @@ public class MainActivity extends Activity {
         // 放在 onResume：界面已可见，避免弹窗盖在未初始化的界面上，
         // 也避免用户从后台返回时错过提示。内部有"问过就不再弹"的闸门。
         NotifyPermission.ensure(this, null, false);
+        // 从 MiMo 登录页回来时，把「登录状态」重画一遍（面板已构建才需要）
+        if (settingsBinder != null && settingsPanelBuilt) {
+            try { settingsBinder.refreshKeys(); } catch (Throwable ignored) { }
+        }
         refresh();
         // 前台：按设置的间隔自动刷新（页面可见时才跑，省电省流量）
         autoHandler.removeCallbacks(autoTask);
@@ -608,6 +867,30 @@ public class MainActivity extends Activity {
         NotifyPermission.onRequestResult(this, code, perms, results);
     }
 
+    /**
+     * 下拉刷新：API 余额页与统计页共用。
+     * 设置页没什么好刷的，所以切到设置面板时直接关掉下拉。
+     */
+    private void bindPullToRefresh() {
+        pullView = (PullScrollView) findViewById(R.id.main_scroll);
+        if (pullView == null) return;
+        pullView.attachIndicator(findViewById(R.id.pull_box),
+                (TextView) findViewById(R.id.pull_text));
+        pullView.setListener(new PullScrollView.Listener() {
+            public void onPull(float progress) { }
+            public void onCancel() { }
+            public void onRefresh() {
+                pullView.setRefreshing(true);
+                /* 正好有自动刷新在跑：不用另起一次，它收尾时会把指示器收掉，
+                   数据也才刚刚拉过，没必要重复请求。 */
+                if (loading) return;
+                /* 统计页刷完还要重算图表（曲线/明细都基于账本），API 页只要卡片 */
+                statsRebuildAfterRefresh = (curPanel == 1);
+                refresh(false);
+            }
+        });
+    }
+
     private void refresh() { refresh(false); }
 
     /**
@@ -625,12 +908,19 @@ public class MainActivity extends Activity {
         new Thread(new Runnable() {
             public void run() {
                 final BalanceFetcher.Result r = BalanceFetcher.fetch(ctx, 12000);
+                // 到点在账本里落一条快照：这样即使桌面没摆小组件，统计页也有曲线
+                BalanceFetcher.sampleIfDue(ctx, r);
                 // 判定阈值并发通知（内部有防重复，重复调用安全）
                 Alert.check(ctx, r);
                 runOnUiThread(new Runnable() {
                     public void run() {
                         loading = false;
                         render(r);
+                        if (statsRebuildAfterRefresh && curPanel == 1) {
+                            statsRebuildAfterRefresh = false;
+                            buildStats();
+                        }
+                        if (pullView != null) pullView.setRefreshing(false);
                     }
                 });
             }
@@ -824,8 +1114,11 @@ public class MainActivity extends Activity {
         tSub.setTextColor(getColor(r.failed > 0 ? R.color.warn : R.color.tx3));
 
         LayoutInflater inf = LayoutInflater.from(this);
-        for (int i = 0; i < r.items.size(); i++) {
-            BalanceFetcher.Item it = r.items.get(i);
+        /* 按用户排好的顺序渲染（没排过就是原始顺序） */
+        final java.util.List<BalanceFetcher.Item> ordered =
+                OrderStore.applyItems(this, OrderStore.CARDS, r.items);
+        for (int i = 0; i < ordered.size(); i++) {
+            BalanceFetcher.Item it = ordered.get(i);
             final BalanceFetcher.Item fi = it;
             View v = inf.inflate(R.layout.item_platform, cards, false);
             /* 点卡片 = 弹出菜单：刷新这一项 / 看密钥（看密钥要先过密码） */
@@ -872,6 +1165,14 @@ public class MainActivity extends Activity {
                 }
             });
 
+            /* 长按卡片 → 排序模式（▲▼ 调顺序，记住不放） */
+            v.setOnLongClickListener(new android.view.View.OnLongClickListener() {
+                public boolean onLongClick(View v2) {
+                    showCardOrder();
+                    return true;
+                }
+            });
+
             TextView name = (TextView) v.findViewById(R.id.p_name);
             TextView tag = (TextView) v.findViewById(R.id.p_tag);
             TextView amount = (TextView) v.findViewById(R.id.p_amount);
@@ -915,5 +1216,38 @@ public class MainActivity extends Activity {
             }
             cards.addView(v);
         }
+    }
+
+    /** 长按卡片：进入卡片排序 */
+    private void showCardOrder() {
+        final BalanceFetcher.Result r = lastResult != null ? lastResult : WidgetCache.read(this);
+        if (r == null || r.items == null || r.items.size() < 2) {
+            android.widget.Toast.makeText(this, "只有一项，不用排序",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        java.util.List<BalanceFetcher.Item> ordered =
+                OrderStore.applyItems(this, OrderStore.CARDS, r.items);
+        java.util.List<String> ids = new java.util.ArrayList<String>();
+        java.util.List<String> names = new java.util.ArrayList<String>();
+        for (int i = 0; i < ordered.size(); i++) {
+            ids.add(ordered.get(i).platform);
+            names.add(ordered.get(i).label);
+        }
+        OrderDialog.show(this, OrderStore.CARDS, "调整卡片顺序", ids, names,
+                new Runnable() {
+                    public void run() {
+                        if (lastResult != null) render(lastResult);
+                    }
+                });
+    }
+
+    /** 长按统计页平台行：进入折线 / 开关排序 */
+    private void showStatsOrder(final java.util.List<String> ids,
+                                final java.util.List<String> names) {
+        OrderDialog.show(this, OrderStore.STATS, "调整统计顺序", ids, names,
+                new Runnable() {
+                    public void run() { buildStats(); }
+                });
     }
 }

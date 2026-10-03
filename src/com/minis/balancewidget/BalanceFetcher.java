@@ -30,6 +30,115 @@ import javax.net.ssl.SSLSocketFactory;
 public class BalanceFetcher {
 
     public static final String PREFS = "balance_widget";
+
+    /** 小米 MiMo 控制台会话音 cookie（**账号级**，不是 Key 级）：由 App 内登录页写入 */
+    private static final String K_MIMO_SESSION = "mimo_session";
+
+    /* 会话音的内存缓存：解密要过 TEE，一次几毫秒到几十毫秒，
+       而统计页/卡片渲染会反复问「登录了没」，不缓存就是白等。 */
+    private static String sessionCache;
+    private static boolean sessionCached = false;
+
+    /** 取 MiMo 会话音（空 = 还没登录过 / 已被清掉） */
+    public static String mimoSession(Context c) {
+        if (sessionCached) return sessionCache;
+        String v = "";
+        try {
+            v = KeyVault.dec(c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString(K_MIMO_SESSION, ""));
+        } catch (Throwable t) {
+            v = "";
+        }
+        sessionCache = v == null ? "" : v;
+        sessionCached = true;
+        return sessionCache;
+    }
+
+    /** 写入 MiMo 会话音（KeyVault 加密，和 API Key 同一把设备密钥） */
+    public static void setMimoSession(Context c, String cookie) {
+        try {
+            c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                    .putString(K_MIMO_SESSION, KeyVault.enc(cookie)).apply();
+            sessionCache = cookie == null ? "" : cookie;
+            sessionCached = true;
+        } catch (Throwable ignored) { }
+    }
+
+    /** MiMo 控制台余额接口（小米账号会话音鉴权，返回 {balance: 元}） */
+    public static final String MIMO_BALANCE_URL =
+            "https://platform.xiaomimimo.com/api/v1/balance";
+    /** 登录页用的域（取 cookie 只认这个域） */
+    public static final String MIMO_HOST = "https://platform.xiaomimimo.com";
+
+    /**
+     * 到点就往账本记一次快照（统计页曲线的唯一来源）。
+     *
+     * 原来这段只写在桌面小组件里 —— 结果就是「不摆小组件 / 小组件没刷新，
+     * 统计页就永远是空的」。现在打开 App 的刷新也会走这里，双保险。
+     */
+    public static void sampleIfDue(Context ctx, Result r) {
+        if (ctx == null || r == null) return;
+        try {
+            SharedPreferences sps = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            long lastSample = sps.getLong("last_sample_at", 0);
+            if (System.currentTimeMillis() - lastSample < Ledger.SAMPLE_MS) return;
+            sps.edit().putLong("last_sample_at", System.currentTimeMillis()).apply();
+            Ledger lg = Ledger.get(ctx);
+            /* 账本按「密钥」记录快照（用合并前的原始条目，避免平台级 id 覆盖） */
+            java.util.List<Item> raw = r.rawItems != null ? r.rawItems : r.items;
+            int n = 0;
+            for (int i = 0; i < raw.size(); i++) {
+                Item it = raw.get(i);
+                if (it.noData) continue;                    // 未登录之类：没数就是没数，别写 0
+                if (it.ok && it.bal >= 0 && "balance".equals(it.kind)) {
+                    lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag));
+                    n++;
+                }
+            }
+            /* 顺手清理超期数据（默认留 90 天） */
+            lg.prune(ctx, sps.getInt("ledger_keep_days", Ledger.KEEP_DAYS_DEFAULT));
+            diag(ctx, "账本采样完成，写入 " + n + " 条");
+        } catch (Throwable t) {
+            diag(ctx, "快照记录失败: " + t);
+        }
+    }
+
+    /**
+     * 这个平台「有办法取数」但 KeyStore 里一条 Key 都没有 —— 目前只有小米 MiMo
+     * （凭据是账号级会话音，不是 Key）。统计页靠它决定要不要给平台补一条线。
+     */
+    public static boolean platformUsable(Context c, String platform) {
+        if ("mimo".equals(platform)) return mimoSession(c).length() > 0;
+        return false;
+    }
+
+    /**
+     * 立刻抓一轮并写快照，**不看 6 小时间隔**。
+     *
+     * 场景：用户刚在登录页登好 MiMo —— 但今天这个 6 小时窗口可能已经采样过了，
+     * 那样统计页要再等 6 小时才有点，用户会以为「功能没生效」。
+     * 所以登录成功立刻强制采一次；同时在后台线程跑，不阻塞界面。
+     */
+    public static void sampleNow(final Context ctx) {
+        if (ctx == null) return;
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    Result r = fetch(ctx, 12000);
+                    ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                            .edit().putLong("last_sample_at", 0L).apply();
+                    sampleIfDue(ctx, r);
+                } catch (Throwable t) {
+                    diag(ctx, "即时采样失败: " + t);
+                }
+            }
+        }).start();
+    }
+
+    /** 供登录页校验用：带会话音拉一次余额，返回原始应答（401/302 会抛异常） */
+    public static String mimoBalanceRaw(String cookie, int timeoutMs) throws Exception {
+        return get(MIMO_BALANCE_URL, null, cookie, timeoutMs);
+    }
     private static final String TAG = "BalanceWidget";
 
     /**
@@ -136,6 +245,16 @@ public class BalanceFetcher {
                    "免费服务，没有余额接口，只作展示",
                    "https://modelscope.cn/my/overview",
                    "https://modelscope.cn/my/overview"),
+        /* 小米 MiMo：官方**没有** API Key 可查的余额接口（api.xiaomimimo.com 只有
+           /v1/models 等推理接口，所有 billing/user 路径实测 404）。余额只在控制台，
+           而控制台的 /api/v1/balance 是小米账号会话音（account.xiaomi.com 登录）鉴权，
+           Bearer sk-xxx 一律 401。所以这里 url 留空 —— 走「App 内登录」：
+           MimoLoginActivity 用 WebView 登录后取出 platform 域 cookie，
+           再由下面的专用分支带 Cookie 调 /api/v1/balance。 */
+        new Preset("mimo", "小米 MiMo", "", "", "CNY", "balance",
+                   "platform.xiaomimimo.com → API Keys。余额需在下方点「登录小米账号」后自动查询",
+                   "https://platform.xiaomimimo.com/console/balance",
+                   "https://platform.xiaomimimo.com/console/recharge"),
     };
 
     private static final int[] PALETTE = {
@@ -306,12 +425,17 @@ public class BalanceFetcher {
         public boolean low = false;     // 是否低于预警阈值
         public boolean ok = false;
         public long subEndMs = 0;       // 订阅制最近到期时间戳（按到期天数报警用）
+        public int mergeCount = 1;      // 合并了多少个密钥（同平台，卡片按平台合并时用）
         public double usageTokens = -1; // usage 平台 token 用量（千token，-1=无数据）
         public String debug = "";       // 诊断：原始应答截断（仅排查用）
+        /** 平台本身没数据可查（MiMo 未登录 / 登录过期）—— 别拿这种 0 值去记快照、画曲线 */
+        public boolean noData;
     }
 
     public static class Result {
         public double rate = 7.1;
+        /** 合并前的逐密钥原始条目（供账本按密钥记录快照用） */
+        public java.util.List<Item> rawItems;
         public double totalCny = 0;
         public int configured = 0;
         public int failed = 0;
@@ -339,6 +463,11 @@ public class BalanceFetcher {
      * IPv4 优先，逐个尝试，单地址最多用掉一半预算。
      */
     private static String get(String url, String bearer, int timeoutMs) throws Exception {
+        return get(url, bearer, null, timeoutMs);
+    }
+
+    /** 带 Cookie 的 GET（小米 MiMo 控制台余额走这条：会话鉴权，不是 Bearer） */
+    private static String get(String url, String bearer, String cookie, int timeoutMs) throws Exception {
         URL u = new URL(url);
         String host = u.getHost();
         boolean https = "https".equalsIgnoreCase(u.getProtocol());
@@ -363,7 +492,7 @@ public class BalanceFetcher {
         else         { ordered.addAll(v6); ordered.addAll(v4); }
         Log.i(TAG, "GET " + host + " → " + v4.size() + " IPv4 / " + v6.size() + " IPv6，本机有IPv4出口="
                 + localV4 + "，试序 " + ordered);
-        if (ordered.isEmpty()) return getViaHost(url, bearer, timeoutMs);
+        if (ordered.isEmpty()) return getViaHost(url, bearer, cookie, timeoutMs);
 
         StringBuilder tried = new StringBuilder();
         /* 首选地址要吃满大部分预算：OpenRouter/七牛云实测稳定要 4~6s，
@@ -374,7 +503,7 @@ public class BalanceFetcher {
             long t0 = System.currentTimeMillis();
             String ip = ordered.get(i).getHostAddress();
             try {
-                String r = getViaIp(ordered.get(i), host, port, https, path, bearer, per);
+                String r = getViaIp(ordered.get(i), host, port, https, path, bearer, cookie, per);
                 Log.i(TAG, "  ✅ " + ip + " " + (System.currentTimeMillis() - t0) + "ms");
                 return r;
             } catch (StatusException se) {
@@ -385,7 +514,7 @@ public class BalanceFetcher {
                    重试大概率命中快的那次；仍慢才换下一个地址。 */
                 Log.w(TAG, "  ⏳ " + ip + " 超时 " + (System.currentTimeMillis() - t0) + "ms，重试一次");
                 try {
-                    String r2 = getViaIp(ordered.get(i), host, port, https, path, bearer, per);
+                    String r2 = getViaIp(ordered.get(i), host, port, https, path, bearer, cookie, per);
                     Log.i(TAG, "  ✅(重试) " + ip + " " + (System.currentTimeMillis() - t0) + "ms");
                     return r2;
                 } catch (Exception e2) {
@@ -431,7 +560,7 @@ public class BalanceFetcher {
     }
 
     private static String getViaIp(InetAddress addr, String host, int port, boolean https,
-                                   String path, String bearer, int timeoutMs) throws Exception {
+                                   String path, String bearer, String cookie, int timeoutMs) throws Exception {
         Socket sock = new Socket();
         try {
             sock.connect(new InetSocketAddress(addr, port), timeoutMs);
@@ -451,6 +580,7 @@ public class BalanceFetcher {
             sb.append("User-Agent: MinisWidget/1.2\r\n");
             sb.append("Connection: close\r\n");
             if (bearer != null) sb.append("Authorization: Bearer ").append(bearer).append("\r\n");
+            if (cookie != null && cookie.length() > 0) sb.append("Cookie: ").append(cookie).append("\r\n");
             sb.append("\r\n");
             OutputStream os = io.getOutputStream();
             os.write(sb.toString().getBytes("UTF-8"));
@@ -524,7 +654,7 @@ public class BalanceFetcher {
     }
 
     /** 解析不出任何地址时的兜底：交回系统默认行为。 */
-    private static String getViaHost(String url, String bearer, int timeoutMs) throws Exception {
+    private static String getViaHost(String url, String bearer, String cookie, int timeoutMs) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
@@ -532,6 +662,7 @@ public class BalanceFetcher {
         c.setRequestProperty("Accept", "application/json");
         c.setRequestProperty("User-Agent", "MinisWidget/1.2");
         if (bearer != null) c.setRequestProperty("Authorization", "Bearer " + bearer);
+        if (cookie != null && cookie.length() > 0) c.setRequestProperty("Cookie", cookie);
         try {
             int code = c.getResponseCode();
             InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
@@ -691,7 +822,8 @@ public class BalanceFetcher {
             KeyStore.ApiKey ak = aks.get(i);
             String plat = ak.platform == null ? "" : ak.platform;
             /* 百炼 / 魔搭是展示型：没 Key 也该出现在列表里，方便点官网 */
-            boolean displayOnly = "dashscope".equals(plat) || "modelscope".equals(plat);
+            boolean displayOnly = "dashscope".equals(plat) || "modelscope".equals(plat)
+                    || "mimo".equals(plat);
             if (!ak.isConfigured() && !displayOnly) continue;
             if (ak.hideCard) { diag(ctx, "隐藏卡片·跳过 " + ak.id); continue; }   // 用户在「隐藏 API」里关掉卡片显示的，不出卡片/小组件
 
@@ -735,7 +867,8 @@ public class BalanceFetcher {
         /* 展示型平台（百炼 / 魔搭）即使没填 Key 也给一张卡，方便点官网 */
         for (int i = 0; i < PRESETS.length; i++) {
             Preset p = PRESETS[i];
-            if (!"dashscope".equals(p.id) && !"modelscope".equals(p.id)) continue;
+            if (!"dashscope".equals(p.id) && !"modelscope".equals(p.id)
+                    && !"mimo".equals(p.id)) continue;
             boolean already = false;
             for (int j = 0; j < items.size(); j++) {
                 if (p.id.equals(items.get(j).platform)) { already = true; break; }
@@ -799,7 +932,7 @@ public class BalanceFetcher {
                 public void run() {
                     long ts0 = System.currentTimeMillis();
                     try {
-                        if (c == null) fill(it, ak, rate, per);  // 修改：传递 ApiKey 对象
+                        if (c == null) fill(ctx, it, ak, rate, per);  // 修改：传递 ApiKey 对象
                         else           fillCustom(it, c, rate, per);
                         it.ok = true;
                         Log.i(TAG, "平台 " + it.id + " 成功: " + it.amount);
@@ -855,8 +988,44 @@ public class BalanceFetcher {
             }
             res.items.add(it);
         }
-        diag(ctx, "fetch 结束：成功 " + (n - res.failed) + "/" + n
-                + "，总耗时 " + (System.currentTimeMillis() - t0) + "ms");
+        /* 平台级合并：同一平台多密钥 → 一张卡片（余额取最大值，避免同账户重复计算） */
+        res.rawItems = new java.util.ArrayList<Item>(res.items);
+        java.util.LinkedHashMap<String, Item> byPlat =
+                new java.util.LinkedHashMap<String, Item>();
+        for (int i = 0; i < res.items.size(); i++) {
+            Item it = res.items.get(i);
+            String plat = it.platform == null ? "" : it.platform;
+            Item prev = byPlat.get(plat);
+            if (prev == null) {
+                it.mergeCount = 1;
+                byPlat.put(plat, it);
+            } else {
+                prev.mergeCount++;
+                if (it.ok && (!prev.ok || it.bal > prev.bal)) {
+                    it.mergeCount = prev.mergeCount;
+                    byPlat.put(plat, it);
+                }
+            }
+        }
+        res.items = new java.util.ArrayList<Item>(byPlat.values());
+        res.totalCny = 0;
+        res.failed = 0;
+        res.configured = res.items.size();
+        for (int i = 0; i < res.items.size(); i++) {
+            Item it = res.items.get(i);
+            it.id = it.platform;           // 卡片/刷新/预警统一用平台标识
+            it.alertKey = it.platform;
+            if (it.ok) {
+                res.totalCny += it.cny;
+                if (it.mergeCount > 1 && it.rows != null) {
+                    it.rows = it.rows + "\n（同平台 " + it.mergeCount + " 个密钥，取最大）";
+                }
+            } else {
+                res.failed++;
+            }
+        }
+        diag(ctx, "fetch 结束：成功 " + (res.configured - res.failed) + "/" + res.configured
+                + "，耗时 " + (System.currentTimeMillis() - t0) + "ms");
         return res;
     }
 
@@ -886,6 +1055,13 @@ public class BalanceFetcher {
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i).id.equals(it.id)) { ak = all.get(i); break; }
         }
+        if (ak == null) {   // 卡片现在是平台级：按平台取第一个已配置密钥为代表
+            for (int i = 0; i < all.size(); i++) {
+                if (it.id.equals(all.get(i).platform) && all.get(i).isConfigured()) {
+                    ak = all.get(i); break;
+                }
+            }
+        }
         if (ak == null) {
             /* 展示型平台（百炼 / 魔搭）可以没有 Key 记录 */
             Preset p0 = presetOf(it.id);
@@ -894,7 +1070,7 @@ public class BalanceFetcher {
                 it.label = p0.name;
                 it.tag = p0.unit;
                 it.kind = p0.kind;
-                try { fill(it, null, 7.1, timeoutMs); it.ok = true; }  // 修改：传递 null
+                try { fill(ctx, it, null, 7.1, timeoutMs); it.ok = true; }  // 修改：传递 null
                 catch (Exception e) {
                     it.ok = false;
                     it.error = e.getMessage();
@@ -958,7 +1134,7 @@ public class BalanceFetcher {
                         ? p.name : (p.name + " \u00b7 " + ak.label);
                 it.kind = p.kind;
                 it.tag = p.unit;
-                fill(it, ak, rate, timeoutMs);  // 修改：传递 ak 对象
+                fill(ctx, it, ak, rate, timeoutMs);  // 修改：传递 ak 对象
                 it.ok = true;
             }
         } catch (Exception e) {
@@ -1033,7 +1209,7 @@ public class BalanceFetcher {
                 c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH));
     }
 
-    private static void fill(Item it, KeyStore.ApiKey apiKey, double rate, int t) throws Exception {
+    private static void fill(Context ctx, Item it, KeyStore.ApiKey apiKey, double rate, int t) throws Exception {
         String id = it.platform;              // 解析逻辑按「平台」选，不按 Key
         boolean usd = "USD".equals(it.tag);
         String key = apiKey != null ? apiKey.key : "";
@@ -1181,6 +1357,60 @@ public class BalanceFetcher {
             it.cny = 0;
             it.bal = 0;
             it.rows = "免费服务";
+            return;
+        }
+
+        /* 小米 MiMo：余额只有控制台有，用登录会话 cookie 调 /api/v1/balance。
+           应答形如 {"balance": 12.34, ...}，**单位是元**（控制台前端 Dn() 就是 Number()，
+           且低余额阈值直接比 ≤5 元 —— 没有分转元这一步），所以不做任何换算。 */
+        if ("mimo".equals(id)) {
+            String ck = mimoSession(ctx);
+            if (ck == null || ck.length() == 0) {
+                it.noData = true;
+                it.amount = "需登录";
+                it.cny = 0;
+                it.bal = 0;
+                it.conv = "";
+                it.rows = "余额需登录小米账号后查询\n设置 → API 密钥与平台 → 小米 MiMo";
+                return;
+            }
+            String body;
+            try {
+                body = get(MIMO_BALANCE_URL, null, ck, Math.max(t, 9000));
+            } catch (StatusException se) {
+                /* 401/302 基本都是登录态过期（小米账号会话有有效期） */
+                diag(ctx, "MiMo 余额被拒 " + se.getMessage());
+                it.noData = true;
+                it.amount = "登录过期";
+                it.cny = 0;
+                it.bal = 0;
+                it.conv = "";
+                it.rows = "小米账号登录态已过期\n重新点「登录小米账号」即可";
+                return;
+            }
+            diag(ctx, "MiMo 余额应答 " + clip(body.replaceAll("\\s+", " "), 300));
+            JSONObject root = new JSONObject(body);
+            JSONObject d = root.optJSONObject("data");
+            if (d == null) d = root;
+            double bal = findNum(d, new String[] { "balance", "availableBalance", "available_balance" });
+            if (Double.isNaN(bal)) bal = pick(d);
+            if (Double.isNaN(bal)) {
+                throw new Exception("未识别余额字段，接口返回：" + clip(body.replaceAll("\\s+", " "), 140));
+            }
+            it.bal = bal;
+            it.cny = bal;                       // 接口本身就是人民币元
+            it.amount = money(bal, false);
+            it.conv = "";
+            StringBuilder sb = new StringBuilder("余额  ").append(money(bal, false));
+            double cash = findNum(d, new String[] { "cashBalance", "cash_balance" });
+            if (!Double.isNaN(cash)) sb.append("\n现金余额  ").append(money(cash, false));
+            double gift = findNum(d, new String[] { "giftBalance", "gift_balance" });
+            if (!Double.isNaN(gift)) sb.append("\n赠送余额  ").append(money(gift, false));
+            double frozen = findNum(d, new String[] { "frozenBalance", "frozen_balance" });
+            if (!Double.isNaN(frozen) && frozen > 0) {
+                sb.append("\n冻结金额  ").append(money(frozen, false));
+            }
+            it.rows = sb.toString();
             return;
         }
 

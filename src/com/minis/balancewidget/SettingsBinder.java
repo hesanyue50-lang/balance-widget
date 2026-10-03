@@ -112,9 +112,20 @@ public class SettingsBinder {
             sb.setOnEditorActionListener(new TextView.OnEditorActionListener() {
                 public boolean onEditorAction(TextView v, int actionId, android.view.KeyEvent e) {
                     search = v.getText() == null ? "" : v.getText().toString();
-                    renderKeys();
+                    Busy.run(act, "正在筛选…", new Runnable() {
+                        public void run() { renderKeys(); }
+                    });
                     return true;
                 }
+            });
+        }
+
+        // ---- 使用帮助 ----
+        // 手势类操作（长按排序等）在界面上没有可点入口，必须有地方能查到
+        View helpBtn = root.findViewById(R.id.btn_help);
+        if (helpBtn != null) {
+            helpBtn.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { Help.show(act); }
             });
         }
 
@@ -190,6 +201,9 @@ public class SettingsBinder {
     private String search = "";
     private final java.util.List<View> keyBlocks = new java.util.ArrayList<View>();
     private final java.util.List<String> keyBlockKeys = new java.util.ArrayList<String>();
+
+    /** 供宿主在外部状态变化后（如 MiMo 登录回来）重画密钥列表 */
+    public void refreshKeys() { renderKeys(); }
 
     private void renderKeys() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.key_fields);
@@ -325,12 +339,33 @@ public class SettingsBinder {
         });
         row.addView(edit);
 
+        /* 长按整行 = 看 / 复制这条密钥（同样要过查看密码，和主界面卡片一个规矩） */
+        final String showName = k.label.length() == 0 ? "默认" : k.label;
+        row.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) {
+                if (!k.isConfigured()) {
+                    Toast.makeText(act, "这一条还没填 Key", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
+                LockDialog.ask(act, "查看「" + showName + "」的密钥", new LockDialog.OnPass() {
+                    public void ok() {
+                        LockDialog.showKey(act, showName + " 的 API Key", k.key);
+                    }
+                });
+                return true;
+            }
+        });
+
         TextView del = mkBtn("删除", color(R.color.danger));
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                KeyStore.remove(act, k.id);
-                renderKeys();
-                kick();
+                Busy.run(act, "正在删除…", new Runnable() {
+                    public void run() {
+                        KeyStore.remove(act, k.id);
+                        renderKeys();
+                        kick();
+                    }
+                });
             }
         });
         row.addView(del);
@@ -388,32 +423,87 @@ public class SettingsBinder {
         eKey.setTextSize(14);
         panel.addView(eKey);
 
-        new AlertDialog.Builder(act)
+        /* 弹窗自引用：MiMo 的「登录」按钮要在点完登录后把弹窗关掉，
+           而 AlertDialog 本体是在下面才构建的，所以用一格数组带出来 */
+        final AlertDialog[] dlgRef = new AlertDialog[1];
+
+        /** 保存（新增或更新）——「保存」按钮和 MiMo 的「登录」按钮都要先落盘再说 */
+        final Runnable persist = new Runnable() {
+            public void run() {
+                KeyStore.ApiKey k = new KeyStore.ApiKey();
+                k.id = src.id;
+                k.platform = platform;
+                k.label = eLabel.getText().toString().trim();
+                k.key = eKey.getText().toString().trim();
+                k.note = src.note;
+                k.threshold = src.threshold;
+                k.budget = src.budget;
+                k.draw = true;
+                k.planMode = src.planMode;
+                k.accessKeyId = src.accessKeyId;
+                k.accessKeySecret = src.accessKeySecret;
+                k.hideCard = src.hideCard;
+                if (isNew) KeyStore.add(act, platform, k);
+                else KeyStore.update(act, k);
+            }
+        };
+
+        /* 小米 MiMo 专用：官方没有 API Key 能查的余额接口，
+           余额只能靠小米账号会话音 —— 这里给一个内置 WebView 登录入口。 */
+        if ("mimo".equals(platform)) {
+            final boolean hasSession = BalanceFetcher.mimoSession(act).length() > 0;
+            TextView st = new TextView(act);
+            st.setText(hasSession
+                    ? "登录状态：已登录（会话音已保存在本机）"
+                    : "登录状态：未登录 —— 余额必须登录后才有（官方无 API Key 余额接口）");
+            st.setTextColor(color(hasSession ? R.color.tx2 : R.color.tx3));
+            st.setTextSize(12);
+            st.setPadding(0, dp(10), 0, 0);
+            panel.addView(st);
+
+            TextView btn = new TextView(act);
+            btn.setText(hasSession ? "重新登录小米账号" : "登录小米账号（用于查余额）");
+            btn.setGravity(Gravity.CENTER);
+            btn.setTextSize(13);
+            btn.setTextColor(color(R.color.accent));
+            btn.setPadding(0, dp(10), 0, dp(10));
+            btn.setBackgroundResource(R.drawable.mini_btn_border);
+            btn.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    Busy.run(act, "正在准备登录…", new Runnable() {
+                        public void run() {
+                            persist.run();               // 先把这条 Key 落盘，回来时卡片还在
+                            renderKeys();
+                        }
+                    });
+                    act.startActivity(new Intent(act, MimoLoginActivity.class));
+                    if (dlgRef[0] != null) dlgRef[0].dismiss();
+                    Toast.makeText(act, "登录成功后余额会自动刷新", Toast.LENGTH_SHORT).show();
+                }
+            });
+            panel.addView(btn);
+        }
+
+        final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle(isNew ? "添加 Key" : "编辑 Key")
                 .setView(panel)
                 .setPositiveButton("保存", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
-                        KeyStore.ApiKey k = new KeyStore.ApiKey();
-                        k.id = src.id;
-                        k.platform = platform;
-                        k.label = eLabel.getText().toString().trim();
-                        k.key = eKey.getText().toString().trim();
-                        k.note = src.note;
-                        k.threshold = src.threshold;
-                        k.budget = src.budget;
-                        k.draw = true;
-                        k.planMode = src.planMode;
-                        k.accessKeyId = src.accessKeyId;
-                        k.accessKeySecret = src.accessKeySecret;
-                        k.hideCard = src.hideCard;
-                        if (isNew) KeyStore.add(act, platform, k);
-                        else KeyStore.update(act, k);
-                        renderKeys();
-                        kick();
+                        /* 保存这一下要过 Keystore 加密 + 重建密钥列表，
+                           以前是「点完没反应、过一会儿突然变」，现在至少有个进度条 */
+                        Busy.run(act, "正在保存…", new Runnable() {
+                            public void run() {
+                                persist.run();
+                                renderKeys();
+                                kick();
+                            }
+                        });
                     }
                 })
                 .setNegativeButton("取消", null)
-                .show();
+                .create();
+        dlgRef[0] = dlg;
+        dlg.show();
     }
 
     // ---------------- 隐藏 API ----------------
@@ -515,6 +605,14 @@ public class SettingsBinder {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.custom_fields);
         if (box == null) return;
         box.removeAllViews();
+
+        /* 「上面 N 家」里的 N 用内置平台数实时算 —— 加一家平台不用再来改文案。
+           这个数必须和 renderKeys 实际列出的条目一致，所以直接取 PRESETS 长度。 */
+        TextView note = (TextView) root.findViewById(R.id.custom_note);
+        if (note != null) {
+            note.setText(act.getString(R.string.custom_note, BalanceFetcher.PRESETS.length));
+        }
+
         List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(act);
         for (int i = 0; i < cs.size(); i++) {
             final int idx = i;
@@ -536,9 +634,9 @@ public class SettingsBinder {
                         list.remove(idx);
                         BalanceFetcher.saveCustom(act, list);
                     }
-                    renderCustoms();
-                    renderKeys();
-                    kick();
+                    Busy.run(act, "正在更新…", new Runnable() {
+                        public void run() { renderCustoms(); renderKeys(); kick(); }
+                    });
                 }
             });
             row.addView(del);
@@ -575,9 +673,9 @@ public class SettingsBinder {
                         List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
                         list.add(c);
                         BalanceFetcher.saveCustom(act, list);
-                        renderCustoms();
-                        renderKeys();
-                        kick();
+                        Busy.run(act, "正在保存…", new Runnable() {
+                            public void run() { renderCustoms(); renderKeys(); kick(); }
+                        });
                     }
                 })
                 .setNegativeButton("取消", null)

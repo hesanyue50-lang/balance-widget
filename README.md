@@ -6,25 +6,72 @@ Android 应用 + 主屏小组件，查看各家 AI 平台 API 余额。
 ## 现状
 
 - 沙盒内**本地编译**并已安装到手机，包名 `com.minis.balancewidget`
-- 当前版本 v5.2（versionCode 43），可**覆盖安装**升级（签名固定，见下）
-- 应用界面 + 小组件均已验证运行正常
+- 当前版本 **26.10.290**（版本号规则：年份后两位.月.累计构建次数），可**覆盖安装**升级（签名固定，见下）
+- 应用界面 + 桌面小组件均已实测运行正常
 
 ## 应用界面
 
-- **主界面**：总资产大字（点击即刷新）+ 各平台卡片（每张卡片点击也刷新）+ 顶部「点击刷新」「设置」
-- **设置界面**：6 家平台的 Key 输入框（掩码显示）+ 自定义平台 + 保存 + 添加到桌面引导
-- 未填 Key 的平台**完全不显示**，填哪个显示哪个
+顶部三个 Tab，**同层三面板**（不跳 Activity，切换带平移动画）：
 
-## 支持平台（6 家，均实测网络可达）
+| 面板 | 内容 |
+|---|---|
+| **API 余额** | 总资产大字 + 各平台卡片。点卡片弹操作菜单，长按进排序 |
+| **用量统计** | 余额折线图 + 日期范围 + 平台开关 + 每平台充值/消耗明细 |
+| **设置** | 刷新间隔、密钥管理、隐藏 API、使用帮助等（与统计页同一套 `settings_body.xml`） |
 
-| 平台 | 币种 | 接口 |
+### 交互速查
+
+| 手势 | 作用 |
+|---|---|
+| **下拉刷新** | API 余额页 / 统计页顶部下拉，拉过触发线松手。统计页会连带重算图表 |
+| 点卡片 | 刷新 / 看密钥 / 控制台 / 充值 |
+| **长按卡片** | 调整卡片顺序（▲▼，顺序持久保存） |
+| **长按统计页的行** | 调整折线与开关顺序（与卡片顺序相互独立） |
+| 点图表某天 | 列出那天各平台余额 |
+| 点「已隐藏的 API (n)」 | 展开/收起被关掉的数据源 |
+| **长按设置里的密钥条目** | 查看 / 复制密钥（需先过查看密码） |
+| 设置 → ❓ 使用帮助 | 内置说明文档（手势 + FAQ） |
+
+## 支持平台（16 家）
+
+| 平台 | 币种 | 说明 |
 |---|---|---|
-| DeepSeek | CNY | `/user/balance` |
-| OpenRouter | USD | `/api/v1/credits`（充值−消耗） |
-| 硅基流动 | CNY | `/v1/user/info` |
-| 月之暗面 Moonshot | CNY | `/v1/users/me/balance` |
-| Novita AI | USD | `/v3/user/balance` |
-| Fireworks AI | USD | `/v1/accounts` |
+| DeepSeek | ¥ | `/user/balance` |
+| OpenRouter | $ | `/api/v1/credits`（充值−消耗） |
+| 七牛云 AI | 消费 | 后付费，显示本月消费额（不计入总资产） |
+| 硅基流动 | ¥ | `/v1/user/info` |
+| 月之暗面 Moonshot | ¥ | `/v1/users/me/balance` |
+| Novita AI | $ | `/v3/user/balance` |
+| Fireworks AI | $ | `/v1/accounts` |
+| 智谱 AI | ¥ | `/api/paas/v4/user/balance` |
+| 阿里云百炼 | — | 走阿里云 BSS OpenAPI（需配置 AccessKey） |
+| 优云智算 | ¥ | `/v1/user/balance` |
+| 火山方舟 | ¥ | `/api/v3/user/balance` |
+| 讯飞星火 | ¥ | `/v1/user/balance` |
+| 书生 InternLM | ¥ | `/api/v1/user/balance` |
+| 阶跃星辰 | ¥ | `/v1/accounts` |
+| 魔搭 ModelScope | — | 免费服务，无余额接口，仅作展示 |
+| **小米 MiMo** | ¥ | **无 API Key 余额接口**，需内置登录（见下） |
+
+### 多密钥
+
+同一平台可挂**多个 Key**（主力 / 备用 / 不同项目分开算），各自独立设阈值与统计开关。
+
+**聚合口径：同平台多 Key 取最大值** —— 同一账户下不同 Key 查到的是同一份余额，
+相加会重复计算。卡片、总资产、统计曲线三处口径一致。
+
+### 小米 MiMo：只能登录，不能填 Key
+
+MiMo 开放平台**没有任何 API Key 可查的余额接口** —— 网关 `api.xiaomimimo.com`
+上除了 `/v1/models`、`/v1/chat/completions` 这类推理接口，所有 billing / user / balance
+路径实测全是 404。余额只在控制台，而控制台的 `GET /api/v1/balance` 认的是
+**小米账号会话音 cookie**（拿 `sk-xxx` 当 Bearer 一样 401）。
+
+所以做法是应用内 WebView 登录：设置 → API 密钥与平台 → 小米 MiMo → 「登录小米账号」。
+会话音用与 API Key 同一把设备密钥加密后存在本机，之后自动查余额。
+
+> 判定登录成功的办法不是猜 cookie 名，而是**拿 cookie 真去调一次余额接口**：
+> 小米会往该域塞好几个 cookie（甚至有登录前就存在的），只有接口返回 200 才算数。
 
 ## 自定义平台（OpenAI 兼容）
 
@@ -37,11 +84,20 @@ Android 应用 + 主屏小组件，查看各家 AI 平台 API 余额。
 
 | 方式 | 位置 |
 |---|---|
-| 顶部「点击刷新」按钮 | 应用主界面 |
-| 点任意卡片 / 总资产区域 | 应用主界面 |
-| 小组件上「点击刷新」按钮 | 桌面 |
+| **下拉刷新** | 应用内（API 余额页 / 统计页） |
+| 点总资产区域 / 任意卡片 | 应用主界面 |
 | 点小组件任意位置 | 桌面 |
-| 自动 | 每 30 分钟（Android 小组件下限） |
+| 自动 | 按设置里的前台/后台间隔（后台走 AlarmManager） |
+
+## 用量统计
+
+- **数据来源**：每 6 小时一条余额快照，存本地 SQLite（`Ledger`）。桌面小组件与
+  打开应用两种时机都会写，不装小组件也有数据
+- **曲线精度 6 小时/点**，范围可选 5 / 7 / 14 / 30 / 90 / 180 日
+- **消耗**由快照差值推导（而非单独存表）：`期间消费 = 前次余额 + 期间充值 − 本次余额`
+- **充值自动识别**：余额突增 → 匹配最接近的充值档位；匹配不准时可用「修正充值」手动改
+- **没有历史数据时**：直接把当前余额打在最右侧那个点上，不会一片空白
+
 
 ## 币种显示
 
@@ -117,7 +173,9 @@ Android 应用 + 主屏小组件，查看各家 AI 平台 API 余额。
 
 **右上角的刷新按钮会跟随风格变化**（玻璃→半透明白胶囊；新拟物→同色浮雕；简约→实体+细边）。
 
-改完点「保存并刷新」生效。
+改完立即生效（应用内所有设置都是「修改即保存」，已无底部保存按钮）。
+
+> 设置面板与统计页共用同一份 `settings_body.xml`，主界面第三面板直接 `<include>` 它。
 
 ### 毛玻璃：材质吸色 + 文字自适应对比度
 
@@ -267,17 +325,35 @@ Android 的 `shape` 只能画硬边色块，做不出柔和阴影，所以这些
 
 ## 隐私
 
-- Key 存在应用私有 `SharedPreferences`（`/data/data/com.minis.balancewidget/`），不外传、不落共享存储
-- 输入框强制密码掩码（`PasswordTransformationMethod`）
+- API Key 与 MiMo 会话音都用 **Android Keystore 设备级密钥 AES-GCM 加密**后
+  存应用私有目录（`/data/data/com.minis.balancewidget/`）
+  —— 密钥本体生成在 TEE 里，**字节永远不出安全硬件**，把 `/data/data` 整个拖走也解不开
+- 输入框强制密码掩码；查看密钥需过「查看密码」闸门
 - 只发往你填了 Key 的平台的官方域名
+- 历史账本为本地 SQLite，不外传
 - 汇率源 `api.frankfurter.dev`
+
+## 性能（几个必要的设计）
+
+界面卡顿的根源几乎都在这三处，都已处理：
+
+| 问题 | 原因 | 做法 |
+|---|---|---|
+| 设置页卡顿 | `KeyStore.load()` 每读一次就对**每个** Key 过一遍 TEE 解密；设置页渲染要调几百次 | 按 `dataVersion` 做内存缓存，只有真改动才重解密 |
+| 统计页卡顿 | `Ledger.series()` 每个数据点查一次充值表（30 天 × 8 平台 ≈ 960 次 SQL） | 一次性读入充值记录后按时间归并 |
+| 「点完没反应」 | 保存密钥 / 重算统计要占主线程几百毫秒 | `Busy` 加载遮罩 + 横向进度条 |
+
+> 加载遮罩有个关键点：**必须先让遮罩画出来再干活**。同步执行的话界面根本没机会
+> 重绘，遮罩等于没显示 —— 所以重活被推到下一帧（`DecorView.post`），另加
+> 220ms 最短展示防一闪而过。
 
 ## 覆盖安装
 
 签名用固定 debug keystore（`/opt/android-dev/keystore/debug.keystore`），
 SHA-256 `ffd72134…c439f33`，**与首版完全一致** → 每次升级直接 `pm install -r`，数据保留。
 
-升级时只需提高 `AndroidManifest.xml` 里的 `versionCode`。
+版本号由 `build.sh` **自动生成**（规则：年份后两位.月.累计构建次数，如 `26.10.290`），
+每次构建自增，不用手改。
 
 ## 构建
 
@@ -307,16 +383,22 @@ d8 必须用 Termux 版（build-tools 自带的那个解析闭包匿名类会崩
 | `tools/gen_widget_layout.py` | 小组件布局生成脚本（改行列/尺寸后重跑） |
 | `res/values/styles.xml` + `values-night/` | 两套主题 |
 | `res/drawable/ic_launcher.xml` | 应用图标（手写矢量） |
-| `src/.../UiInsets.java` | 刘海/状态栏/手势条适配（两个界面共用） |
-| `res/drawable/ic_{refresh,chevron_left,chevron_right}.xml` | 小组件按钮图标（Material / Lucide 官方路径） |
-| `res/layout/activity_main.xml` | 主界面 |
-| `res/layout/activity_settings.xml` | 设置界面 |
-| `res/layout/item_platform.xml` | 平台卡片（动态填充） |
-| `res/layout/widget_balance.xml` | 小组件布局（单一布局，皮肤由代码设置） |
-| `src/.../MainActivity.java` | 主界面逻辑 |
-| `src/.../SettingsActivity.java` | 设置 + 自定义平台 + 添加桌面引导 |
-| `src/.../BalanceFetcher.java` | 6 家平台 + 自定义平台的抓取与解析 |
-| `src/.../BalanceWidgetProvider.java` | 小组件（含翻页、结果缓存、风格切换） |
+| `res/layout/activity_main.xml` | 三面板宿主 + 下拉刷新指示器 + 加载遮罩 |
+| `res/layout/settings_body.xml` | 设置主体（设置页与主界面第三面板共用） |
+| `res/layout/item_platform.xml` | 平台卡片 |
+| `res/layout/widget_balance.xml` | 小组件布局（皮肤由代码设置） |
+| `src/.../MainActivity.java` | 面板切换、卡片渲染、统计页、排序、下拉刷新 |
+| `src/.../SettingsBinder.java` | 设置逻辑（主界面与独立设置页共用） |
+| `src/.../SettingsActivity.java` | 早期的独立设置页，现已不使用（设置改为同层第三面板），保留作参考 |
+| `src/.../BalanceFetcher.java` | 16 家平台 + 自定义平台的抓取与解析 |
+| `src/.../MimoLoginActivity.java` | 小米 MiMo 内置 WebView 登录（取会话音查余额） |
+| `src/.../Ledger.java` | 历史账本（SQLite）：快照 / 充值推导 / 区间查询 |
+| `src/.../KeyStore.java` + `KeyVault.java` | 多密钥存储 + Keystore 加密 |
+| `src/.../OrderStore.java` + `OrderDialog.java` | 卡片 / 统计两套顺序（▲▼ 弹窗） |
+| `src/.../PullScrollView.java` | 下拉刷新容器（无 androidx，自实现） |
+| `src/.../Busy.java` | 加载遮罩 |
+| `src/.../Help.java` | 使用帮助文档 |
+| `src/.../BalanceWidgetProvider.java` | 小组件（翻页、缓存、风格切换、账本采样） |
 | `build.sh` | 构建脚本 |
 
 ## 已知边界
@@ -324,9 +406,16 @@ d8 必须用 Termux 版（build-tools 自带的那个解析闭包匿名类会崩
 - 未设 `previewImage`，小组件选择器里显示应用图标
 - **组件尺寸由桌面决定**：声明 3 行格高（200dp）但 vivo 桌面仍给 2 格（144dp），
   故按实际高度自适应行数：144dp 时只显示 2 行（4 个平台）。想要 3 行需手动拉高组件
-- **翻页功能未经满页实测**：只有 2 个平台有 Key（≤6 个），页数恒为 1，翻页控件按设计隐藏；
-  代码路径（缓存读取 / 页码钳制 / 控件显隐）已就绪但无真实多页数据验证
-- 硅基流动等平台的字段名未经真实 Key 验证，已做深度遍历兜底
+- 部分平台（硅基流动、优云智算、火山、星火、InternLM、阶跃）的字段名未经真实 Key 验证，
+  已做深度遍历兜底；识别不出来时卡片会直接显示接口原始返回
 - 小组件布局仅用 RemoteViews 支持的控件（不能用自定义 View / ScrollView）
 - 小组件玻璃/简约皮为**半透明**，观感取决于壁纸；壁纸太亮时对比度会下降，可换「简约」风格
-- 换风格需点「保存并刷新」，小组件不会自动重绘
+- 换小组件风格后需手动触发一次刷新，小组件不会自动重绘
+- **小米 MiMo 登录依赖官方控制台页面**：若小米账号强制要求短信验证、或页面拒绝
+  WebView，则需改从电脑浏览器取 cookie 手动粘贴（当前未实现手动粘贴入口）
+- **百炼（阿里云）**：DashScope 侧没有公开余额接口，走阿里云 BSS OpenAPI，
+  需要 AccessKey 签名（与 DashScope 的 sk- 令牌是两套东西）；订阅制无余量 API，
+  只查得到实例状态与到期时间
+- 排序用 ▲▼ 而非拖拽：项目无 androidx 依赖（做不了 ItemTouchHelper），
+  自写拖拽会与滚动容器抢手势
+

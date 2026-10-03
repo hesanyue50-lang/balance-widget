@@ -201,30 +201,10 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
 
                     Alert.check(ctx, r);           // 阈值判定 + 发通知（有防重复）
 
-                    /* 每 6 小时记一次快照，顺带检测这段时间有没有充值。
-                       记在本地 SQLite，统计页的曲线全靠它。 */
-                    try {
-                        SharedPreferences sps = ctx.getSharedPreferences(
-                                BalanceFetcher.PREFS, Context.MODE_PRIVATE);
-                        long lastSample = sps.getLong("last_sample_at", 0);
-                        if (System.currentTimeMillis() - lastSample >= Ledger.SAMPLE_MS) {
-                            sps.edit().putLong("last_sample_at",
-                                    System.currentTimeMillis()).apply();
-                            Ledger lg = Ledger.get(ctx);
-                            for (int i = 0; i < r.items.size(); i++) {
-                                BalanceFetcher.Item it = r.items.get(i);
-                                if (it.ok && it.bal >= 0 && "balance".equals(it.kind)) {
-                                    lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag));
-                                }
-                            }
-                            /* 顺手清理超期数据（默认留 90 天） */
-                            int keep = sps.getInt("ledger_keep_days",
-                                    Ledger.KEEP_DAYS_DEFAULT);
-                            lg.prune(ctx, keep);
-                        }
-                    } catch (Throwable t) {
-                        BalanceFetcher.diag(ctx, "快照记录失败: " + t);
-                    }
+                    /* 每 6 小时记一次快照（统计页曲线的来源）。
+                       逻辑已抽到 BalanceFetcher.sampleIfDue —— 打开 App 刷新时也会走一遍，
+                       免得「不摆小组件就永远没曲线」。 */
+                    BalanceFetcher.sampleIfDue(ctx, r);
 
                     int page = 0;
                     if (hasWidget) page = clampPage(ctx, mgr, r, ids[0]);

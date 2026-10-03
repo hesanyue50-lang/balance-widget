@@ -9,7 +9,7 @@
     android:layout_height="match_parent"
     android:background="@color/bg">
 
-    <ScrollView
+    <com.minis.balancewidget.PullScrollView
         android:id="@+id/main_scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -178,7 +178,40 @@
                     android:text="清理数据" android:textColor="@color/danger" android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
-    </ScrollView>
+    </com.minis.balancewidget.PullScrollView>
+
+    <!-- 下拉刷新指示器：顶部栏正下方的小胶囊。
+         topMargin 由 PullScrollView 按顶部栏高度同步（见 applyIndicatorTop），
+         所以它不会压到顶部栏，也不会浮在状态栏上。 -->
+    <LinearLayout
+        android:id="@+id/pull_box"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/pull_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="14dp"
+        android:paddingTop="7dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="7dp"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/pull_spin"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:indeterminateTint="@color/accent" />
+
+        <TextView
+            android:id="@+id/pull_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp"
+            android:text="下拉刷新"
+            android:textColor="@color/tx2"
+            android:textSize="12sp" />
+    </LinearLayout>
 
     <!-- 顶部栏 -->
     <LinearLayout
@@ -242,6 +275,60 @@
                 android:text="⚙ 设置"
                 android:textColor="@color/tx2"
                 android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 加载遮罩：切面板 / 重建统计 / 保存密钥这些活儿虽然现在快多了，
+         但第一次渲染、Keystore 加密仍可能占住主线程几百毫秒 ——
+         盖一层并显示进度条，用户至少知道「在干活」而不是以为点坏了。
+         clickable=true 顺带拦住误触。 -->
+    <LinearLayout
+        android:id="@+id/busy_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#66000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/card_bg"
+            android:gravity="center"
+            android:minWidth="180dp"
+            android:orientation="vertical"
+            android:paddingLeft="26dp"
+            android:paddingTop="22dp"
+            android:paddingRight="26dp"
+            android:paddingBottom="22dp">
+
+            <ProgressBar
+                android:id="@+id/busy_spin"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:indeterminateTint="@color/accent" />
+
+            <TextView
+                android:id="@+id/busy_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="正在加载…"
+                android:textColor="@color/tx2"
+                android:textSize="13sp" />
+
+            <!-- 横向进度条：活儿没进度可报时按不确定态来回滚，比干等一个圈更有反馈 -->
+            <ProgressBar
+                android:id="@+id/busy_bar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="150dp"
+                android:layout_height="4dp"
+                android:layout_marginTop="12dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/accent" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
