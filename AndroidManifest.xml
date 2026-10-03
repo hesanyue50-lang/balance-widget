@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="265"
-    android:versionName="26.10.265">
+    android:versionCode="290"
+    android:versionName="26.10.290">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -34,6 +34,13 @@
             android:name=".SettingsActivity"
             android:label="@string/cfg_title"
             android:exported="false" />
+
+        <!-- 小米 MiMo 余额查询需要控制台会话音，这里做一次内置 WebView 登录 -->
+        <activity
+            android:name=".MimoLoginActivity"
+            android:label="登录小米账号"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <receiver
             android:name=".BalanceWidgetProvider"

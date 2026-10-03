@@ -173,13 +173,42 @@ public final class Ledger extends SQLiteOpenHelper {
             }
             cur.close();
 
-            // 补充值与消费
+            /* 充值记录**一次性**读进内存再按时间归并。
+               原实现是「每个数据点查一次充值表」—— 30 天范围 120 个点、
+               每个平台 120 次查询，8 个平台就近千次 SQLite 查询，全在主线程，
+               统计页一打开就卡。归并写法把查询压到 1 次。 */
+            List<Recharge> rs = rechargeListAsc(c, keyId, fromTs);
+            int ri = 0;
             for (int i = 1; i < out.size(); i++) {
-                Point p = out.get(i), q = out.get(i - 1);
-                double charged = rechargedBetween(c, keyId, q.ts, p.ts);
+                Point q = out.get(i - 1), p = out.get(i);
+                double charged = 0;
+                while (ri < rs.size() && rs.get(ri).ts <= p.ts) {
+                    if (rs.get(ri).ts > q.ts) charged += rs.get(ri).amount;
+                    ri++;                       // 每条充值只被消费一次
+                }
                 p.charged = charged;
                 p.consumed = Math.max(0, q.balance + charged - p.balance);
             }
+        } catch (Throwable ignored) { }
+        return out;
+    }
+
+    /** 区间内充值记录，按时间**升序**（供 series 归并） */
+    private List<Recharge> rechargeListAsc(Context c, String keyId, long fromTs) {
+        List<Recharge> out = new ArrayList<Recharge>();
+        try {
+            Cursor cur = getReadableDatabase().rawQuery("SELECT ts, delta, matched, amount FROM "
+                    + T_RECH + " WHERE key_id=? AND ts>=? ORDER BY ts ASC",
+                    new String[]{keyId, String.valueOf(fromTs)});
+            while (cur.moveToNext()) {
+                Recharge r = new Recharge();
+                r.ts = cur.getLong(0);
+                r.delta = cur.getDouble(1);
+                r.matched = cur.isNull(2) ? -1 : cur.getDouble(2);
+                r.amount = cur.getDouble(3);
+                out.add(r);
+            }
+            cur.close();
         } catch (Throwable ignored) { }
         return out;
     }

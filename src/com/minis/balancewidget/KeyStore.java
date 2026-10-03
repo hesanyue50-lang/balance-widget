@@ -27,6 +27,25 @@ public final class KeyStore {
     /** 数据版本号：add/update/remove/save 时递增，供 UI 判断缓存是否失效 */
     public static long dataVersion = 0;
 
+    /**
+     * 内存缓存（关键性能修复）。
+     *
+     * load() 每读一次就要对**每个** Key 做一遍 Android Keystore 的 AES-GCM 解密 ——
+     * 单次解密要过 TEE，几毫秒到几十毫秒。而设置页渲染时对每个平台都要调
+     * get()/all()，PRESETS 16 个平台 × 每平台 2~3 次 × 20 个 Key
+     * = 几百次硬件解密，全在主线程 → 保存一个 Key 要卡好几秒。
+     *
+     * 所以按 dataVersion 缓存：只有真的增删改过才重读重解密。
+     */
+    private static List<ApiKey> cache;
+    private static long cacheVer = -1L;
+
+    /** 失效缓存：任何写操作前调用 */
+    private static void invalidate() {
+        cache = null;
+        cacheVer = -1L;
+    }
+
     private static final String K_KEYS = "keys_json_v2";
     /** 单平台 Key 数量的上限：太多了统计页会糊成一片，也没实际意义 */
     public static final int MAX_PER_PLATFORM = 8;
@@ -88,7 +107,8 @@ public final class KeyStore {
     }
 
     public static List<ApiKey> all(Context c) {
-        return load(c);
+        /* 返回副本：缓存是共享的可变列表，外面拿到就改会污染全局 */
+        return new ArrayList<ApiKey>(load(c));
     }
 
     /** 平台下第一个配置了密钥的 Key，没有就返回 null */
@@ -104,7 +124,7 @@ public final class KeyStore {
     // ---------- 写 ----------
 
     public static void add(Context c, String platform, ApiKey k) {
-        dataVersion++;
+        dataVersion++; invalidate();
         List<ApiKey> all = load(c);
         if (k.id == null || k.id.length() == 0) {
             k.id = UUID.randomUUID().toString().substring(0, 8);
@@ -115,7 +135,7 @@ public final class KeyStore {
     }
 
     public static void update(Context c, ApiKey k) {
-        dataVersion++;
+        dataVersion++; invalidate();
         List<ApiKey> all = load(c);
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i).id.equals(k.id)) {
@@ -128,7 +148,7 @@ public final class KeyStore {
     }
 
     public static void remove(Context c, String id) {
-        dataVersion++;
+        dataVersion++; invalidate();
         List<ApiKey> all = load(c);
         for (int i = all.size() - 1; i >= 0; i--) {
             if (all.get(i).id.equals(id)) all.remove(i);
@@ -149,6 +169,14 @@ public final class KeyStore {
     // ---------- 内部 ----------
 
     private static List<ApiKey> load(Context c) {
+        if (cache != null && cacheVer == dataVersion) return cache;
+        List<ApiKey> out = parseAll(c);
+        cache = out;
+        cacheVer = dataVersion;
+        return out;
+    }
+
+    private static List<ApiKey> parseAll(Context c) {
         List<ApiKey> out = new ArrayList<ApiKey>();
         SharedPreferences p = sp(c);
         String json = p.getString(K_KEYS, "");
@@ -186,7 +214,8 @@ public final class KeyStore {
     }
 
     private static void save(Context c, List<ApiKey> list) {
-        dataVersion++;
+        /* 这里不再自增 dataVersion：自增会让刚写好的缓存立刻失效，
+           下一次读又得把所有 Key 重新解密一遍。版本号由调用方（add/update/remove）负责推。 */
         try {
             JSONArray arr = new JSONArray();
             for (int i = 0; i < list.size(); i++) {
@@ -209,6 +238,8 @@ public final class KeyStore {
                 arr.put(o);
             }
             sp(c).edit().putString(K_KEYS, arr.toString()).apply();
+            cache = new ArrayList<ApiKey>(list);   // 回填缓存，省掉下一次重解密
+            cacheVer = dataVersion;
         } catch (Throwable ignored) { }
     }
 
