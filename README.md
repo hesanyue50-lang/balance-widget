@@ -279,22 +279,33 @@ SHA-256 `ffd72134…c439f33`，**与首版完全一致** → 每次升级直接 
 
 升级时只需提高 `AndroidManifest.xml` 里的 `versionCode`。
 
-## 构建
+## 构建与发布
 
 ```sh
-cd /var/minis/mounts/AIWord/projects/balance-widget
+cd /var/minis/mounts/AIWord/projects/balance-widget   # 源码母本在 AIWord
+sh tools/release.sh "提交说明"        # 一键：编译 → 同步到 git 仓库 → 提交 → 推送（带重试）
+sh tools/release.sh -n "只改了文档"   # 跳过编译
+```
+
+只编译 + 装到本机：
+
+```sh
 sh build.sh          # 产出 com.minis.balancewidget.apk
+android-shizuku-cli exec "cp /storage/emulated/0/others/AIWord/BalanceWidget-latest.apk /data/local/tmp/a.apk && pm install -r /data/local/tmp/a.apk"
 ```
 
-安装：
+### 为什么分「母本」和「仓库」两个目录
 
-```sh
-android-shizuku-cli exec 'cp /storage/emulated/0/others/AIWord/projects/balance-widget/com.minis.balancewidget.apk /data/local/tmp/a.apk && pm install -r /data/local/tmp/a.apk'
-```
+AIWord 是 FUSE 挂载卷，**git objects 写不进去**，所以源码母本在 AIWord、
+git 仓库在沙盒真实文件系统（`/var/minis/shared/balance-widget`），两边靠 tar 同步。
+
+> ⚠️ 改 `tools/*.sh` 要改 **AIWord 那份**。只改仓库副本的话，下次跑 release.sh
+> 会先同步，用 AIWord 的旧版把改动覆盖掉。
 
 沙盒是 aarch64，靠 **qemu-user + x86_64 glibc sysroot** 跑官方 aapt2/zipalign；
 d8 必须用 Termux 版（build-tools 自带的那个解析闭包匿名类会崩）。
 完整步骤见 skill `openminis-android-dev`。
+
 
 ## 文件
 
