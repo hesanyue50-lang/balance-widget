@@ -43,12 +43,17 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
+        <!-- 标题：weight=1 吃掉剩余空间，但要允许被压缩到 0 并省略号收尾。
+             之前没设 minWidth/ellipsize，标题会"顶"着后面的图标，
+             在窄组件（vivo 桌面只给 2 格宽）下把 w2_next 挤去和 w2_refresh 重叠。 -->
         <TextView
             android:id="@+id/w2_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:minWidth="0dp"
             android:singleLine="true"
+            android:ellipsize="end"
             android:includeFontPadding="false"
             android:textColor="@color/w2_tx2"
             android:textSize="12sp"
@@ -58,31 +63,45 @@
             android:id="@+id/w2_page"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:minWidth="0dp"
             android:includeFontPadding="false"
             android:textColor="@color/w2_tx3"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
 
+        <!-- 上一页 / 下一页：紧挨放，属于"翻页"这一组 -->
         <ImageView
             android:id="@+id/w2_prev"
+            android:clickable="true"
+            android:focusable="true"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="2dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_chevron_left"
             android:contentDescription="上一页" />
 
         <ImageView
             android:id="@+id/w2_next"
+            android:clickable="true"
+            android:focusable="true"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:layout_marginStart="2dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_chevron_right"
             android:contentDescription="下一页" />
 
+        <!-- 刷新：单独一组，用 marginStart 拉开间距。
+             它与翻页在视觉上必须分开，否则窄组件下三个图标贴在一起，
+             既难点准，用户也分不清哪个是翻页哪个是刷新。 -->
         <ImageView
             android:id="@+id/w2_refresh"
+            android:clickable="true"
+            android:focusable="true"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:layout_marginStart="2dp"
+            android:layout_marginStart="8dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_refresh"
             android:contentDescription="刷新" />
     </LinearLayout>

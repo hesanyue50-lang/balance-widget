@@ -56,6 +56,41 @@ public final class WidgetRenderer {
 
     private static final int LAYOUT = R.layout.widget_balance2;
 
+    /**
+     * 计算每个条目落在哪个格子，返回**总共需要多少格子**。
+     *
+     * 为什么单独抽出来：翻页要用到页数，而页数 = ceil(槽位数 / 每页容量)。
+     * 槽位数**不等于条目数** —— 制式切换时要补到行首（分档线才完整），
+     * 补出来的空位也算占位。
+     *
+     * ⚠️ 这个方法必须被渲染器和 Provider **共用**。曾经 Provider 自己用
+     * `items.size()` 算页数，结果和渲染器显示的页数不一致：
+     * 实测 items=6 但槽位=9，渲染器显示 1/2、Provider 算出 1/1，
+     * 于是点「下一页」被夹回第 0 页 —— 表现就是"点了只刷新、不翻页"。
+     *
+     * @param slotOf     输出参数，长度应 >= items.size()；可为 null（只要总数时）
+     * @param groupStart 输出参数，记录每个制式分档的起始槽位；可为 null
+     */
+    public static int computeSlots(List<BalanceFetcher.Item> items, int cols,
+                                   int[] slotOf, HashSet<Integer> groupStart) {
+        if (items == null) return 0;
+        if (cols <= 0) cols = 1;
+        int slot = 0;
+        String prevKind = null;
+        for (int i = 0; i < items.size(); i++) {
+            String k = items.get(i).kind;
+            if (prevKind != null && !k.equals(prevKind)) {
+                int rem = slot % cols;
+                if (rem != 0) slot += (cols - rem);     // 新档从行首开始，分档线才完整
+                if (groupStart != null) groupStart.add(Integer.valueOf(slot));
+            }
+            if (slotOf != null && i < slotOf.length) slotOf[i] = slot;
+            slot++;
+            prevKind = k;
+        }
+        return slot;
+    }
+
     /** 每个平台一个颜色，按索引循环取 */
     private static final int[] PALETTE = {
         0xFF4D6BFE, 0xFF8B5CF6, 0xFF0EA5E9, 0xFF22C55E, 0xFFF97316,
@@ -124,19 +159,7 @@ public final class WidgetRenderer {
         int n = items.size();
         int[] slotOf = new int[n];
         HashSet<Integer> groupStart = new HashSet<Integer>();
-        int slot = 0;
-        String prevKind = null;
-        for (int i = 0; i < n; i++) {
-            String k = items.get(i).kind;
-            if (prevKind != null && !k.equals(prevKind)) {
-                int rem = slot % cols;
-                if (rem != 0) slot += (cols - rem);     // 新档从行首开始，分档线才完整
-                groupStart.add(Integer.valueOf(slot));
-            }
-            slotOf[i] = slot;
-            slot++;
-            prevKind = k;
-        }
+        int slot = computeSlots(items, cols, slotOf, groupStart);
 
         int pages = Math.max(1, (slot + perPage - 1) / perPage);
         v.setTextViewText(R.id.w2_page, pages > 1 ? (page + 1) + "/" + pages : "");

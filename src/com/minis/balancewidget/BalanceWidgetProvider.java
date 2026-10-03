@@ -105,12 +105,23 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                 fetchAndRender(ctx, mgr, ids);
                 return;
             }
+            /* 页数必须和渲染器用**同一套算法**：渲染器按「合并后的平台槽位」算，
+               而这里原来是按「原始条目数」算 —— 两者不等时，
+               点「下一页」会被夹回第 0 页，表现为"点了只刷新、不翻页"。
+               （实测：items=6 但槽位=9，渲染器显示 1/2，这里却算成 1/1。） */
             int perPage = WidgetStyle.capacityFor(mgr, ids[0]);
-            int pages = Math.max(1, (r.items.size() + perPage - 1) / perPage);
+            int cols = WidgetStyle.colsFor(mgr, ids[0]);
+            java.util.List<BalanceFetcher.Item> grouped = BalanceFetcher.groupByKind(r.items);
+            int slots = WidgetRenderer.computeSlots(grouped, cols, null, null);
+            int pages = Math.max(1, (slots + perPage - 1) / perPage);
             int page = WidgetCache.page(ctx);
             page = ACTION_NEXT.equals(a) ? Math.min(pages - 1, page + 1)
                                          : Math.max(0, page - 1);
             WidgetCache.setPage(ctx, page);
+            /* 记一条：排查「点了翻页却像刷新」时，靠它区分
+               ① 点击没送到（日志里没有这行）② 送到了但页码没变。 */
+            BalanceFetcher.diag(ctx, "小组件翻页 " + a + " → " + page + "/" + pages
+                    + " (perPage=" + perPage + " items=" + r.items.size() + ")");
             for (int i = 0; i < ids.length; i++) {
                 WidgetRenderer.renderResult(ctx, mgr, ids[i], r, page);
             }
