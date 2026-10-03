@@ -14,12 +14,16 @@
 # Token 从环境变量 GITHUB_TOKEN 读，**不写进 .git/config**：
 #   写进去的话，一旦 token 轮换就会以「Authentication failed」的形式神秘失败，
 #   而且整个目录被拷贝时会把明文凭证一起带走。这里改成推送时临时拼接。
+#
+# 关于网络：沙盒访问 github.com 不稳定（有时 7s 握手成功，有时直接连不上，
+#   而 api.github.com 却一直正常）。所以推送**自动重试**，别让一次抖动白跑一轮。
 set -e
 
 SRC=/var/minis/mounts/AIWord/projects/balance-widget
 REPO=/var/minis/shared/balance-widget
 SLUG=hesanyue50-lang/balance-widget
 APK=com.minis.balancewidget.apk
+TRIES=3
 
 DO_BUILD=1
 if [ "$1" = "-n" ] || [ "$1" = "--no-build" ]; then
@@ -63,20 +67,26 @@ VER=$(grep -o 'versionName="[^"]*"' AndroidManifest.xml | head -1 | cut -d'"' -f
 git commit -q -m "$MSG"$'\n\n'"versionName=$VER"
 echo "📝 已提交：$MSG (versionName=$VER)"
 
-# ---------- ④ 推送 ----------
-echo "🚀 推送…"
-# 注意两个坑：
-#   ① 别用 `cmd \` 续行 + 管道 —— busybox ash 下参数会丢，git 会退回用 origin（裸 URL）去找凭证；
-#   ② 别把 git 的输出直接接管道 —— 管道的退出码是 sed 的，git 失败也看不出来。
-# 所以：单行命令 + 重定向到临时文件 + 显式判退出码，回显时再过滤 token。
+# ---------- ④ 推送（带重试） ----------
+# 两个坑：
+#   ① 别把 git 的输出直接接管道 —— 管道的退出码是 sed 的，git 失败也会被判成成功；
+#      所以重定向到文件，再显式看退出码。
+#   ② github.com 在沙盒里可达性抖动，一次失败不代表凭证有问题，重试通常就好。
+URL="https://x-access-token:$GITHUB_TOKEN@github.com/$SLUG.git"
 LOG=/tmp/bw-push.log
-if git push "https://x-access-token:$GITHUB_TOKEN@github.com/$SLUG.git" HEAD:main >"$LOG" 2>&1; then
-    sed "s/$GITHUB_TOKEN/<token>/g" "$LOG"
-    rm -f "$LOG"
-    echo "✅ 完成"
-else
-    sed "s/$GITHUB_TOKEN/<token>/g" "$LOG"
-    rm -f "$LOG"
-    echo "❌ 推送失败（改动已本地提交，可重跑本脚本）"
-    exit 1
-fi
+i=1
+while [ "$i" -le "$TRIES" ]; do
+    echo "🚀 推送（第 $i/$TRIES 次）…"
+    if git push "$URL" HEAD:main >"$LOG" 2>&1; then
+        grep -v '^remote:' "$LOG" | sed "s/$GITHUB_TOKEN/<token>/g"
+        rm -f "$LOG"
+        echo "✅ 完成"
+        exit 0
+    fi
+    sed "s/$GITHUB_TOKEN/<token>/g" "$LOG" | tail -3
+    i=$((i + 1))
+    [ "$i" -le "$TRIES" ] && { echo "⏳ 5 秒后重试…"; sleep 5; }
+done
+rm -f "$LOG"
+echo "❌ 推送失败 $TRIES 次（改动已本地提交，网络恢复后重跑本脚本即可）"
+exit 1
