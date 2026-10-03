@@ -8,6 +8,9 @@
 #   AIWord 是 FUSE 挂载卷，git objects 写不进去 —— 所以源码母本在 AIWord，
 #   但 git 仓库必须放在沙盒真实文件系统（/var/minis/shared/），两边靠 tar 同步。
 #
+# ⚠️ 因此：**改本脚本必须改 AIWord 里的那一份**（AIWord 是母本）。
+#    若只改仓库副本，下次跑它就会用 AIWord 的旧版把自己覆盖掉。
+#
 # Token 从环境变量 GITHUB_TOKEN 读，**不写进 .git/config**：
 #   写进去的话，一旦 token 轮换就会以「Authentication failed」的形式神秘失败，
 #   而且整个目录被拷贝时会把明文凭证一起带走。这里改成推送时临时拼接。
@@ -62,6 +65,18 @@ echo "📝 已提交：$MSG (versionName=$VER)"
 
 # ---------- ④ 推送 ----------
 echo "🚀 推送…"
-git push "https://x-access-token:$GITHUB_TOKEN@github.com/$SLUG.git" HEAD:main \
-    2>&1 | sed "s/$GITHUB_TOKEN/<token>/g"
-echo "✅ 完成"
+# 注意两个坑：
+#   ① 别用 `cmd \` 续行 + 管道 —— busybox ash 下参数会丢，git 会退回用 origin（裸 URL）去找凭证；
+#   ② 别把 git 的输出直接接管道 —— 管道的退出码是 sed 的，git 失败也看不出来。
+# 所以：单行命令 + 重定向到临时文件 + 显式判退出码，回显时再过滤 token。
+LOG=/tmp/bw-push.log
+if git push "https://x-access-token:$GITHUB_TOKEN@github.com/$SLUG.git" HEAD:main >"$LOG" 2>&1; then
+    sed "s/$GITHUB_TOKEN/<token>/g" "$LOG"
+    rm -f "$LOG"
+    echo "✅ 完成"
+else
+    sed "s/$GITHUB_TOKEN/<token>/g" "$LOG"
+    rm -f "$LOG"
+    echo "❌ 推送失败（改动已本地提交，可重跑本脚本）"
+    exit 1
+fi
