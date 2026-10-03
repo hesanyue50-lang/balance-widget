@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 余额页（第 1 页）
+     从 activity_main.xml 拆出来，因为三个面板现在各自是一个独立滚动的页面。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <!-- 总资产 -->
+    <LinearLayout
+        android:id="@+id/total_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/total_bg"
+        android:padding="31dp"
+        android:layout_marginBottom="13dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/main_total_label"
+            android:textColor="@color/tx2"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/t_total"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="—"
+            android:textColor="@color/tx"
+            android:textSize="32sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/t_sub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="@string/tap_refresh"
+            android:textColor="@color/tx3"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- 平台卡片容器（动态填充） -->
+    <LinearLayout
+        android:id="@+id/cards"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

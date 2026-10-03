@@ -23,8 +23,13 @@ public class MainActivity extends Activity {
     private TextView tTotal;
     private TextView tSub;
     private boolean loading = false;
-    /** 下拉刷新容器（API 余额页 / 统计页共用同一个滚动区） */
-    private PullScrollView pullView;
+    /** 收起所有页面的下拉刷新指示器（三页共用一个胶囊，谁收起都一样） */
+    private void hidePullRefresh() {
+        if (scrolls == null) return;
+        for (int i = 0; i < scrolls.length; i++) {
+            if (scrolls[i] != null) scrolls[i].setRefreshing(false);
+        }
+    }
     /** 这次下拉刷新结束后要不要重算统计图表 */
     private boolean statsRebuildAfterRefresh = false;
 
@@ -59,6 +64,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.total_card).setOnClickListener(refreshClick);
 
         applyWindowInsets();
+        setupPager();
         bindPullToRefresh();
 
         findViewById(R.id.total_card).setOnClickListener(refreshClick);
@@ -69,7 +75,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) { showTab(true); }
         });
         findViewById(R.id.tab_stats).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { showTab(false); buildStats(); }
+            public void onClick(View v) { showTab(false); }   // 统计页重算在停稳回调里统一做
         });
 
         // 日期范围下拉（5/7/14/30/90/180 天）
@@ -235,87 +241,6 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    /** 切换 API / 统计 两个栏目 */
-    /** 保留旧签名：true=API 面板, false=统计面板 */
-    /** 设置导航选中项背景（选中=浅底，未选中=透明） */
-    private void setSegBg(int idx) {
-        int[] ids = { R.id.tab_api, R.id.tab_stats, R.id.btn_settings };
-        for (int i = 0; i < ids.length; i++) {
-            TextView t = (TextView) findViewById(ids[i]);
-            if (t != null) t.setBackground(i == idx
-                    ? getResources().getDrawable(R.drawable.seg_sel) : null);
-        }
-    }
-
-    private void showTab(boolean api) { showPanel(api ? 0 : 1); }
-
-    /** 面板序号（0=API 余额, 1=用量统计, 2=设置） */
-    private int curPanel = 0;
-
-    /** 三个面板同页统一平移切换（API余额 / 用量统计 / 设置 动画完全一致） */
-    private void showPanel(int idx) {
-        BalanceFetcher.diag(this, "showPanel " + idx);
-        final View total = findViewById(R.id.total_card);
-        final View cards = findViewById(R.id.cards);
-        final View stats = findViewById(R.id.stats_container);
-        final View set = findViewById(R.id.settings_container);
-
-        total.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
-        cards.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
-        stats.setVisibility(idx == 1 ? View.VISIBLE : View.GONE);
-        set.setVisibility(idx == 2 ? View.VISIBLE : View.GONE);
-
-        // 切到统计：重算可能占住主线程几百毫秒（多次 SQLite 查询 + 图表重建），加遮罩
-        if (pullView != null) pullView.setPullEnabled(idx != 2);   // 设置页不给下拉
-        if (idx == 1) {
-            Busy.run(this, "正在统计…", new Runnable() {
-                public void run() { buildStats(); }
-            });
-        }
-        if (idx == 2) buildSettingsPanel();   // 自守卫，只建一次
-        // 切换面板时滚动回顶部：否则沿用上一面板的滚动位置，内容会顶到导航条下（看起来像圆角缺失）
-        final android.widget.ScrollView sc = (android.widget.ScrollView) findViewById(R.id.main_scroll);
-        if (sc != null) sc.post(new Runnable() { public void run() { sc.scrollTo(0, 0); } });
-
-        // 平移动画：按切换方向从两侧滑入（与 Tab 切换同一语言）
-        final int dir = (idx == curPanel) ? 0 : (idx > curPanel ? 1 : -1);
-        curPanel = idx;
-        if (dir != 0) {
-            final float w = findViewById(R.id.main_root).getWidth() * 0.35f;
-            final float fromX = dir * w;
-            View[] vs = (idx == 0) ? new View[] { total, cards } : new View[] { idx == 1 ? stats : set };
-            for (int i = 0; i < vs.length; i++) {
-                if (vs[i] == null) continue;
-                vs[i].setTranslationX(fromX);
-                vs[i].animate().translationX(0f).setDuration(240).start();
-            }
-        }
-
-        // 文字选中态
-        TextView ta = (TextView) findViewById(R.id.tab_api);
-        TextView ts = (TextView) findViewById(R.id.tab_stats);
-        TextView tg = (TextView) findViewById(R.id.btn_settings);
-        ta.setTextColor(getColor(idx == 0 ? R.color.accent : R.color.tx2));
-        ts.setTextColor(getColor(idx == 1 ? R.color.accent : R.color.tx2));
-        tg.setTextColor(getColor(idx == 2 ? R.color.accent : R.color.tx2));
-        ta.setTypeface(null, idx == 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-        ts.setTypeface(null, idx == 1 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-        tg.setTypeface(null, idx == 2 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-        setSegBg(idx);
-    }
-
-
-
-    @Override
-    protected void onNewIntent(Intent i) {
-        super.onNewIntent(i);
-        setIntent(i);
-        String gt = i.getStringExtra("goto_tab");
-        if ("stats".equals(gt)) showTab(false);
-        else if ("api".equals(gt)) showTab(true);
-    }
-
-    /** 设置面板是否已构建（避免重复绑定） */
     private boolean settingsPanelBuilt = false;
     /** 设置面板绑定器：从 MiMo 登录页回来后要靠它刷新「登录状态」那行字 */
     private SettingsBinder settingsBinder;
@@ -324,10 +249,199 @@ public class MainActivity extends Activity {
     private void buildSettingsPanel() {
         if (settingsPanelBuilt) return;
         settingsPanelBuilt = true;
-        settingsBinder = new SettingsBinder(this, findViewById(R.id.settings_container), new Runnable() {
-            public void run() { applyHideLocally(); refresh(false); }   // 改动后立即重绘 + 后台刷新
-        });
+        settingsBinder = new SettingsBinder(this, findViewById(R.id.settings_container),
+                new Runnable() {
+                    public void run() { applyHideLocally(); refresh(false); }
+                });
         settingsBinder.bind();
+    }
+
+    private void showTab(boolean api) { showPanel(api ? 0 : 1); }
+
+    /** 面板序号（0=API 余额, 1=用量统计, 2=设置） */
+    private int curPanel = 0;
+    /** 横向分页容器（左右滑动切换） */
+    private PanelPager pager;
+    /** 导航栏的滑动滑块 */
+    private View segSlider;
+
+    /** 三页的滚动容器，按页序排列 */
+    private PullScrollView[] scrolls;
+
+    /**
+     * 初始化左右滑动分页。
+     *
+     * 导航栏的动画不用动画器，而是**直接由滚动进度驱动** ——
+     * 手指拖到哪、滑块就在哪，跟手才不会有"动画追不上手指"的割裂感。
+     */
+    private void setupPager() {
+        pager = (PanelPager) findViewById(R.id.panel_pager);
+        segSlider = findViewById(R.id.seg_slider);
+        scrolls = new PullScrollView[] {
+            (PullScrollView) findViewById(R.id.scroll_api),
+            (PullScrollView) findViewById(R.id.scroll_stats),
+            (PullScrollView) findViewById(R.id.scroll_settings),
+        };
+
+        final View wrap = findViewById(R.id.seg_wrap);
+        if (wrap != null) {
+            wrap.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                public void onLayoutChange(View v, int l, int t, int r, int b,
+                                           int ol, int ot, int or_, int ob) {
+                    layoutSlider();
+                }
+            });
+        }
+        if (pager != null) {
+            pager.setListener(new PanelPager.Listener() {
+                public void onPagerScroll(float progress) { applyNavProgress(progress); }
+                public void onPageSettled(int page) { onPanelSettled(page); }
+            });
+            /* 首帧之后补一次初始化：滑块宽度要等布局量完才知道，
+               下拉开关也要按当前页设一遍（否则设置页默认还是允许下拉）。 */
+            pager.post(new Runnable() {
+                public void run() {
+                    layoutSlider();
+                    /* 显式对齐一次：布局过程中任何子视图获焦都可能让容器挪位，
+                       这里把位置钉死在当前页（无动画，避免开屏就动一下）。 */
+                    pager.setPage(curPanel, false);
+                    onPanelSettled(curPanel);
+                }
+            });
+        }
+    }
+
+    /**
+     * 滑块尺寸 = 三等分内宽 × 标签行高（都得等布局完成后再量）。
+     *
+     * 高度必须由代码设：滑块是无内容的纯 View，若在 XML 里写 match_parent，
+     * 父容器处于 AT_MOST 约束时 View.getDefaultSize() 会直接返回上限值 ——
+     * 滑块会一路撑到整屏高，把顶栏和下面所有内容都挤没（踩过）。
+     */
+    private void layoutSlider() {
+        View wrap = findViewById(R.id.seg_wrap);
+        View tabs = findViewById(R.id.seg_tabs);
+        if (wrap == null || segSlider == null) return;
+        int inner = wrap.getWidth() - wrap.getPaddingLeft() - wrap.getPaddingRight();
+        int w = inner / 3;
+        int h = (tabs != null) ? tabs.getHeight() : 0;
+        android.view.ViewGroup.LayoutParams lp = segSlider.getLayoutParams();
+        boolean need = false;
+        if (w > 0 && lp.width != w) { lp.width = w; need = true; }
+        if (h > 0 && lp.height != h) { lp.height = h; need = true; }
+        if (need) segSlider.setLayoutParams(lp);
+        applyNavProgress(pager == null || pager.getWidth() == 0
+                ? curPanel : pager.getScrollX() / (float) pager.getWidth());
+    }
+
+    /**
+     * 按滑动进度刷新导航栏：滑块位置 + 三个标签的颜色渐变。
+     * progress 可能是小数（正处在两页之间），所以颜色要按距离插值，
+     * 而不是简单地"选中/未选中"二选一 —— 那会在滑动中间出现突兀的跳变。
+     */
+    private void applyNavProgress(float progress) {
+        View wrap = findViewById(R.id.seg_wrap);
+        if (wrap == null || segSlider == null) return;
+        int inner = wrap.getWidth() - wrap.getPaddingLeft() - wrap.getPaddingRight();
+        if (inner <= 0) return;
+        float step = inner / 3f;
+        segSlider.setTranslationX(progress * step);
+
+        int[] ids = { R.id.tab_api, R.id.tab_stats, R.id.btn_settings };
+        int on = getColor(R.color.accent);
+        int off = getColor(R.color.tx2);
+        for (int i = 0; i < ids.length; i++) {
+            TextView t = (TextView) findViewById(ids[i]);
+            if (t == null) continue;
+            float t01 = Math.max(0f, 1f - Math.abs(progress - i));
+            t.setTextColor(blendColor(off, on, t01));
+            t.setTypeface(null, t01 > 0.5f
+                    ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        }
+    }
+
+    /** 两色线性插值（用于导航标签的渐变） */
+    private static int blendColor(int from, int to, float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        int a = (int) (android.graphics.Color.alpha(from)
+                + (android.graphics.Color.alpha(to) - android.graphics.Color.alpha(from)) * t);
+        int r = (int) (android.graphics.Color.red(from)
+                + (android.graphics.Color.red(to) - android.graphics.Color.red(from)) * t);
+        int g = (int) (android.graphics.Color.green(from)
+                + (android.graphics.Color.green(to) - android.graphics.Color.green(from)) * t);
+        int b = (int) (android.graphics.Color.blue(from)
+                + (android.graphics.Color.blue(to) - android.graphics.Color.blue(from)) * t);
+        return android.graphics.Color.argb(a, r, g, b);
+    }
+
+    /**
+     * 切到某页。动画、导航栏、滚动位置全部交给 PanelPager 统一处理；
+     * 那些"重活"（重建统计 / 构建设置面板）放在**停稳之后**做 ——
+     * 边滚边算会掉帧，而且用户可能只是滑过去又滑回来。
+     */
+    private void showPanel(int idx) {
+        BalanceFetcher.diag(this, "showPanel " + idx);
+        if (pager == null) { setupPager(); }
+        if (pager == null) return;
+        pager.setPage(idx, true);
+    }
+
+    /** 某页停稳后：建内容、切下拉开关、把该页滚回顶部 */
+    private void onPanelSettled(int page) {
+        curPanel = page;
+        // 下拉刷新：设置页不给下拉（那里没什么好刷的）
+        if (scrolls != null) {
+            for (int i = 0; i < scrolls.length; i++) {
+                if (scrolls[i] != null) scrolls[i].setPullEnabled(i != 2);
+            }
+        }
+        if (page == 1) {
+            Busy.run(this, "正在统计…", new Runnable() {
+                public void run() { buildStats(); }
+            });
+        } else if (page == 2) {
+            Busy.run(this, "正在打开设置…", new Runnable() {
+                public void run() {
+                    buildSettingsPanel();
+                    dropEditFocus();     // 设置页里有输入框，别让它一进来就抢焦点弹键盘
+                }
+            });
+        }
+        // 回到该页顶部：沿用上一页的滚动位置会让人以为内容没加载
+        if (scrolls != null && page >= 0 && page < scrolls.length && scrolls[page] != null) {
+            final android.widget.ScrollView sc = scrolls[page];
+            sc.post(new Runnable() {
+                public void run() {
+                    sc.scrollTo(0, 0);
+                    dropEditFocus();
+                }
+            });
+        }
+    }
+
+    /**
+     * 清掉输入框焦点并收起键盘。
+     *
+     * 设置页里第一个 EditText 会跟着 Activity 一起自动获焦，结果一进设置就
+     * 弹出键盘、光标闪烁 —— 用户根本没打算输入。三道保险一起上：
+     *   ① manifest 的 stateAlwaysHidden（窗口初始不弹键盘）；
+     *   ② 根布局 focusableInTouchMode，让初始焦点落在根上而不是第一个输入框；
+     *   ③ 就是这里，面板停稳后主动清一次焦点。
+     * 任意一道生效都不会再出现"自动弹键盘"，多余的重复只是无害。
+     */
+    private void dropEditFocus() {
+        try {
+            View f = getCurrentFocus();
+            if (f instanceof android.widget.EditText) {
+                f.clearFocus();
+                android.view.inputmethod.InputMethodManager imm =
+                        (android.view.inputmethod.InputMethodManager)
+                                getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(f.getWindowToken(), 0);
+                }
+            }
+        } catch (Throwable ignored) { }
     }
 
     /** 当前统计范围天数（默认 7 天，可切换 30/90/180） */
@@ -828,7 +942,8 @@ public class MainActivity extends Activity {
 
     /** 刘海 / 状态栏 / 手势条适配（与设置界面共用同一套逻辑） */
     private void applyWindowInsets() {
-        UiInsets.apply(this, R.id.app_header, R.id.main_scroll, 12, 20);
+        UiInsets.apply(this, R.id.app_header, 12, 20,
+                R.id.scroll_api, R.id.scroll_stats, R.id.scroll_settings);
     }
 
     private int dp(float v) {
@@ -872,23 +987,29 @@ public class MainActivity extends Activity {
      * 设置页没什么好刷的，所以切到设置面板时直接关掉下拉。
      */
     private void bindPullToRefresh() {
-        pullView = (PullScrollView) findViewById(R.id.main_scroll);
-        if (pullView == null) return;
-        pullView.attachIndicator(findViewById(R.id.pull_box),
-                (TextView) findViewById(R.id.pull_text));
-        pullView.setListener(new PullScrollView.Listener() {
-            public void onPull(float progress) { }
-            public void onCancel() { }
-            public void onRefresh() {
-                pullView.setRefreshing(true);
-                /* 正好有自动刷新在跑：不用另起一次，它收尾时会把指示器收掉，
-                   数据也才刚刚拉过，没必要重复请求。 */
-                if (loading) return;
-                /* 统计页刷完还要重算图表（曲线/明细都基于账本），API 页只要卡片 */
-                statsRebuildAfterRefresh = (curPanel == 1);
-                refresh(false);
-            }
-        });
+        if (scrolls == null) return;
+        View box = findViewById(R.id.pull_box);
+        TextView label = (TextView) findViewById(R.id.pull_text);
+        for (int i = 0; i < scrolls.length; i++) {
+            final PullScrollView ps = scrolls[i];
+            if (ps == null) continue;
+            /* 三页共用同一个指示器胶囊 —— 同一时刻只可能有一页在下拉，不会打架。
+               它按容器 paddingTop（= 顶部栏高度）定位，所以永远贴在顶部栏正下方。 */
+            ps.attachIndicator(box, label);
+            ps.setListener(new PullScrollView.Listener() {
+                public void onPull(float progress) { }
+                public void onCancel() { }
+                public void onRefresh() {
+                    ps.setRefreshing(true);
+                    /* 正好有自动刷新在跑：不用另起一次，它收尾时会把指示器收掉，
+                       数据也才刚刚拉过，没必要重复请求。 */
+                    if (loading) return;
+                    /* 统计页刷完还要重算图表（曲线/明细都基于账本），API 页只要卡片 */
+                    statsRebuildAfterRefresh = (curPanel == 1);
+                    refresh(false);
+                }
+            });
+        }
     }
 
     private void refresh() { refresh(false); }
@@ -920,7 +1041,7 @@ public class MainActivity extends Activity {
                             statsRebuildAfterRefresh = false;
                             buildStats();
                         }
-                        if (pullView != null) pullView.setRefreshing(false);
+                        hidePullRefresh();
                     }
                 });
             }
