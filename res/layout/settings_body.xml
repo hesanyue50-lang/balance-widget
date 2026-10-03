@@ -243,6 +243,20 @@
             </LinearLayout>
 
             
+            <!-- ========== 页面管理 ========== -->
+            <TextView
+                android:id="@+id/btn_pages"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingTop="13dp"
+                android:paddingBottom="13dp"
+                android:text="📑 页面管理（主页面 / 隐藏 / 排序）"
+                android:textColor="@color/tx"
+                android:textSize="13sp" />
+
             <!-- ========== 操作 ==========（「保存并刷新」已移除：修改即保存） -->
 
             <TextView

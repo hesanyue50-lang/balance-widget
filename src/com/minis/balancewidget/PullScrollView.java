@@ -55,7 +55,9 @@ public class PullScrollView extends ScrollView {
 
     private void init(Context c) {
         touchSlop = ViewConfiguration.get(c).getScaledTouchSlop();
-        triggerPx = dp(c, 68);
+        /* 触发线调低到 56dp：原先 68dp 要拉挺长一段，配合水平死区后
+           现在一下就能拉出来，符合"下拉即刷"的直觉。 */
+        triggerPx = dp(c, 56);
         setOverScrollMode(OVER_SCROLL_NEVER);
     }
 

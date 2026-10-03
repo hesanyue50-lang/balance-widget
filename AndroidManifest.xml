@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="299"
-    android:versionName="26.10.299">
+    android:versionCode="339"
+    android:versionName="26.10.339">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -12,22 +12,55 @@
     <!-- 后台定时刷新（用于余额预警及时送达）：开机后重新注册闹钟 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- 系统级全局代理：VpnService 需要前台服务常驻（否则会被系统随时回收，
+         那样流量会突然断掉）。SPECIAL_USE 是 targetSdk 34 起对
+         「不属于其它既有类别」的前台服务所要求的类型声明。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application
         android:name=".App"
         android:label="@string/app_name"
         android:icon="@drawable/ic_launcher"
         android:theme="@style/AppTheme"
         android:allowBackup="true"
+        android:extractNativeLibs="true"
         android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"
             android:label="@string/app_name"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
+            android:launchMode="singleTask"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- 接收机场页面的「导入 Clash」。
+                 机场通常给的是 clash://install-config?url=<订阅地址>&name=<名字>，
+                 有的客户端用 clashmeta: 前缀，所以两个 scheme 都注册。
+                 注册后，用户在机场网站点「一键导入 Clash」时，
+                 系统的应用选择器里会出现本应用。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="clash" android:host="install-config" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="clashmeta" android:host="install-config" />
+            </intent-filter>
+            <!-- 有些机场不带 host，直接用 clash://?url=... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="clash" />
             </intent-filter>
         </activity>
 
@@ -35,6 +68,21 @@
             android:name=".SettingsActivity"
             android:label="@string/cfg_title"
             android:exported="false" />
+
+        <!-- 系统级 VPN（真正全局）：接管整机流量交给内置内核处理。
+             只在用户显式选择「系统全局」模式时才会启动。 -->
+        <service
+            android:name=".ClashVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Global proxy for refreshing account balances" />
+        </service>
 
         <!-- 小米 MiMo 余额查询需要控制台会话音，这里做一次内置 WebView 登录 -->
         <activity

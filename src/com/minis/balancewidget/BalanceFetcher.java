@@ -154,6 +154,16 @@ public class BalanceFetcher {
         public final String console;
         /** 充值页（能直达就直达，直达不了就填控制台首页） */
         public final String topup;
+        /**
+         * 国外平台标记。
+         *
+         * 国内网络访问境外站点（尤其 Cloudflare 系）握手本来就慢且不稳，
+         * 给 12 秒的总预算经常卡在 TLS 握手上直接超时 —— 明明网络是通的。
+         * 标了 foreign 的会给更长的单地址预算，必要时还能走代理。
+         */
+        public boolean foreign;
+        /** 走代理访问（用户在设置里为这个平台开了 VPN 分流） */
+        public boolean viaProxy;
         public Preset(String id, String name, String url, String paths,
                       String unit, String kind, String hint) {
             this(id, name, url, paths, unit, kind, hint, "", "");
@@ -169,6 +179,13 @@ public class BalanceFetcher {
             this.unit = unit; this.kind = kind; this.hint = hint;
             this.console = console;
             this.topup = topup;
+        }
+        /** 国外平台用这个构造：末尾多一个 foreign 标记 */
+        public Preset(String id, String name, String url, String paths,
+                      String unit, String kind, String hint,
+                      String console, String topup, boolean foreign) {
+            this(id, name, url, paths, unit, kind, hint, console, topup);
+            this.foreign = foreign;
         }
     }
 
@@ -187,7 +204,8 @@ public class BalanceFetcher {
         new Preset("openrouter", "OpenRouter", "", "", "USD", "balance",
                    "openrouter.ai → Keys。余额 = 累计充值 − 已用",
                    "https://openrouter.ai/settings/keys",
-                   "https://openrouter.ai/credits"),
+                   "https://openrouter.ai/credits",
+                   true),
         new Preset("qiniu", "七牛云 AI", "", "", "消费", "usage",
                    "portal.qiniu.com → AI 推理 → API Key。后付费，显示本月消费",
                    "https://portal.qiniu.com/financial/balance",
@@ -203,11 +221,13 @@ public class BalanceFetcher {
         new Preset("novita", "Novita AI", "", "", "USD", "balance",
                    "novita.ai → Settings → API Keys",
                    "https://novita.ai/billing",
-                   "https://novita.ai/billing"),
+                   "https://novita.ai/billing",
+                   true),
         new Preset("fireworks", "Fireworks AI", "", "", "USD", "balance",
                    "fireworks.ai → API Keys",
                    "https://fireworks.ai/account/billing",
-                   "https://fireworks.ai/account/billing"),
+                   "https://fireworks.ai/account/billing",
+                   true),
         new Preset("zhipu", "智谱 AI", "https://open.bigmodel.cn/api/paas/v4/user/balance",
                    BAL_PATHS, "CNY", "balance", "bigmodel.cn → API Keys",
                    "https://bigmodel.cn/finance",
@@ -430,6 +450,10 @@ public class BalanceFetcher {
         public String debug = "";       // 诊断：原始应答截断（仅排查用）
         /** 平台本身没数据可查（MiMo 未登录 / 登录过期）—— 别拿这种 0 值去记快照、画曲线 */
         public boolean noData;
+        /** 国外平台：给更长的请求预算 */
+        public boolean foreign;
+        /** 走代理访问 */
+        public boolean viaProxy;
     }
 
     public static class Result {
@@ -468,11 +492,41 @@ public class BalanceFetcher {
 
     /** 带 Cookie 的 GET（小米 MiMo 控制台余额走这条：会话鉴权，不是 Bearer） */
     private static String get(String url, String bearer, String cookie, int timeoutMs) throws Exception {
+        return get(url, bearer, cookie, timeoutMs, false);
+    }
+
+    /**
+     * @param forceDirect true = 这一跳强制直连（用于代理失败后的回退）
+     */
+    private static String get(String url, String bearer, String cookie, int timeoutMs,
+                              boolean forceDirect) throws Exception {
         URL u = new URL(url);
         String host = u.getHost();
         boolean https = "https".equalsIgnoreCase(u.getProtocol());
         int port = u.getPort() > 0 ? u.getPort() : (https ? 443 : 80);
         String path = u.getFile();
+
+        /* 走代理的请求不解析 DNS、也不做多地址回退 —— 域名解析和目标连接
+           都交给内核去办（它自己有 DNS 与节点选择逻辑），我们只管把请求丢给它。 */
+        if (useProxyNow() && !forceDirect) {
+            try {
+                return getThroughProxy(host, port, https, path, bearer, cookie, timeoutMs);
+            } catch (StatusException se) {
+                throw se;                          // 服务器已应答（401/429 等），不必再试直连
+            } catch (Exception e) {
+                /* 代理这条路失败就**回退直连**再试一次。
+                   实测过：某些机场节点会被 Cloudflare 拒（openrouter 这类就挂在 CF 上），
+                   表现为 TLS 握手阶段 connection closed —— 而同一时刻直连反而是通的。
+                   有这条回退，最坏情况退化成"代理没用上"，而不会变成"平台查不出来"。 */
+                diag(null, "代理失败，回退直连 " + host + "：" + e);
+                try {
+                    return get(url, bearer, cookie, timeoutMs, true);
+                } catch (Exception e2) {
+                    throw new Exception("代理与直连均失败（代理：" + e.getMessage()
+                            + " / 直连：" + e2.getMessage() + "）");
+                }
+            }
+        }
 
         List<InetAddress> v4 = new ArrayList<InetAddress>();
         List<InetAddress> v6 = new ArrayList<InetAddress>();
@@ -557,6 +611,107 @@ public class BalanceFetcher {
             }
         } catch (Throwable ignored) { }
         return false;
+    }
+
+    /**
+     * 「这次请求是否走代理」用线程局部变量传，而不是一层层加参数。
+     *
+     * 理由：get() → getViaIp() 这条链路上有五六层，加参数要改所有调用点；
+     * 而抓取本来就是「每个平台一个线程」，线程局部天然就是「按平台分流」的粒度。
+     */
+    private static final ThreadLocal<Boolean> VIA_PROXY = new ThreadLocal<Boolean>();
+
+    static boolean useProxyNow() {
+        Boolean b = VIA_PROXY.get();
+        return b != null && b.booleanValue();
+    }
+
+    /** 带代理的 GET：直接暴露给 Clash 的连通性自检用 */
+    public static String getViaProxy(String url, String bearer, String cookie,
+                                     int timeoutMs) throws Exception {
+        VIA_PROXY.set(Boolean.TRUE);
+        try {
+            return get(url, bearer, cookie, timeoutMs);
+        } finally {
+            VIA_PROXY.remove();
+        }
+    }
+
+    /**
+     * 走本地 Clash 代理（HTTP CONNECT 隧道）。
+     *
+     * 先连到 127.0.0.1:7890 发 CONNECT 建隧道，隧道通了之后再在它上面做 TLS 握手 ——
+     * 关键点是 **SNI 仍然填真实目标域名**（不是 127.0.0.1），
+     * 否则对方服务器会按错误的主机名给证书，握手直接失败。
+     */
+    private static String getThroughProxy(String host, int port, boolean https,
+                                          String path, String bearer, String cookie,
+                                          int timeoutMs) throws Exception {
+        Socket sock = new Socket();
+        try {
+            sock.connect(new InetSocketAddress("127.0.0.1", Clash.PROXY_PORT),
+                    Math.min(timeoutMs, 4000));
+            sock.setSoTimeout(timeoutMs);
+            Socket io = sock;
+            if (https) {
+                /* 建 CONNECT 隧道：告诉代理「我要连 host:port」，它回 200 就通了 */
+                java.io.OutputStream os = sock.getOutputStream();
+                String req = "CONNECT " + host + ":" + port + " HTTP/1.1\r\n"
+                        + "Host: " + host + ":" + port + "\r\n"
+                        + "Proxy-Connection: keep-alive\r\n\r\n";
+                os.write(req.getBytes("UTF-8"));
+                os.flush();
+                java.io.BufferedInputStream in = new java.io.BufferedInputStream(sock.getInputStream());
+                String status = readLine(in);
+                if (status == null || status.indexOf(" 200") < 0) {
+                    throw new StatusException("代理未能建立隧道 (" + status + ")");
+                }
+                while (true) {                       // 吃掉 CONNECT 的响应头
+                    String l = readLine(in);
+                    if (l == null || l.length() == 0) break;
+                }
+                SSLSocketFactory sf = (SSLSocketFactory) SSLSocketFactory.getDefault();
+                SSLSocket ssl = (SSLSocket) sf.createSocket(sock, host, port, true);
+                ssl.startHandshake();
+                io = ssl;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("GET ").append(path).append(" HTTP/1.1\r\n");
+            sb.append("Host: ").append(host).append("\r\n");
+            sb.append("Accept: application/json\r\n");
+            sb.append("Accept-Encoding: identity\r\n");
+            sb.append("User-Agent: MinisWidget/1.2\r\n");
+            sb.append("Connection: close\r\n");
+            if (bearer != null) sb.append("Authorization: Bearer ").append(bearer).append("\r\n");
+            if (cookie != null && cookie.length() > 0) sb.append("Cookie: ").append(cookie).append("\r\n");
+            sb.append("\r\n");
+            java.io.OutputStream os2 = io.getOutputStream();
+            os2.write(sb.toString().getBytes("UTF-8"));
+            os2.flush();
+
+            java.io.BufferedInputStream in2 = new java.io.BufferedInputStream(io.getInputStream());
+            String st = readLine(in2);
+            int code = 0;
+            if (st != null) {
+                String[] p = st.split(" ");
+                if (p.length > 1) { try { code = Integer.parseInt(p[1].trim()); } catch (Exception ig) { } }
+            }
+            boolean chunked = false;
+            String line;
+            while ((line = readLine(in2)) != null && line.length() > 0) {
+                String l = line.toLowerCase();
+                if (l.startsWith("transfer-encoding") && l.indexOf("chunked") >= 0) chunked = true;
+            }
+            String body = chunked ? readChunked(in2) : readRest(in2);
+            if (code < 200 || code >= 300) {
+                if (code == 401 || code == 403) throw new StatusException("Key 无效或未授权 (" + code + ")");
+                if (code == 429) throw new StatusException("请求过于频繁 (429)");
+                throw new StatusException("HTTP " + code);
+            }
+            return body;
+        } finally {
+            try { sock.close(); } catch (Exception ig) { }
+        }
     }
 
     private static String getViaIp(InetAddress addr, String host, int port, boolean https,
@@ -761,6 +916,7 @@ public class BalanceFetcher {
 
     /** 诊断日志：写到 App 专属外部目录（不需要存储权限），方便用 shell 排查 */
     public static void diag(Context ctx, String msg) {
+        if (ctx == null) return;      // 少数深层调用点拿不到 Context，静默跳过即可
         try {
             java.io.File dir = ctx.getExternalFilesDir(null);
             if (dir == null) return;
@@ -844,6 +1000,8 @@ public class BalanceFetcher {
                 it.label = c.name.length() > 0 ? c.name : "自定义";
                 it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
                 it.kind = c.kind;
+                /* 自定义平台不预设是否国外，交给用户在设置里勾 */
+                it.viaProxy = Clash.platformViaProxy(ctx, it.platform, false);
                 items.add(it);
                 custs.add(c);
                 keys.add(ak.key);
@@ -856,6 +1014,8 @@ public class BalanceFetcher {
                         ? p.name : (p.name + " · " + ak.label);
                 it.tag = p.unit;
                 it.kind = p.kind;
+                it.foreign = p.foreign;
+                it.viaProxy = p.viaProxy;
                 items.add(it);
                 custs.add(null);
                 keys.add(ak.key);
@@ -888,6 +1048,8 @@ public class BalanceFetcher {
             it.label = p.name;
             it.tag = p.unit;
             it.kind = p.kind;
+            it.foreign = p.foreign;
+            it.viaProxy = p.viaProxy;
             items.add(it);
             custs.add(null);
             keys.add("");
@@ -931,8 +1093,16 @@ public class BalanceFetcher {
             ts[i] = new Thread(new Runnable() {
                 public void run() {
                     long ts0 = System.currentTimeMillis();
+                    /* 按当前分流模式决定这次请求直连还是走本地代理。
+                       抓取是「一个平台一个线程」，所以线程局部变量天然就是平台级粒度。 */
+                    boolean viaProxy = Clash.enabled(ctx) && Clash.isRunning()
+                            && Clash.shouldProxy(ctx, it.platform, it.foreign);
+                    if (viaProxy) VIA_PROXY.set(Boolean.TRUE);
                     try {
-                        if (c == null) fill(ctx, it, ak, rate, per);  // 修改：传递 ApiKey 对象
+                        /* 国外平台给双倍预算：境内访问境外站点常卡在 TLS 握手，
+                           12 秒总预算切成 9 秒单地址往往不够，网络明明是通的。 */
+                        int budget = it.foreign ? per * 2 : per;
+                        if (c == null) fill(ctx, it, ak, rate, budget);  // 修改：传递 ApiKey 对象
                         else           fillCustom(it, c, rate, per);
                         it.ok = true;
                         Log.i(TAG, "平台 " + it.id + " 成功: " + it.amount);
@@ -948,6 +1118,8 @@ public class BalanceFetcher {
                                 + " | " + e.getClass().getSimpleName());
                         diag(ctx, "  NG  " + it.id + " " + it.error
                                 + "   (" + (System.currentTimeMillis() - ts0) + "ms)");
+                    } finally {
+                        if (viaProxy) VIA_PROXY.remove();   // 线程即将结束，顺手清掉
                     }
                 }
             });
@@ -1134,7 +1306,18 @@ public class BalanceFetcher {
                         ? p.name : (p.name + " \u00b7 " + ak.label);
                 it.kind = p.kind;
                 it.tag = p.unit;
-                fill(ctx, it, ak, rate, timeoutMs);  // 修改：传递 ak 对象
+                it.foreign = p.foreign;
+                it.viaProxy = p.viaProxy;
+                /* 单平台刷新走的是当前线程（调用方开的），所以这里手动把代理标志
+                   挂上再清掉 —— 与批量抓取保持同一套分流判断。 */
+                boolean viaProxy = Clash.enabled(ctx) && Clash.isRunning()
+                        && Clash.shouldProxy(ctx, p.id, p.foreign);
+                if (viaProxy) VIA_PROXY.set(Boolean.TRUE);
+                try {
+                    fill(ctx, it, ak, rate, it.foreign ? timeoutMs * 2 : timeoutMs);
+                } finally {
+                    if (viaProxy) VIA_PROXY.remove();
+                }
                 it.ok = true;
             }
         } catch (Exception e) {

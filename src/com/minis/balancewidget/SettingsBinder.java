@@ -38,6 +38,9 @@ public class SettingsBinder {
 
     public SettingsBinder(Activity a, View r) { this(a, r, null); }
 
+    /** 页面顺序/隐藏/主页面 改动后的回调（宿主重建导航条） */
+    public Runnable onPagesChanged;
+
     public SettingsBinder(Activity a, View r, Runnable onChanged) {
         this.act = a; this.root = r; this.onChanged = onChanged;
     }
@@ -140,6 +143,14 @@ public class SettingsBinder {
                 if (now) { renderHides(); keyFadeIn(hideCard); }
             }
         });
+
+        // ---- 页面管理 ----
+        View pagesBtn = root.findViewById(R.id.btn_pages);
+        if (pagesBtn != null) {
+            pagesBtn.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { PageManager.show(act, onPagesChanged); }
+            });
+        }
 
         // ---- 自定义平台 ----
         View addCustom = root.findViewById(R.id.btn_add_custom);
