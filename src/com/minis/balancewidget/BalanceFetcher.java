@@ -121,10 +121,20 @@ public class BalanceFetcher {
      */
     public static void sampleIfDue(Context ctx, Result r) {
         if (ctx == null || r == null) return;
+        /* ★ 复用缓存的结果绝不能记账：它不是"此刻读到的余额"，
+           写进去会让曲线凭空回跳到过去的旧值。 */
+        if (r.fromCache) {
+            diag(ctx, "跳过记账：本轮为缓存复用，非新抓取");
+            return;
+        }
         try {
             SharedPreferences sps = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            /* 这里只挡"同一分钟内重复调用"（并发闸门外的第二道保险）。
+               真正的采样节奏交给 Ledger.record 逐 Key 判断 ——
+               全局时间戳挡不出"某平台余额变了但别的没变"这种情况，
+               而按 6 小时全局挡会把新点全挡掉。 */
             long lastSample = sps.getLong("last_sample_at", 0);
-            if (System.currentTimeMillis() - lastSample < Ledger.SAMPLE_MS) return;
+            if (System.currentTimeMillis() - lastSample < 60 * 1000L) return;
             sps.edit().putLong("last_sample_at", System.currentTimeMillis()).apply();
             Ledger lg = Ledger.get(ctx);
             /* 账本按「密钥」记录快照（用合并前的原始条目，避免平台级 id 覆盖） */
@@ -135,6 +145,9 @@ public class BalanceFetcher {
                 Item it = raw.get(i);
                 if (it.noData) continue;                    // 未登录之类：没数就是没数，别写 0
                 if (it.ok && it.bal >= 0 && "balance".equals(it.kind)) {
+                    /* 写入前先清掉历史假点：否则下一个点会以假值为基准算差值，
+                       把 23.9 误判成"又充值了 9.38 元"。 */
+                    try { lg.dropCacheArtifacts(ctx, it.id); } catch (Throwable ig) { }
                     lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag));
                     who.append(it.id).append(' ');
                     n++;
@@ -523,6 +536,16 @@ public class BalanceFetcher {
 
     public static class Result {
         public double rate = 7.1;
+        /**
+         * 这份结果是**复用的缓存**，不是刚抓到的。
+         *
+         * 为什么必须区分：并发闸门在"已有抓取在跑"时会直接返回上次的缓存，
+         * 这本身是对的（避免叠加请求）；但账本记账**只能记新读到的数据** ——
+         * 拿旧缓存记账会把当前时间点的余额改写成过去的旧值，
+         * 曲线上就出现一个凭空回跳的假点（实测 DeepSeek 因此被写成
+         * 14.52，而当时真实余额是 24.11）。
+         */
+        public boolean fromCache;
         /** 合并前的逐密钥原始条目（供账本按密钥记录快照用） */
         public java.util.List<Item> rawItems;
         public double totalCny = 0;
@@ -1035,7 +1058,8 @@ public class BalanceFetcher {
             /* 已有抓取在进行：直接复用上次结果，绝不叠加第二轮 */
             Result cached = WidgetCache.read(ctx);
             if (cached != null && cached.items != null && cached.items.size() > 0) {
-                diag(ctx, "已有抓取在进行，复用缓存结果");
+                diag(ctx, "已有抓取在进行，复用缓存结果（不记账）");
+                cached.fromCache = true;            // ★ 标记为缓存，禁止记账
                 return cached;
             }
             /* 没有可用缓存就短暂等一会儿，多半能等到正在跑的那轮结束 */
@@ -1043,10 +1067,14 @@ public class BalanceFetcher {
                 try { Thread.sleep(100); } catch (Exception ig) { }
             }
             Result c2 = WidgetCache.read(ctx);
-            if (c2 != null && c2.items != null && c2.items.size() > 0) return c2;
+            if (c2 != null && c2.items != null && c2.items.size() > 0) {
+                c2.fromCache = true;                // ★ 同上
+                return c2;
+            }
             Result empty = new Result();
             empty.items = new ArrayList<Item>();
             empty.rawItems = new ArrayList<Item>();
+            empty.fromCache = true;                 // 空结果更不能记账
             return empty;
         }
         try {

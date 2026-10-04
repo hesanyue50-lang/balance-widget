@@ -628,10 +628,66 @@ public class MainActivity extends Activity {
 
     private void buildStats() { buildStats(true); }
 
+    /**
+     * 分桶粒度的候选档位。图表宽度有限，点数太多会糊成一片，
+     * 所以按范围挑一个"能把点数压到 200 以内、又尽量细"的粒度。
+     */
+    private static final long[] SLOT_CANDIDATES = {
+            5L * 60 * 1000,             // 5 分钟（= 采样下限，最细档）
+            15L * 60 * 1000,            // 15 分钟
+            30L * 60 * 1000,            // 30 分钟
+            60L * 60 * 1000,            // 1 小时
+            2L * 3600 * 1000,           // 2 小时
+            4L * 3600 * 1000,           // 4 小时
+            6L * 3600 * 1000,           // 6 小时
+            12L * 3600 * 1000,          // 12 小时
+            24L * 3600 * 1000,          // 1 天
+            48L * 3600 * 1000,          // 2 天
+    };
+
+    /**
+     * 格子数上限。
+     *
+     * 定得比较宽（2200）是**故意的**：格子多只意味着遍历次数多（可忽略），
+     * 但粒度够细才不会有"两次刷新落进同一格"的情况 ——
+     * 那正是"余额谷底被抹掉"的根源：实测 16:55=14.52 与 17:01=24.11
+     * 只差 6 分钟，在 1 小时粒度下被并成一个点，取最新就只剩 24.11，
+     * 用户看到的曲线凭空少了那个低谷。
+     *
+     * 把粒度压到采样下限（5 分钟）之后，两点最小间隔就是 5 分钟，
+     * 不会再有合并损失。空格子不画点（遍历时跳过 NaN），所以视觉上依然是
+     * 稀疏的点连成的线，不会因为格子多而变糊。
+     */
+    private static final int TARGET_SLOTS = 2200;
+
+    /** 按范围挑分桶粒度：近 7 日用 1 小时/点，近 30 日用 4 小时，近 180 日用 1 天 */
+    private static long pickSlotMs(int days) {
+        long span = (long) days * 86400000L;
+        for (int i = 0; i < SLOT_CANDIDATES.length; i++) {
+            if (span / SLOT_CANDIDATES[i] <= TARGET_SLOTS) return SLOT_CANDIDATES[i];
+        }
+        return SLOT_CANDIDATES[SLOT_CANDIDATES.length - 1];
+    }
+
+    /** 粒度的人类可读写法（"1 小时/点"） */
+    private static String slotLabel(long ms) {
+        long min = ms / 60000L;
+        if (min < 60) return min + " 分钟";
+        long h = ms / 3600000L;
+        if (h < 24) return h + " 小时";
+        return (h / 24) + " 天";
+    }
+
+    /** 首轮构建时打一次点明细（诊断用），之后不再打，免得刷屏 */
+    private boolean statsDiagDone = false;
+
     private void buildStats(boolean rebuildToggles) {
-        // 采样精度 6 小时/点：图表按 6h 分桶（近 N 天 = N×4 个点）
-        final int SLOT_MS = 6 * 3600 * 1000;
-        final int DAYS = statsDays * 4;          // 点数 = 天数 × 4
+        final boolean diagThisRound = !statsDiagDone;
+        statsDiagDone = true;
+        /* 分桶粒度按范围自适应 —— 以前固定 6 小时/点，近 7 天只有 28 个点，
+           每次刷新带来的变化完全看不出来。近 7 天现在是 1 小时/点（168 点）。 */
+        final long SLOT_MS = pickSlotMs(statsDays);
+        final int DAYS = (int) ((long) statsDays * 86400000L / SLOT_MS);
         long now = System.currentTimeMillis();
         long from = now - (long) statsDays * 86400000L;
         SharedPreferences sp = getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
@@ -768,31 +824,48 @@ public class MainActivity extends Activity {
             int ptsAny = 0;                 // 只要有 1 个点就出线（至少能看到最新余额）
             for (int i = 0; i < srcN; i++) {
                 String kid = ks.isEmpty() ? plat : ks.get(i).id;
-                java.util.List<Ledger.Point> pts = lg.series(this, kid, from);
                 /* 历史遗留：早期版本原始条目被别名改写，快照按**平台 id** 记过一批。
-                   这里把两个来源**合并**查询 —— 之前的写法是"查不到才回退"，
-                   一旦新数据开始按 Key id 落库就不再回退，老数据被永久遮住
+                   合并查询两个来源 —— 只在 Key id 查会漏掉那批老数据
                    （用户反馈的"MiMo 比上一版少了两个点"正是这么来的）。 */
-                if (ks.size() <= 1 && !plat.equals(kid)) {
-                    pts = lg.series(this, new String[]{kid, plat}, from);
-                }
+                String[] kids = (ks.size() <= 1 && !plat.equals(kid))
+                        ? new String[]{kid, plat} : new String[]{kid};
+                java.util.List<Ledger.Point> pts = lg.series(this, kids, from);
                 BalanceFetcher.diag(this, "  stats 查账本 " + plat
                         + " kid=" + kid + " 点数=" + pts.size());
+                /* 首轮构建时把原始点序列打出来 —— 判断"某值没画出来"
+                   到底是聚合吃掉还是采样没覆盖（只打首轮，免得刷屏）。 */
+                if (diagThisRound) {
+                    BalanceFetcher.diag(this, "  点明细 " + plat + "  "
+                            + lg.dumpPoints(this, kids, from, 40));
+                }
                 if (pts.size() > 0) ptsAny++;
                 double kCons = 0, kCharged = 0;
                 double[] kDay = new double[DAYS];
+                double[] kOwn = new double[DAYS];          // 该 Key 在各桶的最新余额
+                java.util.Arrays.fill(kOwn, Double.NaN);
                 boolean[] hasDay = new boolean[DAYS];
                 for (int j = 0; j < pts.size(); j++) {
                     Ledger.Point pt = pts.get(j);
                     int idx = DAYS - 1 - (int) ((now - pt.ts) / SLOT_MS);
                     if (idx < 0 || idx >= DAYS) continue;
-                    double v = pt.balance * mul;
-                    own[idx] = (cnt[idx] == 0 || Double.isNaN(own[idx])) ? v : Math.max(own[idx], v);
-                    cnt[idx]++;
+                    /* ★ 桶内取**最新**值，不是最大值。
+                       pts 是按时间升序的，直接覆盖即可拿到最新。
+                       原实现用 Math.max —— 余额一路下降时（正常消耗），
+                       取到的反而是这个桶里最早、最高的那个值，曲线会虚高。
+                       （6 小时采样时每桶基本只有一个点，问题看不出来；
+                       采样加密之后就会明显失真。） */
+                    kOwn[idx] = pt.balance * mul;
                     kDay[idx] += pt.consumed * mul;
                     hasDay[idx] = true;
                     kCons += pt.consumed * mul;
                     kCharged += pt.charged * mul;
+                }
+                /* 各 Key 的桶值合并（同平台多密钥余额相同，取最大避免重复累计） */
+                for (int d = 0; d < DAYS; d++) {
+                    if (!Double.isNaN(kOwn[d])) {
+                        own[d] = Double.isNaN(own[d]) ? kOwn[d] : Math.max(own[d], kOwn[d]);
+                        cnt[d]++;
+                    }
                 }
                 platCons = Math.max(platCons, kCons);
                 platCharged = Math.max(platCharged, kCharged);
@@ -874,7 +947,13 @@ public class MainActivity extends Activity {
         statsLabels = labels;
         // 范围标签 / 下拉按钮文字
         TextView rl = (TextView) findViewById(R.id.stats_range_label);
-        if (rl != null) rl.setText("近 " + statsDays + " 日（6 小时/点）");
+        if (rl != null) rl.setText("近 " + statsDays + " 日（" + slotLabel(SLOT_MS) + "/点）");
+        /* 采样精度声明：曲线是"按时段聚合的近似值"，不是逐笔流水。
+           充值/消费的准确数字以各平台后台为准 —— 说清楚比让用户猜好。 */
+        TextView note = (TextView) findViewById(R.id.stats_sampling_note);
+        if (note != null) {
+            note.setText(getString(R.string.stats_sampling_note, slotLabel(SLOT_MS)));
+        }
         TextView rp = (TextView) findViewById(R.id.range_pick);
         if (rp != null) rp.setText("近 " + statsDays + " 天 ▽");
 

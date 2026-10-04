@@ -87,6 +87,17 @@
         android:textSize="15sp"
         android:textStyle="bold" />
 
+    <!-- ⑥b 采样精度声明 -->
+    <TextView
+        android:id="@+id/stats_sampling_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:lineSpacingExtra="3dp"
+        android:textColor="@color/tx3"
+        android:textSize="11.5sp"
+        android:text="@string/stats_sampling_note_default" />
+
     <!-- ⑦ 清理数据（红） -->
     <TextView android:id="@+id/stats_clean" android:layout_width="wrap_content"
         android:layout_height="wrap_content" android:layout_gravity="right"

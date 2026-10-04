@@ -34,8 +34,25 @@ public final class Ledger extends SQLiteOpenHelper {
     /** 默认保留天数：超出部分由 prune() 清掉 */
     public static final int KEEP_DAYS_DEFAULT = 90;
 
-    /** 采样间隔：6 小时（用户要求） */
+    /**
+     * 兜底采样间隔：6 小时。
+     *
+     * 余额长期没有变化时，也保证这么久落一个点 —— 曲线不会断档，
+     * 消耗统计（相邻点差值）也不会因为中间空太久而失真。
+     */
     public static final long SAMPLE_MS = 6L * 60 * 60 * 1000;
+
+    /**
+     * 常规采样下限：5 分钟。
+     *
+     * 余额**有变化**时，最快按这个间隔落点 —— 也就是"每次刷新都打一个点"
+     * （前台刷新间隔本身就是 5 分钟起）。余额没变则不必重复记，
+     * 那种点除了占空间没有信息量，交给上面的 6 小时兜底。
+     */
+    public static final long SAMPLE_MIN_MS = 5L * 60 * 1000;
+
+    /** 余额视为"没有变化"的容差（元）。小于它就不值得单独落一个点 */
+    private static final double SAME_EPS = 0.005;
 
     private static Ledger inst;
 
@@ -107,6 +124,16 @@ public final class Ledger extends SQLiteOpenHelper {
             cur.close();
 
             long now = System.currentTimeMillis();
+
+            /* ---- 采样节奏（"每次刷新打点 + 保底 6 小时"）----
+               ① 距上次太近（< 5 分钟）→ 跳过，防止同一波刷新重复落点
+               ② 余额和上次一样，且还没到 6 小时兜底 → 跳过，这种点没有信息量
+               余额变了就落点，所以"每次刷新"实际上都会记上一个新点。 */
+            if (!Double.isNaN(prevBal)) {
+                long gap = now - prevTs;
+                if (gap < SAMPLE_MIN_MS) return 0;
+                if (Math.abs(balance - prevBal) < SAME_EPS && gap < SAMPLE_MS) return 0;
+            }
 
             if (!Double.isNaN(prevBal)) {
                 double delta = balance - prevBal;
@@ -227,6 +254,52 @@ public final class Ledger extends SQLiteOpenHelper {
         return out;
     }
 
+    /**
+     * 清理"缓存回跳"造成的假点。
+     *
+     * 背景：并发闸门在已有抓取时会复用缓存，早期版本把它当新数据记了账 →
+     * 曲线末尾凭空出现一个回跳到旧值的点（实测 DeepSeek 被写成 14.52，
+     * 而真实余额是 24.11）。**危害不止于曲线难看**：下一个采样点会以这个
+     * 假值为基准算差值，23.9 会被误判成"又充值了 9.38 元"。
+     *
+     * 判定（保守，只在很明确的形态下触发）：取最近三个点 P1(最新)/P2/P3，
+     *   ① P1 与 P3 余额几乎相同（回跳到旧值）
+     *   ② P2 与它们差异明显（中间确实有过变化）
+     *   ③ P1 与 P3 相隔不超过 1 小时
+     * 满足则删掉 P1 —— 真实业务里"一小时内先变化又精确回到原值"几乎不可能。
+     */
+    public int dropCacheArtifacts(Context c, String keyId) {
+        int removed = 0;
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            Cursor cur = db.rawQuery("SELECT id, ts, balance FROM " + T_SNAP
+                    + " WHERE key_id=? ORDER BY ts DESC LIMIT 3", new String[]{keyId});
+            long[] ids = new long[3];
+            long[] ts = new long[3];
+            double[] bal = new double[3];
+            int n = 0;
+            while (cur.moveToNext() && n < 3) {
+                ids[n] = cur.getLong(0);
+                ts[n] = cur.getLong(1);
+                bal[n] = cur.getDouble(2);
+                n++;
+            }
+            cur.close();
+            if (n == 3
+                    && Math.abs(bal[0] - bal[2]) < 0.01              // ① 回到旧值
+                    && Math.abs(bal[1] - bal[2]) > 0.5               // ② 中间确有变化
+                    && (ts[0] - ts[2]) < 60L * 60 * 1000) {          // ③ 一小时内
+                removed = db.delete(T_SNAP, "id=?", new String[]{String.valueOf(ids[0])});
+                if (removed > 0) {
+                    BalanceFetcher.diag(c, "清理缓存假点 " + keyId + " "
+                            + fmt(bal[0]) + " (回跳自 " + fmt(bal[2]) + "，中间 "
+                            + fmt(bal[1]) + ")");
+                }
+            }
+        } catch (Throwable ignored) { }
+        return removed;
+    }
+
     /** 区间内充值记录，按时间**升序**（供 series 归并） */
     private List<Recharge> rechargeListAsc(Context c, String keyId, long fromTs) {
         List<Recharge> out = new ArrayList<Recharge>();
@@ -321,6 +394,45 @@ public final class Ledger extends SQLiteOpenHelper {
             return "dump 失败 " + t;
         }
         return sb.length() == 0 ? "(账本为空)" : sb.toString();
+    }
+
+    /**
+     * 某组 key 在范围内的快照**明细**（诊断用）：时间 + 余额，按时间升序。
+     *
+     * 排查"某个值没画到图上"时最有用的一招：一眼看清那个值到底有没有进账本 ——
+     *   账本里有、图上没有  → 是分桶聚合把它吃掉了（同桶内被后来的值覆盖）
+     *   账本里也没有        → 是采样没覆盖到（两次刷新之间来不及记录）
+     * 两种情况对用户的意义完全不同，别凭猜。
+     */
+    public String dumpPoints(Context c, String[] keyIds, long fromTs, int max) {
+        StringBuilder sb = new StringBuilder();
+        if (keyIds == null || keyIds.length == 0) return "";
+        try {
+            StringBuilder ph = new StringBuilder();
+            String[] args = new String[keyIds.length + 1];
+            for (int i = 0; i < keyIds.length; i++) {
+                if (i > 0) ph.append(',');
+                ph.append('?');
+                args[i] = keyIds[i];
+            }
+            args[keyIds.length] = String.valueOf(fromTs);
+            Cursor cur = getReadableDatabase().rawQuery(
+                    "SELECT key_id, ts, balance FROM " + T_SNAP + " WHERE key_id IN (" + ph
+                    + ") AND ts>=? ORDER BY ts ASC LIMIT " + Math.max(1, max), args);
+            java.text.SimpleDateFormat f = new java.text.SimpleDateFormat(
+                    "MM-dd HH:mm", java.util.Locale.US);
+            while (cur.moveToNext()) {
+                /* 带上 key_id：多 Key 平台（同平台开了两个账号）合并看会像"跳来跳去"，
+                   标出来才分得清是"余额真的回跳"还是"两个账号各记各的" */
+                sb.append(cur.getString(0)).append('@')
+                  .append(f.format(new java.util.Date(cur.getLong(1)))).append('=')
+                  .append(String.format("%.2f", cur.getDouble(2))).append(' ');
+            }
+            cur.close();
+        } catch (Throwable t) {
+            return "dump 失败 " + t;
+        }
+        return sb.length() == 0 ? "(无)" : sb.toString();
     }
 
     private static String fmtTs(long ts) {

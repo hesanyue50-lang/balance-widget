@@ -68,6 +68,8 @@
     <string name="autostart_later">暂不</string>
     <string name="autostart_entry">设置自启动 ›</string>
     <string name="battery_entry">电池优化白名单 ›</string>
+    <string name="stats_sampling_note">⚠️ 曲线按 %1$s/点 聚合，采样精度有限：\n· 余额只在刷新时刻读取，两次刷新之间的短暂波动无法记录\n· 同一时段内的涨跌会被合并成一个点（如"先扣费后充值"，可能只看到充值后的值）\n· 因此图表为**近似趋势**，充值 / 消费的准确金额请以各平台后台账单为准</string>
+    <string name="stats_sampling_note_default">⚠️ 曲线按固定间隔聚合，采样精度有限，为近似趋势；准确金额请以各平台后台账单为准。</string>
     <string name="vpn_import_tip">💡 在机场官网点「一键导入 Clash」会自动跳回本软件完成导入，不用手动复制订阅链接。</string>
     <string name="ps_on">省电模式：已开启</string>
     <string name="ps_off">省电模式：已关闭</string>

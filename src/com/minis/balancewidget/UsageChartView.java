@@ -241,14 +241,30 @@ public class UsageChartView extends View {
                     else linePath.lineTo(x, y);
                 }
                 cv.drawPath(linePath, pLine);
-                // 数据点：只画有数据的天
+                /* 数据点默认不画。
+                   采样加密后（近 7 日 = 1 小时/点 ≈ 168 个点）每点都画会糊成
+                   一串珠子，反而看不清折线本身的走势 —— 用户反馈的正是这个。
+
+                   但有三处必须保留，否则会丢信息：
+                     ① 孤立点：某平台可能只有 1 个快照（刚接入 / 长期只有一个点），
+                        不画的话它在图上彻底消失，只剩一条"零长度的折线"；
+                     ② 按住查看时，把当前位置的点画出来，与浮动框对应；
+                     ③ 点数稀少时（点间距足够大）照旧画点，
+                        免得将来范围变小或改成粗粒度后图变得太素。 */
+                boolean sparse = slot >= 16f;
                 pDot.setColor(s.color);
                 pDotIn.setColor(0xFFFFFFFF);
                 for (int i = 0; i < n && i < s.vals.length; i++) {
                     if (Double.isNaN(s.vals[i])) continue;
+                    boolean lonely = (i == 0 || Double.isNaN(s.vals[i - 1]))
+                            && (i + 1 >= s.vals.length || Double.isNaN(s.vals[i + 1]));
+                    boolean touched = (i == touchIdx);
+                    if (!lonely && !touched && !sparse) continue;
                     float x = padL + slot * i + slot / 2f;
                     float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
-                    cv.drawCircle(x, y, 9f, pDot);
+                    /* 孤立点/按住点放大一点：密度低时它们是唯一的视觉锚点 */
+                    float r = (lonely || touched) ? 10f : 9f;
+                    cv.drawCircle(x, y, r, pDot);
                     cv.drawCircle(x, y, 3.5f, pDotIn);
                 }
             }
