@@ -162,14 +162,40 @@ public final class Ledger extends SQLiteOpenHelper {
 
     /** 取某个 Key 的时间序列（升序）。充值额会从充值表里补进来 */
     public List<Point> series(Context c, String keyId, long fromTs) {
+        return series(c, new String[]{keyId}, fromTs);
+    }
+
+    /**
+     * 取**多个** Key 合并后的时间序列（升序）。
+     *
+     * 为什么要合并：早期版本有一处对象别名缺陷，把快照记到了**平台 id** 上
+     * （而不是 Key id）。修好之后新数据按 Key id 落库，老数据却还留在平台 id 下 ——
+     * 只查 Key id 的话，那批历史会凭空"消失"（用户看到的"MiMo 少了两个点"）。
+     * 把两个来源一起查、按时间戳去重，历史与新增才能接得上。
+     */
+    public List<Point> series(Context c, String[] keyIds, long fromTs) {
         List<Point> out = new ArrayList<Point>();
+        if (keyIds == null || keyIds.length == 0) return out;
         try {
+            StringBuilder ph = new StringBuilder();
+            String[] args = new String[keyIds.length + 1];
+            for (int i = 0; i < keyIds.length; i++) {
+                if (i > 0) ph.append(',');
+                ph.append('?');
+                args[i] = keyIds[i];
+            }
+            args[keyIds.length] = String.valueOf(fromTs);
+
             SQLiteDatabase db = getReadableDatabase();
             Cursor cur = db.rawQuery("SELECT ts, balance FROM " + T_SNAP
-                    + " WHERE key_id=? AND ts>=? ORDER BY ts ASC",
-                    new String[]{keyId, String.valueOf(fromTs)});
+                    + " WHERE key_id IN (" + ph + ") AND ts>=? ORDER BY ts ASC", args);
+            long lastTs = Long.MIN_VALUE;
             while (cur.moveToNext()) {
-                out.add(new Point(cur.getLong(0), cur.getDouble(1)));
+                long ts = cur.getLong(0);
+                /* 同一时刻至多留一条：两个来源若有重叠，去重免得图上出现"双点" */
+                if (ts == lastTs) continue;
+                lastTs = ts;
+                out.add(new Point(ts, cur.getDouble(1)));
             }
             cur.close();
 
@@ -177,7 +203,15 @@ public final class Ledger extends SQLiteOpenHelper {
                原实现是「每个数据点查一次充值表」—— 30 天范围 120 个点、
                每个平台 120 次查询，8 个平台就近千次 SQLite 查询，全在主线程，
                统计页一打开就卡。归并写法把查询压到 1 次。 */
-            List<Recharge> rs = rechargeListAsc(c, keyId, fromTs);
+            List<Recharge> rs = new ArrayList<Recharge>();
+            for (int i = 0; i < keyIds.length; i++) rs.addAll(rechargeListAsc(c, keyIds[i], fromTs));
+            if (rs.size() > 1) {
+                java.util.Collections.sort(rs, new java.util.Comparator<Recharge>() {
+                    public int compare(Recharge a, Recharge b) {
+                        return a.ts < b.ts ? -1 : (a.ts > b.ts ? 1 : 0);
+                    }
+                });
+            }
             int ri = 0;
             for (int i = 1; i < out.size(); i++) {
                 Point q = out.get(i - 1), p = out.get(i);
@@ -263,6 +297,36 @@ public final class Ledger extends SQLiteOpenHelper {
             cur.close();
         } catch (Throwable ignored) { }
         return sum;
+    }
+
+    /**
+     * 列出账本里所有 key_id 及各自的快照条数（诊断用）。
+     *
+     * 排查"某个平台少点/没线"时最有用的一招：一眼看出数据到底记在哪个 id 下 ——
+     * 是按 Key id 记的、还是历史遗留按平台 id 记的。
+     */
+    public String dumpKeys(Context c) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            Cursor cur = getReadableDatabase().rawQuery(
+                    "SELECT key_id, COUNT(*), MIN(ts), MAX(ts) FROM " + T_SNAP
+                    + " GROUP BY key_id ORDER BY COUNT(*) DESC", null);
+            while (cur.moveToNext()) {
+                sb.append(cur.getString(0)).append('=').append(cur.getInt(1));
+                sb.append('[').append(fmtTs(cur.getLong(2))).append('~')
+                  .append(fmtTs(cur.getLong(3))).append("] ");
+            }
+            cur.close();
+        } catch (Throwable t) {
+            return "dump 失败 " + t;
+        }
+        return sb.length() == 0 ? "(账本为空)" : sb.toString();
+    }
+
+    private static String fmtTs(long ts) {
+        if (ts <= 0) return "-";
+        return new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US)
+                .format(new java.util.Date(ts));
     }
 
     /** 记录里最早的快照时间（用于"全部"范围） */

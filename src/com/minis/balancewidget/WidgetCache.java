@@ -94,6 +94,45 @@ public final class WidgetCache {
 
     // ---------- JSON ----------
 
+    /** 单个条目 ↔ JSON（items 与 rawItems 共用，字段必须保持一致） */
+    private static JSONObject itemJson(BalanceFetcher.Item it) throws org.json.JSONException {
+        JSONObject x = new JSONObject();
+        x.put("id", it.id); x.put("platform", it.platform);
+        x.put("label", it.label); x.put("tag", it.tag);
+        x.put("amount", it.amount); x.put("cny", it.cny);
+        x.put("ok", it.ok); x.put("error", it.error);
+        x.put("bal", it.bal); x.put("low", it.low);
+        x.put("kind", it.kind); x.put("conv", it.conv);
+        x.put("rows", it.rows); x.put("alertKey", it.alertKey);
+        x.put("threshold", it.threshold);
+        /* noData 必须存！它代表"平台没数可查"（MiMo 未登录/过期）。
+           丢了它，缓存里的 MiMo 就成了 bal=0 的正常条目 ——
+           统计页会显示"当前 ¥0.00"，账本还会被写进一堆 0 值快照。 */
+        x.put("noData", it.noData);
+        return x;
+    }
+
+    private static BalanceFetcher.Item itemFrom(JSONObject x) {
+        BalanceFetcher.Item it = new BalanceFetcher.Item();
+        it.id = x.optString("id", "");
+        it.platform = x.optString("platform", "");
+        it.label = x.optString("label", "");
+        it.tag = x.optString("tag", "CNY");
+        it.amount = x.optString("amount", "");
+        it.cny = x.optDouble("cny", 0);
+        it.ok = x.optBoolean("ok", false);
+        it.error = x.optString("error", "");
+        it.bal = x.optDouble("bal", 0);
+        it.low = x.optBoolean("low", false);
+        it.kind = x.optString("kind", "balance");
+        it.conv = x.optString("conv", "");
+        it.rows = x.optString("rows", "");
+        it.alertKey = x.optString("alertKey", it.id);
+        it.threshold = x.optDouble("threshold", 0);
+        it.noData = x.optBoolean("noData", false);
+        return it;
+    }
+
     private static String toJson(BalanceFetcher.Result r) {
         try {
             JSONObject o = new JSONObject();
@@ -103,20 +142,16 @@ public final class WidgetCache {
             o.put("failed", r.failed);
             o.put("at", System.currentTimeMillis());
             JSONArray a = new JSONArray();
-            for (int i = 0; i < r.items.size(); i++) {
-                BalanceFetcher.Item it = r.items.get(i);
-                JSONObject x = new JSONObject();
-                x.put("id", it.id); x.put("platform", it.platform);
-                x.put("label", it.label); x.put("tag", it.tag);
-                x.put("amount", it.amount); x.put("cny", it.cny);
-                x.put("ok", it.ok); x.put("error", it.error);
-                x.put("bal", it.bal); x.put("low", it.low);
-                x.put("kind", it.kind); x.put("conv", it.conv);
-                x.put("rows", it.rows); x.put("alertKey", it.alertKey);
-                x.put("threshold", it.threshold);
-                a.put(x);
-            }
+            for (int i = 0; i < r.items.size(); i++) a.put(itemJson(r.items.get(i)));
             o.put("items", a);
+            /* ★ 一并存下合并前的原始条目。账本按 **Key id** 记账，
+               缓存里没有它的话，从缓存恢复的 Result（小组件刷新就是这条路）
+               只能拿平台 id 去记账，统计页按 Key id 查就永远是空的。 */
+            if (r.rawItems != null) {
+                JSONArray ra = new JSONArray();
+                for (int i = 0; i < r.rawItems.size(); i++) ra.put(itemJson(r.rawItems.get(i)));
+                o.put("raw", ra);
+            }
             return o.toString();
         } catch (Exception e) {
             return "";
@@ -137,20 +172,16 @@ public final class WidgetCache {
                 for (int i = 0; i < a.length(); i++) {
                     JSONObject x = a.optJSONObject(i);
                     if (x == null) continue;
-                    BalanceFetcher.Item it = new BalanceFetcher.Item();
-                    it.id = x.optString("id", "");
-                    it.platform = x.optString("platform", "");
-                    it.label = x.optString("label", "");
-                    it.tag = x.optString("tag", "CNY"); it.amount = x.optString("amount", "");
-                    it.cny = x.optDouble("cny", 0);
-                    it.ok = x.optBoolean("ok", false); it.error = x.optString("error", "");
-                    it.bal = x.optDouble("bal", 0); it.low = x.optBoolean("low", false);
-                    it.kind = x.optString("kind", "balance");
-                    it.conv = x.optString("conv", "");
-                    it.rows = x.optString("rows", "");
-                    it.alertKey = x.optString("alertKey", it.id);
-                    it.threshold = x.optDouble("threshold", 0);
-                    r.items.add(it);
+                    r.items.add(itemFrom(x));
+                }
+            }
+            JSONArray ra = o.optJSONArray("raw");
+            if (ra != null) {
+                r.rawItems = new java.util.ArrayList<BalanceFetcher.Item>();
+                for (int i = 0; i < ra.length(); i++) {
+                    JSONObject x = ra.optJSONObject(i);
+                    if (x == null) continue;
+                    r.rawItems.add(itemFrom(x));
                 }
             }
             return r;

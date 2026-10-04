@@ -71,7 +71,14 @@ public class PanelPager extends HorizontalScrollView {
      */
     @Override
     public boolean dispatchTouchEvent(MotionEvent e) {
-        if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
+        int a = e.getActionMasked();
+        if (a == MotionEvent.ACTION_DOWN) {
+            /* 死区判定放在这里 —— 这是**唯一一定被调用**的入口。
+               若放到 onInterceptTouchEvent 里会漏：那个方法只在子视图接住了 DOWN
+               时才会被回调；子视图没接住时 AOSP 直接把后续事件标成 intercepted，
+               死区逻辑永远不执行（第一版就是这么失效的）。 */
+            deadZoneGesture = inHDeadZone(e.getRawX(), e.getRawY());
+
             View f = findFocus();
             if (f != null && f instanceof android.widget.EditText) {
                 f.clearFocus();
@@ -83,7 +90,9 @@ public class PanelPager extends HorizontalScrollView {
                 }
             }
         }
-        return super.dispatchTouchEvent(e);
+        boolean r = super.dispatchTouchEvent(e);
+        if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) deadZoneGesture = false;
+        return r;
     }
 
     /**
@@ -290,15 +299,57 @@ public class PanelPager extends HorizontalScrollView {
     /** 手势抖动阈值：由 ViewConfiguration 给出，随设备密度变化 */
     private int touchSlop;
     private float downX, downY;
-    /** 0=未判定  1=已让给子页（垂直）  2=归自己翻页（水平） */
+    /** 按下点在屏幕上的原始坐标（判定死区用 —— 死区视图和本控件不在同一坐标系） */
+    private float downRawX, downRawY;
+    /** 0=未判定  1=已让给子页（垂直/死区）  2=归自己翻页（水平） */
     private int gestureMode;
+
+    /**
+     * 横向滑动死区。落在这个 View 上的手势**永不翻页** —— 全部让给它自己处理。
+     *
+     * 为什么需要：用量统计的折线图靠按住 + 左右滑动来看某个时间点的数值。
+     * 但分页器把横向滑动一律判成"翻页"，两者抢同一个手势 ——
+     * 结果就是用户想在图上拖一下看数据，页面先翻走了。
+     * 给图表划一块死区，各管各的，互不打架。
+     */
+    private android.view.View hDeadZone;
+
+    /** 由宿主页在布局完成后指定（通常是那张折线图） */
+    public void setHDeadZone(android.view.View v) { hDeadZone = v; }
+
+    /** 本次手势是否起于死区（DOWN 时判定一次，全程沿用）。
+     *  判定在 dispatchTouchEvent 里做 —— 见文件上方那个方法。 */
+    private boolean deadZoneGesture;
+
+    /** 按下点是否落在死区内。两个 View 坐标系不同，统一换算到窗口坐标再比 */
+    private boolean inHDeadZone(float rawX, float rawY) {
+        if (hDeadZone == null || hDeadZone.getWidth() == 0) return false;
+        int[] hl = new int[2];
+        int[] sl = new int[2];
+        try {
+            hDeadZone.getLocationInWindow(hl);
+            getLocationInWindow(sl);
+        } catch (Throwable t) {
+            return false;
+        }
+        float x = rawX - sl[0];
+        float y = rawY - sl[1];
+        float l = hl[0] - sl[0];
+        float t = hl[1] - sl[1];
+        return x >= l && x <= l + hDeadZone.getWidth()
+                && y >= t && y <= t + hDeadZone.getHeight();
+    }
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent e) {
+        /* 起于死区的手势：从头到尾不抢 */
+        if (deadZoneGesture) return false;
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 downX = e.getX();
                 downY = e.getY();
+                downRawX = e.getRawX();
+                downRawY = e.getRawY();
                 gestureMode = 0;
                 break;
             case MotionEvent.ACTION_MOVE:
@@ -312,6 +363,12 @@ public class PanelPager extends HorizontalScrollView {
                         return false;
                     }
                     if (dx > touchSlop * H_DEAD_ZONE && dx > dy * H_RATIO) {
+                        /* 按下点若在死区（折线图）内，这一整套手势都归子页 ——
+                           复用 gestureMode=1「已让给子页」，后续 MOVE 全程不抢。 */
+                        if (inHDeadZone(downRawX, downRawY)) {
+                            gestureMode = 1;
+                            return false;
+                        }
                         gestureMode = 2;      // 水平明显占优 → 翻页
                     }
                 }
@@ -326,6 +383,9 @@ public class PanelPager extends HorizontalScrollView {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        /* 兜底：万一事件还是落到自己头上（子视图全程没接住），
+           死区手势直接放行，绝不拿它去翻页。 */
+        if (deadZoneGesture) return false;
         if (vt == null) vt = android.view.VelocityTracker.obtain();
         vt.addMovement(e);
 

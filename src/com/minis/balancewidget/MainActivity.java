@@ -39,6 +39,11 @@ public class MainActivity extends Activity {
     private final Runnable autoTask = new Runnable() {
         public void run() {
             refresh(true);          // 静默刷新，不闪"正在查询"
+            /* 顺带把小米账号会话续上。小米控制台前端自带续期逻辑
+               （带长期凭证换新会话），但必须**页面被加载**才会跑 ——
+               老实现只在登录那一刻碰过 WebView，之后再没访问过，
+               于是十几分钟就过期。这里定期静默加载一次即可（内部有 8 分钟间隔闸）。 */
+            MimoKeepAlive.tick(MainActivity.this);
             autoHandler.postDelayed(this, RefreshScheduler.fgMillis(MainActivity.this));
         }
     };
@@ -77,6 +82,10 @@ public class MainActivity extends Activity {
                 }
             }).start();
         }
+
+        /* 进 App 就先保活一次：会话多半在后台已经过期了，
+           先续上再刷新，比让用户看到"登录过期"再手动登要顺得多。 */
+        MimoKeepAlive.tick(this);
 
         cards = (LinearLayout) findViewById(R.id.cards);
         tTotal = (TextView) findViewById(R.id.t_total);
@@ -342,6 +351,13 @@ public class MainActivity extends Activity {
             });
         }
         if (pager != null) {
+            /* 折线图设为**横向死区**：用量统计里要看某个时间点的数值，
+               得在图上按住左右拖；而分页器默认把横向滑动判成"翻页" ——
+               两者抢同一个手势，结果图永远拖不动、页面先翻走了。
+               给图表划一块死区，它那一片不参与翻页。 */
+            View chart = findViewById(R.id.usage_chart);
+            if (chart != null) pager.setHDeadZone(chart);
+
             pager.setListener(new PanelPager.Listener() {
                 public void onPagerScroll(float progress) { applyNavProgress(progress); }
                 public void onPageSettled(int page) { onPanelSettled(page); }
@@ -655,7 +671,13 @@ public class MainActivity extends Activity {
                 new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
         for (int i = 0; i < aks.size(); i++) {
             KeyStore.ApiKey k = aks.get(i);
-            if (!k.isConfigured()) continue;
+            /* 未配置 Key 的平台也照收 —— 只要它"有办法取数"。
+               MiMo 正是这种：凭据是登录会话音、不是 API Key。老代码把它挡在分组外，
+               统计页就只能拿**平台 id** 去查账本，而账本按 **Key id** 记账
+               → 怎么查都是空（这就是"小米 MiMo 没有任何数据"的真因）。
+               让它进组之后，查询用的 kid 才会等于账本里的 key id。 */
+            if (!k.isConfigured() && !BalanceFetcher.platformUsable(this,
+                    k.platform == null ? "" : k.platform)) continue;
             String plat = k.platform == null ? "" : k.platform;
             java.util.List<KeyStore.ApiKey> g = groups.get(plat);
             if (g == null) { g = new java.util.ArrayList<KeyStore.ApiKey>(); groups.put(plat, g); }
@@ -747,6 +769,15 @@ public class MainActivity extends Activity {
             for (int i = 0; i < srcN; i++) {
                 String kid = ks.isEmpty() ? plat : ks.get(i).id;
                 java.util.List<Ledger.Point> pts = lg.series(this, kid, from);
+                /* 历史遗留：早期版本原始条目被别名改写，快照按**平台 id** 记过一批。
+                   这里把两个来源**合并**查询 —— 之前的写法是"查不到才回退"，
+                   一旦新数据开始按 Key id 落库就不再回退，老数据被永久遮住
+                   （用户反馈的"MiMo 比上一版少了两个点"正是这么来的）。 */
+                if (ks.size() <= 1 && !plat.equals(kid)) {
+                    pts = lg.series(this, new String[]{kid, plat}, from);
+                }
+                BalanceFetcher.diag(this, "  stats 查账本 " + plat
+                        + " kid=" + kid + " 点数=" + pts.size());
                 if (pts.size() > 0) ptsAny++;
                 double kCons = 0, kCharged = 0;
                 double[] kDay = new double[DAYS];
@@ -771,6 +802,12 @@ public class MainActivity extends Activity {
             }
             if (ptsAny == 0) {
                 if (anyDraw) {
+                    /* MiMo 要分两种"没数据"：
+                       cookie 为空 = 从没登录过；cookie 在、服务端 401 = 登录已过期。
+                       老代码只判断前者 —— 于是过期会话被显示成"数据积累中"，
+                       用户完全看不出真正该做的是重新登录一次。 */
+                    boolean mimoExpired = "mimo".equals(plat)
+                            && BalanceFetcher.mimoExpired(this);
                     boolean needLogin = "mimo".equals(plat)
                             && BalanceFetcher.mimoSession(this).length() == 0;
                     /* 没历史数据也别留白 —— 把「当前余额」当成最新那一个点打上去。
@@ -784,9 +821,11 @@ public class MainActivity extends Activity {
                         detail.append(name).append("   当前 ").append(String.format("%.2f", live * mul))
                               .append("   历史数据积累中\n");
                     } else {
-                        detail.append(name).append(needLogin
-                                ? "   未登录 · 点卡片登录后开始积累\n"
-                                : "   数据积累中 · 暂无快照\n");
+                        detail.append(name).append(mimoExpired
+                                ? "   登录已过期 · 点卡片重新登录\n"
+                                : (needLogin
+                                        ? "   未登录 · 点卡片登录后开始积累\n"
+                                        : "   数据积累中 · 暂无快照\n"));
                     }
                     int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
                     platformColor.put(plat, Integer.valueOf(zc));
@@ -825,6 +864,8 @@ public class MainActivity extends Activity {
             }
             balIdx++;
         }
+        /* 账本明细：排查"少点/没线"时一眼看出数据记在哪个 id 下 */
+        BalanceFetcher.diag(this, "账本明细 " + lg.dumpKeys(this));
         BalanceFetcher.diag(this, "stats 构建: 平台组=" + groups.size() + " 折线=" + series.size()
                 + " 明细长=" + detail.length() + " aks=" + aks.size());
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
@@ -877,7 +918,13 @@ public class MainActivity extends Activity {
                 new java.util.LinkedHashMap<String, java.util.List<KeyStore.ApiKey>>();
         for (int i = 0; i < aks.size(); i++) {
             KeyStore.ApiKey k = aks.get(i);
-            if (!k.isConfigured()) continue;
+            /* 未配置 Key 的平台也照收 —— 只要它"有办法取数"。
+               MiMo 正是这种：凭据是登录会话音、不是 API Key。老代码把它挡在分组外，
+               统计页就只能拿**平台 id** 去查账本，而账本按 **Key id** 记账
+               → 怎么查都是空（这就是"小米 MiMo 没有任何数据"的真因）。
+               让它进组之后，查询用的 kid 才会等于账本里的 key id。 */
+            if (!k.isConfigured() && !BalanceFetcher.platformUsable(this,
+                    k.platform == null ? "" : k.platform)) continue;
             String plat = k.platform == null ? "" : k.platform;
             java.util.List<KeyStore.ApiKey> g = groups.get(plat);
             if (g == null) { g = new java.util.ArrayList<KeyStore.ApiKey>(); groups.put(plat, g); }
@@ -1230,6 +1277,10 @@ public class MainActivity extends Activity {
                 Alert.check(ctx, r);
                 runOnUiThread(new Runnable() {
                     public void run() {
+                        /* Activity 可能已经 finish/销毁（用户退出、转屏重建）——
+                           这时再碰 UI 轻则无效、重则崩。老代码缺这道检查，
+                           而抓取要跑好几秒，退出得刚好就会撞上。 */
+                        if (isFinishing() || isDestroyed()) return;
                         loading = false;
                         render(r);
                         if (statsRebuildAfterRefresh && curPanel == 1) {
@@ -1315,6 +1366,7 @@ public class MainActivity extends Activity {
                         BalanceFetcher.fetchOne(MainActivity.this, old.id, 12000);
                 runOnUiThread(new Runnable() {
                     public void run() {
+                        if (isFinishing() || isDestroyed()) return;
                         BalanceFetcher.Result r = WidgetCache.read(MainActivity.this);
                         if (r != null) {
                             for (int i = 0; i < r.items.size(); i++) {
@@ -1440,6 +1492,29 @@ public class MainActivity extends Activity {
             /* 点卡片 = 弹出菜单：刷新这一项 / 看密钥（看密钥要先过密码） */
             v.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v2) {
+                    /* MiMo 是登录型平台：登录态失效时，菜单里必须先给"重新登录"。
+                       否则用户点开只有「刷新/看密钥/控制台」，
+                       根本看不出该做什么才能把这个平台救回来。 */
+                    if ("mimo".equals(fi.platform)
+                            && BalanceFetcher.mimoNeedsRelogin(MainActivity.this)) {
+                        LockDialog.choose(MainActivity.this, fi.label,
+                            new String[] { "重新登录小米账号", "刷新", "控制台", "充值" },
+                            new LockDialog.OnPick() {
+                                public void pick(int which) {
+                                    if (which == 0) {
+                                        startActivity(new Intent(MainActivity.this,
+                                                MimoLoginActivity.class));
+                                    } else if (which == 1) {
+                                        refreshOne(fi);
+                                    } else if (which == 2) {
+                                        openSiteMenu(fi);
+                                    } else {
+                                        openTopup(fi);
+                                    }
+                                }
+                            });
+                        return;
+                    }
                     LockDialog.choose(MainActivity.this, fi.label,
                         new String[] { "刷新", "看密钥", "控制台", "充值" },
                         new LockDialog.OnPick() {

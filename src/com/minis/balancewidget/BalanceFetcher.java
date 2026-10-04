@@ -33,6 +33,8 @@ public class BalanceFetcher {
 
     /** 小米 MiMo 控制台会话音 cookie（**账号级**，不是 Key 级）：由 App 内登录页写入 */
     private static final String K_MIMO_SESSION = "mimo_session";
+    /** MiMo 登录态失效标记：cookie 还在本地，但服务端已经 401 */
+    private static final String K_MIMO_EXPIRED = "mimo_session_expired";
 
     /* 会话音的内存缓存：解密要过 TEE，一次几毫秒到几十毫秒，
        而统计页/卡片渲染会反复问「登录了没」，不缓存就是白等。 */
@@ -58,9 +60,41 @@ public class BalanceFetcher {
     public static void setMimoSession(Context c, String cookie) {
         try {
             c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                    .putString(K_MIMO_SESSION, KeyVault.enc(cookie)).apply();
+                    .putString(K_MIMO_SESSION, KeyVault.enc(cookie))
+                    .putBoolean(K_MIMO_EXPIRED, false)      // 重新登录 → 清掉过期标记
+                    .apply();
             sessionCache = cookie == null ? "" : cookie;
             sessionCached = true;
+        } catch (Throwable ignored) { }
+    }
+
+    /**
+     * MiMo 登录态是否**已失效**：本地留着 cookie，但服务端返回 401。
+     *
+     * 为什么要单独记这个：cookie 非空时老代码只判断"登录过没有"，
+     * 于是一个过期会话会被当成正常状态 —— 统计页显示"数据积累中"，
+     * 用户根本看不出其实是需要重新登录。
+     */
+    public static boolean mimoExpired(Context c) {
+        try {
+            return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getBoolean(K_MIMO_EXPIRED, false);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** 需要重新登录：完全没登录，或者登录态已失效 */
+    public static boolean mimoNeedsRelogin(Context c) {
+        return mimoSession(c).length() == 0 || mimoExpired(c);
+    }
+
+    /** 标记 MiMo 登录态已失效（供保活逻辑在"被弹回登录页"时调用） */
+    public static void markMimoExpired(Context c) {
+        if (c == null) return;
+        try {
+            c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                    .putBoolean(K_MIMO_EXPIRED, true).apply();
         } catch (Throwable ignored) { }
     }
 
@@ -87,17 +121,19 @@ public class BalanceFetcher {
             /* 账本按「密钥」记录快照（用合并前的原始条目，避免平台级 id 覆盖） */
             java.util.List<Item> raw = r.rawItems != null ? r.rawItems : r.items;
             int n = 0;
+            StringBuilder who = new StringBuilder();
             for (int i = 0; i < raw.size(); i++) {
                 Item it = raw.get(i);
                 if (it.noData) continue;                    // 未登录之类：没数就是没数，别写 0
                 if (it.ok && it.bal >= 0 && "balance".equals(it.kind)) {
                     lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag));
+                    who.append(it.id).append(' ');
                     n++;
                 }
             }
             /* 顺手清理超期数据（默认留 90 天） */
             lg.prune(ctx, sps.getInt("ledger_keep_days", Ledger.KEEP_DAYS_DEFAULT));
-            diag(ctx, "账本采样完成，写入 " + n + " 条");
+            diag(ctx, "账本采样完成，写入 " + n + " 条 [" + who.toString().trim() + "]");
         } catch (Throwable t) {
             diag(ctx, "快照记录失败: " + t);
         }
@@ -454,6 +490,26 @@ public class BalanceFetcher {
         public boolean foreign;
         /** 走代理访问 */
         public boolean viaProxy;
+
+        /**
+         * 字段级副本。
+         *
+         * 为什么需要它：账本快照必须按「合并前的原始条目」记录（用 Key id），
+         * 而结果汇总时会给 Item 写 `id = platform` 做平台级合并 ——
+         * 如果两份列表引用同一批对象，那次改写就会**把原始条目一起改掉**，
+         * 快照从此按 platform 记账，统计页按 Key id 查询自然什么都查不到。
+         */
+        public Item copy() {
+            Item o = new Item();
+            o.id = id; o.platform = platform; o.label = label; o.tag = tag;
+            o.kind = kind; o.amount = amount; o.conv = conv; o.rows = rows;
+            o.error = error; o.cny = cny; o.bal = bal; o.threshold = threshold;
+            o.alertKey = alertKey; o.low = low; o.ok = ok; o.subEndMs = subEndMs;
+            o.mergeCount = mergeCount; o.usageTokens = usageTokens;
+            o.debug = debug; o.noData = noData; o.foreign = foreign;
+            o.viaProxy = viaProxy;
+            return o;
+        }
     }
 
     public static class Result {
@@ -553,11 +609,19 @@ public class BalanceFetcher {
            按 timeoutMs/2 分（8000 → 4000）会让它们次次超时。
            地址已按本机出口协议排好，首选通常一次就通，所以给它 3/4 预算。 */
         int per = Math.max(3000, timeoutMs * 3 / 4);
+        /* ★ 总预算（deadline）：timeoutMs 是**整个请求**的预算，不是每个地址的额度。
+           原实现里每个地址能吃 per，超时后同地址还会再吃一次 per ——
+           8 个地址理论上最多 48 秒，实测汇率请求把 3 秒预算拖成了 22.5 秒。
+           结果就是"调用方以为 3 秒放弃，实际卡了 20 多秒"，刷新被整体拖慢。 */
+        final long deadline = System.currentTimeMillis() + Math.max(2500, timeoutMs);
         for (int i = 0; i < ordered.size(); i++) {
+            long left = deadline - System.currentTimeMillis();
+            if (left <= 400) { tried.append("总预算耗尽; "); break; }
+            int eff = (int) Math.min(per, left);
             long t0 = System.currentTimeMillis();
             String ip = ordered.get(i).getHostAddress();
             try {
-                String r = getViaIp(ordered.get(i), host, port, https, path, bearer, cookie, per);
+                String r = getViaIp(ordered.get(i), host, port, https, path, bearer, cookie, eff);
                 Log.i(TAG, "  ✅ " + ip + " " + (System.currentTimeMillis() - t0) + "ms");
                 return r;
             } catch (StatusException se) {
@@ -567,8 +631,11 @@ public class BalanceFetcher {
                 /* 间歇性慢接口（七牛账单实测 0.2s~9s 随机抖动）：同地址立即重试一次，
                    重试大概率命中快的那次；仍慢才换下一个地址。 */
                 Log.w(TAG, "  ⏳ " + ip + " 超时 " + (System.currentTimeMillis() - t0) + "ms，重试一次");
+                long left2 = deadline - System.currentTimeMillis();
+                if (left2 <= 400) { tried.append(ip).append("=超时且预算尽; "); break; }
                 try {
-                    String r2 = getViaIp(ordered.get(i), host, port, https, path, bearer, cookie, per);
+                    String r2 = getViaIp(ordered.get(i), host, port, https, path, bearer, cookie,
+                                         (int) Math.min(per, left2));
                     Log.i(TAG, "  ✅(重试) " + ip + " " + (System.currentTimeMillis() - t0) + "ms");
                     return r2;
                 } catch (Exception e2) {
@@ -932,7 +999,44 @@ public class BalanceFetcher {
 
     // ---------- 主流程 ----------
 
+    /**
+     * 并发闸门：同一时刻只允许一轮抓取在跑。
+     *
+     * 以前没有这道闸 —— 前台自动刷新、手动点刷新、小组件广播、RefreshReceiver
+     * 各走各的，一波操作就能叠出好几轮 fetch；每轮又按平台数开线程，
+     * 再叠加汇率最长 20+ 秒的阻塞，线程越堆越多，最后把进程拖垮
+     * （用户反馈的"刷着刷着就闪退"就是这个）。
+     */
+    private static final java.util.concurrent.atomic.AtomicBoolean IN_FLIGHT =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
     public static Result fetch(Context ctx, int timeoutMs) {
+        if (!IN_FLIGHT.compareAndSet(false, true)) {
+            /* 已有抓取在进行：直接复用上次结果，绝不叠加第二轮 */
+            Result cached = WidgetCache.read(ctx);
+            if (cached != null && cached.items != null && cached.items.size() > 0) {
+                diag(ctx, "已有抓取在进行，复用缓存结果");
+                return cached;
+            }
+            /* 没有可用缓存就短暂等一会儿，多半能等到正在跑的那轮结束 */
+            for (int i = 0; i < 40 && IN_FLIGHT.get(); i++) {
+                try { Thread.sleep(100); } catch (Exception ig) { }
+            }
+            Result c2 = WidgetCache.read(ctx);
+            if (c2 != null && c2.items != null && c2.items.size() > 0) return c2;
+            Result empty = new Result();
+            empty.items = new ArrayList<Item>();
+            empty.rawItems = new ArrayList<Item>();
+            return empty;
+        }
+        try {
+            return fetchInner(ctx, timeoutMs);
+        } finally {
+            IN_FLIGHT.set(false);
+        }
+    }
+
+    private static Result fetchInner(Context ctx, int timeoutMs) {
         long t0 = System.currentTimeMillis();
         Result res = new Result();
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -1010,8 +1114,11 @@ public class BalanceFetcher {
             } else {
                 Preset p = presetOf(plat);
                 if (p == null) continue;
-                it.label = (ak.label.length() == 0 || "默认".equals(ak.label))
-                        ? p.name : (p.name + " · " + ak.label);
+                /* 卡片是**平台粒度**的（同平台多密钥合并成一张），所以标题只写平台名。
+                   以前在这里挂上某一个密钥的备注（"DeepSeek · minis"）会误导：
+                   那张卡代表的是整个平台，而备注只属于其中一个密钥。
+                   想区分具体密钥，走「查看密钥」——那里本就按密钥逐条列。 */
+                it.label = p.name;
                 it.tag = p.unit;
                 it.kind = p.kind;
                 it.foreign = p.foreign;
@@ -1129,6 +1236,9 @@ public class BalanceFetcher {
             try {
                 ts[i].join(per + 1500L);
                 if (ts[i].isAlive()) {
+                    /* ★ 预算内没收尾就直接中断：不掐的话它会继续占着 socket 和线程，
+                       多轮刷新叠加起来就是线程/内存堆积（闪退的来源之一）。 */
+                    ts[i].interrupt();
                     /* 没在预算内收尾：换成一个干净的失败项，
                        免得它稍后再往正在被序列化/渲染的对象上写脏数据 */
                     Item src = items.get(i);
@@ -1161,7 +1271,11 @@ public class BalanceFetcher {
             res.items.add(it);
         }
         /* 平台级合并：同一平台多密钥 → 一张卡片（余额取最大值，避免同账户重复计算） */
-        res.rawItems = new java.util.ArrayList<Item>(res.items);
+        /* ★ 必须**深拷贝**：下面是平台级合并，会给 Item 写 `id = platform`。
+           浅拷贝（原实现 `new ArrayList<>(res.items)`）下两份列表指向同一批对象，
+           那次改写会连原始条目的 id 一起覆盖 —— 与"账本按密钥记录"的初衷正好相反。 */
+        res.rawItems = new java.util.ArrayList<Item>(res.items.size());
+        for (int i = 0; i < res.items.size(); i++) res.rawItems.add(res.items.get(i).copy());
         java.util.LinkedHashMap<String, Item> byPlat =
                 new java.util.LinkedHashMap<String, Item>();
         for (int i = 0; i < res.items.size(); i++) {
@@ -1302,8 +1416,8 @@ public class BalanceFetcher {
                     it.amount = "\u2014";
                     return it;
                 }
-                it.label = (ak.label.length() == 0 || "\u9ed8\u8ba4".equals(ak.label))
-                        ? p.name : (p.name + " \u00b7 " + ak.label);
+                /* 同上：单平台刷新出来的也是平台级卡片，标题不带密钥备注 */
+                it.label = p.name;
                 it.kind = p.kind;
                 it.tag = p.unit;
                 it.foreign = p.foreign;
@@ -1563,6 +1677,14 @@ public class BalanceFetcher {
             } catch (StatusException se) {
                 /* 401/302 基本都是登录态过期（小米账号会话有有效期） */
                 diag(ctx, "MiMo 余额被拒 " + se.getMessage());
+                /* cookie 还在、服务端却 401 —— 登录态过期。
+                   记下来，好让界面说清"需要重新登录"而不是含糊的"数据积累中"。 */
+                if (se.getMessage() != null && se.getMessage().indexOf("401") >= 0) {
+                    try {
+                        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                                .putBoolean(K_MIMO_EXPIRED, true).apply();
+                    } catch (Throwable ig) { }
+                }
                 it.noData = true;
                 it.amount = "登录过期";
                 it.cny = 0;
@@ -1582,6 +1704,11 @@ public class BalanceFetcher {
             }
             it.bal = bal;
             it.cny = bal;                       // 接口本身就是人民币元
+            /* 取数成功 → 登录态是好的，清掉过期标记 */
+            try {
+                ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                        .putBoolean(K_MIMO_EXPIRED, false).apply();
+            } catch (Throwable ig) { }
             it.amount = money(bal, false);
             it.conv = "";
             StringBuilder sb = new StringBuilder("余额  ").append(money(bal, false));

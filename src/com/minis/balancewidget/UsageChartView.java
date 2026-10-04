@@ -39,19 +39,52 @@ public class UsageChartView extends View {
 
     @Override
     public boolean onTouchEvent(android.view.MotionEvent ev) {
-        if (mN <= 0 || mCw <= 0) return super.onTouchEvent(ev);
+        int a = ev.getActionMasked();
+
+        /* ★ 手势归属声明：按下就告诉所有祖先容器「这次手势归我，别来抢」。
+           用量统计的折线图靠按住左右拖来看某点数值，而分页器默认把横向滑动
+           判成翻页 —— 两者抢同一个手势，图表永远拖不动。
+
+           ⚠️ 为什么必须在 ACTION_DOWN 就声明，而不能等判定出方向再说：
+           PanelPager.onInterceptTouchEvent 只在**子视图接住了 DOWN** 时才会被调用；
+           一旦子视图没接住，mFirstTouchTarget 为空，后续 MOVE 事件 AOSP 会
+           直接把 intercepted 置为 true，**根本不再回调 onInterceptTouchEvent** ——
+           在父容器里写的"死区判断"压根没机会执行。所以只能由子视图主动声明。
+
+           requestDisallowInterceptTouchEvent 会沿父链一路往上设置标志，
+           祖先容器看到就不再拦截，这是 Android 处理"子视图要独占手势"的标准做法。 */
+        if (a == android.view.MotionEvent.ACTION_DOWN) {
+            disallowParentIntercept(true);
+        }
+
+        if (mN <= 0 || mCw <= 0) {
+            /* 没数据也**必须接住 DOWN**（返回 true）：
+               否则这次手势连 touch target 都建立不起来，
+               父容器又会退回"直接拦截"的老路。 */
+            return a == android.view.MotionEvent.ACTION_DOWN || super.onTouchEvent(ev);
+        }
+
         float slot = mCw / mN;
         int idx = (int) ((ev.getX() - mPadL) / slot);
         if (idx < 0) idx = 0;
         if (idx >= mN) idx = mN - 1;
-        int a = ev.getAction();
+
         if (a == android.view.MotionEvent.ACTION_DOWN || a == android.view.MotionEvent.ACTION_MOVE) {
             touchIdx = idx; invalidate(); return true;
         }
         if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) {
+            disallowParentIntercept(false);     // 手势结束，恢复父容器拦截能力
             touchIdx = -1; invalidate(); return true;
         }
         return super.onTouchEvent(ev);
+    }
+
+    /** 沿父链声明/解除"不要拦截我的手势"；父链异常也不影响主流程 */
+    private void disallowParentIntercept(boolean disallow) {
+        try {
+            android.view.ViewParent p = getParent();
+            if (p != null) p.requestDisallowInterceptTouchEvent(disallow);
+        } catch (Throwable ignored) { }
     }
 
     private List<Series> series;
