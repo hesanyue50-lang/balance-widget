@@ -56,7 +56,8 @@ public class SettingsBinder {
         eFg = (EditText) root.findViewById(R.id.e_fg_min);
         eBg = (EditText) root.findViewById(R.id.e_bg_min);
         if (eFg != null) eFg.setText(String.valueOf(RefreshScheduler.fgMinutes(act)));
-        if (eBg != null) eBg.setText(String.valueOf(RefreshScheduler.bgMinutes(act)));
+        /* 填**用户设定值**而非托底后的值，否则保存时会把托底值写回去 */
+        if (eBg != null) eBg.setText(String.valueOf(RefreshScheduler.bgMinutesRaw(act)));
         android.text.TextWatcher w = new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             public void onTextChanged(CharSequence s, int a, int b, int c) {
@@ -68,10 +69,83 @@ public class SettingsBinder {
         if (eFg != null) eFg.addTextChangedListener(w);
         if (eBg != null) eBg.addTextChangedListener(w);
 
+        /* 提示里的"最小 N 分钟"从常量生成 —— 硬编码的话改了最小值文案就对不上 */
+        TextView hf = (TextView) root.findViewById(R.id.hint_fg);
+        if (hf != null) {
+            hf.setText(act.getString(R.string.hint_refresh_fg, RefreshScheduler.FG_MIN));
+        }
+        TextView hb = (TextView) root.findViewById(R.id.hint_bg);
+        if (hb != null) {
+            hb.setText(act.getString(R.string.hint_refresh_bg, RefreshScheduler.BG_MIN));
+        }
+
+        /* 失焦时把越界的输入收敛到合法范围。
+           为什么用"失焦"而不是"边打字边纠正"：
+           用户想输 20，刚敲下 "2"（小于后台最小值 5）就被改成 5，
+           接着再敲 "0" 就变成 50 —— 边打字边纠正一定会打架。
+           失焦时用户已经表达完意图，这时收敛既准确又不打断输入。 */
+        android.view.View.OnFocusChangeListener fc =
+                new android.view.View.OnFocusChangeListener() {
+                    public void onFocusChange(View v, boolean hasFocus) {
+                        if (hasFocus || !(v instanceof EditText)) return;
+                        int min = (v.getId() == R.id.e_bg_min)
+                                ? RefreshScheduler.BG_MIN : RefreshScheduler.FG_MIN;
+                        int fixed = clampInterval((EditText) v, min);
+                        if (!String.valueOf(fixed).equals(
+                                ((EditText) v).getText().toString().trim())) {
+                            ((EditText) v).setText(String.valueOf(fixed));
+                        }
+                    }
+                };
+        if (eFg != null) eFg.setOnFocusChangeListener(fc);
+        if (eBg != null) eBg.setOnFocusChangeListener(fc);
+
         View autostart = root.findViewById(R.id.btn_autostart);
         if (autostart != null) autostart.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { Autostart.ensure(act, true); }
         });
+
+        /* 电池优化白名单单独给一个入口。
+           和"自启动"是两套独立机制：自启动决定闹钟能不能唤醒本应用（国产 ROM 特有），
+           电池优化白名单决定 Doze 深度休眠时闹钟会不会被大幅推迟（Android 原生）。
+           之前只引导了自启动，实测这台机器就是"自启动已给、电池优化没进" ——
+           闹钟虽然排上了，却带着 15 分钟窗口。 */
+        View battery = root.findViewById(R.id.btn_battery);
+        if (battery != null) {
+            battery.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (Autostart.isIgnoringBattery(act)) {
+                        android.widget.Toast.makeText(act,
+                                "已在电池优化白名单中，后台刷新不会被 Doze 推迟",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    } else {
+                        Autostart.requestIgnoreBattery(act);
+                    }
+                }
+            });
+        }
+
+        /* 省电模式 */
+        final TextView ps = (TextView) root.findViewById(R.id.btn_power_save);
+        if (ps != null) {
+            renderPowerSave(ps, act);
+            ps.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    boolean on = !RefreshScheduler.powerSave(act);
+                    RefreshScheduler.setPowerSave(act, on);
+                    renderPowerSave(ps, act);
+                    /* 立刻按新间隔重排闹钟 —— 已排上的那个还是旧间隔，
+                       不重排的话要等它触发一次才生效。 */
+                    RefreshScheduler.schedule(act);
+                    if (on) {
+                        android.widget.Toast.makeText(act,
+                                "省电模式已开启：后台刷新的实际间隔为 "
+                                        + RefreshScheduler.bgMinutes(act) + " 分钟",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
 
         // ---- 通知状态提示 ----
         TextView ns = (TextView) root.findViewById(R.id.notify_state);
@@ -201,10 +275,34 @@ public class SettingsBinder {
     }
 
     private void saveIntervals() {
-        int f = RefreshScheduler.FG_DEFAULT_MIN, b = RefreshScheduler.BG_DEFAULT_MIN;
-        try { f = Integer.parseInt(eFg.getText().toString().trim()); } catch (Exception ig) { }
-        try { b = Integer.parseInt(eBg.getText().toString().trim()); } catch (Exception ig) { }
+        int f = clampInterval(eFg, RefreshScheduler.FG_MIN);
+        int b = clampInterval(eBg, RefreshScheduler.BG_MIN);
         RefreshScheduler.setIntervals(act, f, b);
+    }
+
+    /**
+     * 把输入框的值收进 [min, MAX_MIN]，返回收敛后的结果。
+     *
+     * 空 / 非数字也按最小值处理（"没填有效值"和"填了个太小的值"结果一样）。
+     * 若收敛结果与原文本不同，且**该框没有焦点**，就回填 —— 用户正在这个框里
+     * 打字时不回填，否则会打断输入。
+     */
+    private int clampInterval(EditText e, int min) {
+        if (e == null) return min;
+        String raw = e.getText().toString().trim();
+        int v;
+        try {
+            v = Integer.parseInt(raw);
+        } catch (Exception ig) {
+            v = min;                       // 空或非数字
+        }
+        if (v < min) v = min;
+        if (v > RefreshScheduler.MAX_MIN) v = RefreshScheduler.MAX_MIN;
+
+        if (!String.valueOf(v).equals(raw) && !e.hasFocus()) {
+            e.setText(String.valueOf(v));
+        }
+        return v;
     }
 
     // ---------------- 密钥列表 ----------------
@@ -818,6 +916,15 @@ public class SettingsBinder {
             Intent it = new Intent(act, BalanceWidgetProvider.class);
             it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             act.sendBroadcast(it);
+        } catch (Throwable ignored) { }
+    }
+
+    /** 省电开关的文字与配色（开启时用强调色，一眼看出状态） */
+    private static void renderPowerSave(TextView ps, android.content.Context ctx) {
+        boolean on = RefreshScheduler.powerSave(ctx);
+        ps.setText(on ? ctx.getString(R.string.ps_on) : ctx.getString(R.string.ps_off));
+        try {
+            ps.setTextColor(ctx.getColor(on ? R.color.accent : R.color.tx3));
         } catch (Throwable ignored) { }
     }
 }

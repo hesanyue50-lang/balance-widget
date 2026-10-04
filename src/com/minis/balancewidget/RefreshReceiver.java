@@ -48,6 +48,9 @@ public class RefreshReceiver extends BroadcastReceiver {
         // （即使当前没有小组件，Provider 内部也会取数并做预警）
         Intent refresh = new Intent(app, BalanceWidgetProvider.class);
         refresh.setAction(BalanceWidgetProvider.ACTION_REFRESH);
+        /* 打上"来自后台闹钟"的标记：Provider 据此走精简模式
+           （跳过汇率、失败不重试），减少后台耗电。 */
+        refresh.putExtra(BalanceWidgetProvider.EXTRA_BG, true);
         app.sendBroadcast(refresh);
 
         // 排下一次

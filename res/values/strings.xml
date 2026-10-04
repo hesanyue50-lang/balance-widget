@@ -57,8 +57,8 @@
     <string name="refresh_foreground">前台刷新间隔</string>
     <string name="refresh_background">后台刷新间隔</string>
     <string name="unit_minute">分钟</string>
-    <string name="hint_refresh_fg">最小 1 分钟。设得过短会频繁请求，可能被平台限流。</string>
-    <string name="hint_refresh_bg">最小 2 分钟。应用退到后台后按此间隔唤醒刷新，用于及时推送余额预警（需允许自启动）。</string>
+    <string name="hint_refresh_fg">最小 %1$d 分钟。设得过短会频繁请求，可能被平台限流；填小于最小值会自动改为最小值。</string>
+    <string name="hint_refresh_bg">最小 %1$d 分钟。应用退到后台后按此间隔唤醒刷新，用于及时推送余额预警（需允许自启动）；填小于最小值会自动改为最小值。</string>
     <string name="sec_keys">API 密钥与平台</string>
 
     <!-- 自启动引导 -->
@@ -66,7 +66,12 @@
     <string name="autostart_msg">余额预警依赖后台定时刷新（当前每 %1$d 分钟）。\n\n系统会限制后台应用，请把本应用加入「自启动」白名单，否则预警可能延迟或收不到。\n\n自启动仅用于刷新 API 余额，不做其他任何事。</string>
     <string name="autostart_go">去设置</string>
     <string name="autostart_later">暂不</string>
-    <string name="autostart_entry">设置后台运行权限（自启动 / 电池优化）›</string>
+    <string name="autostart_entry">设置自启动 ›</string>
+    <string name="battery_entry">电池优化白名单 ›</string>
+    <string name="vpn_import_tip">💡 在机场官网点「一键导入 Clash」会自动跳回本软件完成导入，不用手动复制订阅链接。</string>
+    <string name="ps_on">省电模式：已开启</string>
+    <string name="ps_off">省电模式：已关闭</string>
+    <string name="ps_hint">开启后后台刷新间隔至少 %1$d 分钟，并跳过汇率查询等非必要请求，减少耗电。</string>
     <string name="battery_msg">另外建议把本应用加入「电池优化白名单」：否则系统深度休眠时会推迟后台刷新，余额预警可能不准时。</string>
     <string name="battery_go">电池优化白名单</string>
 

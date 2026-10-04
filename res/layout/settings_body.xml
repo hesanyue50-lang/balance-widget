@@ -23,6 +23,7 @@
                 </LinearLayout>
 
                 <TextView style="@style/FieldHint"
+                    android:id="@+id/hint_fg"
                     android:text="@string/hint_refresh_fg" />
 
                 <LinearLayout style="@style/FieldRow" android:layout_marginTop="14dp">
@@ -37,20 +38,60 @@
                 </LinearLayout>
 
                 <TextView style="@style/FieldHint"
+                    android:id="@+id/hint_bg"
                     android:text="@string/hint_refresh_bg" />
 
-                <TextView
-                    android:id="@+id/btn_autostart"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btn_autostart"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/mini_btn_border"
+                        android:gravity="center"
+                        android:paddingLeft="10dp"
+                        android:paddingRight="10dp"
+                        android:paddingTop="12dp"
+                        android:paddingBottom="12dp"
+                        android:text="@string/autostart_entry"
+                        android:textColor="@color/accent"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btn_battery"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginLeft="8dp"
+                        android:background="@drawable/mini_btn_border"
+                        android:gravity="center"
+                        android:paddingLeft="10dp"
+                        android:paddingRight="10dp"
+                        android:paddingTop="12dp"
+                        android:paddingBottom="12dp"
+                        android:text="@string/battery_entry"
+                        android:textColor="@color/accent"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btn_power_save"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
                     android:background="@drawable/mini_btn_border"
                     android:gravity="center"
-                    android:paddingLeft="14dp"
-                    android:paddingRight="14dp"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
                     android:paddingTop="12dp"
                     android:paddingBottom="12dp"
-                    android:text="@string/autostart_entry"
+                    android:text="@string/ps_off"
                     android:textColor="@color/accent"
                     android:textSize="13sp" />
             </LinearLayout>

@@ -24,12 +24,28 @@ public final class RefreshScheduler {
     /** 后台默认 20 分钟 */
     public static final int BG_DEFAULT_MIN = 20;
     /** 范围（分钟）：过短会频繁请求被平台限流，过长则预警不及时 */
-    public static final int FG_MIN = 1;      // 前台最小 1 分钟
-    public static final int BG_MIN = 2;      // 后台最小 2 分钟（唤醒更耗电）
+    /* 最小值定得比"技术上能跑通"更保守一些：
+       设太短只会让平台限流、耗电上升，而余额变化本身很慢，收益为零。
+       前台 2 分钟（用户盯着看时够灵敏）；后台 5 分钟（唤醒一次要拉起进程+建连接，
+       是主要耗电来源，没必要太频繁）。 */
+    public static final int FG_MIN = 2;      // 前台最小 2 分钟
+    public static final int BG_MIN = 5;      // 后台最小 5 分钟
     public static final int MAX_MIN = 360;
 
     private static final String KEY_FG = "fg_interval_min";
     private static final String KEY_BG = "bg_interval_min";
+    /** 省电模式开关 */
+    private static final String KEY_PS = "power_save";
+
+    /**
+     * 省电模式下后台刷新的最小间隔。
+     *
+     * 为什么是 60 分钟：后台唤醒一次要拉起进程、建连接、跑完所有平台 ——
+     * 这是本应用最主要的耗电来源，而**余额变化本身很慢**（尤其预付费平台）。
+     * 拉长到 1 小时对预警的实际影响很小，省电收益却很明显。
+     * 用户仍可在省电模式下手动设更长。
+     */
+    public static final int PS_BG_MIN = 60;
 
     private static android.content.SharedPreferences prefs(Context c) {
         return c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
@@ -40,7 +56,28 @@ public final class RefreshScheduler {
     }
 
     public static int bgMinutes(Context c) {
+        int v = clampBg(prefs(c).getInt(KEY_BG, BG_DEFAULT_MIN));
+        /* 省电模式：把后台间隔托到 PS_BG_MIN 以上（用户设了更长的就尊重用户） */
+        if (powerSave(c) && v < PS_BG_MIN) v = PS_BG_MIN;
+        return v;
+    }
+
+    /**
+     * 用户**设定**的后台间隔（不经省电模式托底）。
+     *
+     * 设置页的编辑框必须用它填 —— 若用 bgMinutes()，省电模式下会显示托底后的 60，
+     * 用户没动过也会在保存时把 60 写回去，一关省电模式间隔就莫名变成 1 小时。
+     */
+    public static int bgMinutesRaw(Context c) {
         return clampBg(prefs(c).getInt(KEY_BG, BG_DEFAULT_MIN));
+    }
+
+    public static boolean powerSave(Context c) {
+        try { return prefs(c).getBoolean(KEY_PS, false); } catch (Throwable t) { return false; }
+    }
+
+    public static void setPowerSave(Context c, boolean on) {
+        try { prefs(c).edit().putBoolean(KEY_PS, on).apply(); } catch (Throwable ignored) { }
     }
 
     public static int clampFg(int v) {

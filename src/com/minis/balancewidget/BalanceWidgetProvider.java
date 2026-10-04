@@ -27,6 +27,8 @@ import android.widget.RemoteViews;
 public class BalanceWidgetProvider extends AppWidgetProvider {
 
     public static final String ACTION_REFRESH = "com.minis.balancewidget.ACTION_REFRESH";
+    /** 标记这次刷新来自后台闹钟（走精简模式，省电） */
+    public static final String EXTRA_BG = "from_background_alarm";
     /** 不联网，直接用缓存把所有实例重画一遍（App 更新后救场用） */
     public static final String ACTION_FORCE_REDRAW = "com.minis.balancewidget.ACTION_FORCE_REDRAW";
     public static final String ACTION_PREV = "com.minis.balancewidget.ACTION_PREV";
@@ -89,7 +91,8 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         /* 注意：ACTION_REFRESH 即使当前没有小组件也必须执行 ——
            后台定时刷新（RefreshReceiver）正是靠它取数并做余额预警。 */
         if (ACTION_REFRESH.equals(a)) {
-            fetchAndRender(ctx, mgr, ids);
+            /* RefreshReceiver（闹钟唤醒）会打上 EXTRA_BG 标记 */
+            fetchAndRender(ctx, mgr, ids, intent.getBooleanExtra(EXTRA_BG, false));
             return;
         }
 
@@ -154,7 +157,17 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     // ---------- 刷新编排 ----------
 
     /** 后台联网拉取（goAsync 延长广播存活时间） */
+    /** 非后台来源（用户点击、系统更新等） */
     private void fetchAndRender(final Context ctx, final AppWidgetManager mgr, final int[] ids) {
+        fetchAndRender(ctx, mgr, ids, false);
+    }
+
+    /**
+     * @param bg true = 这次刷新来自后台闹钟。走**精简模式**省电：
+     *           跳过汇率查询、失败不做重试（Doze 下网络本就常不通，重试纯浪费电）。
+     */
+    private void fetchAndRender(final Context ctx, final AppWidgetManager mgr,
+                                final int[] ids, final boolean bg) {
         final boolean hasWidget = ids != null && ids.length > 0;
         BalanceFetcher.diag(ctx, "实例 ids=" + java.util.Arrays.toString(ids)
                 + " 数量=" + (ids == null ? -1 : ids.length));
@@ -187,9 +200,12 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                 try {
                     long t0 = System.currentTimeMillis();
                     BalanceFetcher.diag(ctx, "=== 小组件刷新开始 ===");
-                    BalanceFetcher.Result r = BalanceFetcher.fetch(ctx, FETCH_TIMEOUT_MS);
+                    /* 后台标记由 RefreshReceiver 经 onReceive 传进来；
+                       后台走精简模式，并且不做失败重试 ——
+                       Doze 下网络本来就常不通，重试既拿不到数据又白白耗电。 */
+                    BalanceFetcher.Result r = BalanceFetcher.fetch(ctx, FETCH_TIMEOUT_MS, bg);
                     // Doze/idle 下网络栈可能未就绪导致全 DNS 失败：等 2s 自愈重试一次
-                    if (r.configured > 0 && r.failed == r.configured) {
+                    if (!bg && r.configured > 0 && r.failed == r.configured) {
                         try { Thread.sleep(2000); } catch (Exception ig) { }
                         r = BalanceFetcher.fetch(ctx, FETCH_TIMEOUT_MS);
                     }

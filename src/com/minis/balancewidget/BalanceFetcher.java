@@ -1020,6 +1020,17 @@ public class BalanceFetcher {
             new java.util.concurrent.atomic.AtomicBoolean(false);
 
     public static Result fetch(Context ctx, int timeoutMs) {
+        return fetch(ctx, timeoutMs, false);
+    }
+
+    /**
+     * @param background 后台刷新（闹钟唤醒）。
+     *   true 时走**精简模式**，省电：
+     *     - 跳过汇率请求，直接用缓存值（汇率日内波动极小，对余额展示没有影响，
+     *       但这一跳实测可能吃掉好几秒的 radio 活跃时间）
+     *     - 调用方不再做"全失败重试"（Doze 下网络本就常不通，重试纯浪费）
+     */
+    public static Result fetch(Context ctx, int timeoutMs, boolean background) {
         if (!IN_FLIGHT.compareAndSet(false, true)) {
             /* 已有抓取在进行：直接复用上次结果，绝不叠加第二轮 */
             Result cached = WidgetCache.read(ctx);
@@ -1039,13 +1050,13 @@ public class BalanceFetcher {
             return empty;
         }
         try {
-            return fetchInner(ctx, timeoutMs);
+            return fetchInner(ctx, timeoutMs, background);
         } finally {
             IN_FLIGHT.set(false);
         }
     }
 
-    private static Result fetchInner(Context ctx, int timeoutMs) {
+    private static Result fetchInner(Context ctx, int timeoutMs, boolean background) {
         long t0 = System.currentTimeMillis();
         Result res = new Result();
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -1057,6 +1068,12 @@ public class BalanceFetcher {
             res.rate = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .getFloat("last_rate", 7.1f);
         } catch (Throwable ig) { }
+        if (background) {
+            /* 省电：后台不查汇率，直接用缓存。
+               汇率一天波动通常不到 0.5%，对"余额折合人民币"的展示没有实际影响；
+               而对 USD 平台之外的抓取完全无关 —— 白白多一跳网络，不如省掉。 */
+            diag(ctx, "后台精简刷新：跳过汇率查询，用缓存 " + res.rate);
+        } else
         try {
             String j = get(RATE_URL,
                            null, Math.min(timeoutMs, 3000));
