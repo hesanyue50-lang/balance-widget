@@ -89,6 +89,15 @@ public class BalanceFetcher {
         return mimoSession(c).length() == 0 || mimoExpired(c);
     }
 
+    /** 清除 MiMo 过期标记（保活确认会话有效、或取数成功时调用） */
+    public static void clearMimoExpired(Context c) {
+        if (c == null) return;
+        try {
+            c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                    .putBoolean(K_MIMO_EXPIRED, false).apply();
+        } catch (Throwable ignored) { }
+    }
+
     /** 标记 MiMo 登录态已失效（供保活逻辑在"被弹回登录页"时调用） */
     public static void markMimoExpired(Context c) {
         if (c == null) return;

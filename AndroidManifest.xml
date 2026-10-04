@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="355"
-    android:versionName="26.10.355">
+    android:versionCode="356"
+    android:versionName="26.10.356">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 后台定时刷新（用于余额预警及时送达）：开机后重新注册闹钟 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 加入电池优化白名单：不加的话 Doze 深度睡眠会把闹钟推迟很久。
+         实测这台机器「自启动」已给、但电池优化白名单没进 —— 两者缺一不可。 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- 系统级全局代理：VpnService 需要前台服务常驻（否则会被系统随时回收，
          那样流量会突然断掉）。SPECIAL_USE 是 targetSdk 34 起对

@@ -146,6 +146,15 @@ public final class MimoKeepAlive {
                             + "已标记为需重新登录");
                 } else if (ctx != null && fresh != null && fresh.length() > 0) {
                     String old = BalanceFetcher.mimoSession(ctx);
+                    /* ★ 页面还在控制台 = 会话有效 → 顺手清掉"过期"标记。
+                       否则会出现这种别扭状态：会话其实已经恢复正常，
+                       界面却还按"过期"提示用户去重新登录。
+                       （实测小米是服务端滑动过期：cookie 一个字都没变，
+                       但有效期确实被延长了 —— 不能靠比对 cookie 判断续期成败。） */
+                    if (BalanceFetcher.mimoExpired(ctx)) {
+                        BalanceFetcher.clearMimoExpired(ctx);
+                        BalanceFetcher.diag(ctx, "MiMo 保活：会话有效，清除过期标记");
+                    }
                     /* 只在真的变了才写盘（避免每次都触发加密+落盘） */
                     if (!fresh.equals(old)) {
                         BalanceFetcher.setMimoSession(ctx, fresh);

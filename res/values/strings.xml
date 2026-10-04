@@ -66,7 +66,9 @@
     <string name="autostart_msg">余额预警依赖后台定时刷新（当前每 %1$d 分钟）。\n\n系统会限制后台应用，请把本应用加入「自启动」白名单，否则预警可能延迟或收不到。\n\n自启动仅用于刷新 API 余额，不做其他任何事。</string>
     <string name="autostart_go">去设置</string>
     <string name="autostart_later">暂不</string>
-    <string name="autostart_entry">设置后台运行权限（自启动）›</string>
+    <string name="autostart_entry">设置后台运行权限（自启动 / 电池优化）›</string>
+    <string name="battery_msg">另外建议把本应用加入「电池优化白名单」：否则系统深度休眠时会推迟后台刷新，余额预警可能不准时。</string>
+    <string name="battery_go">电池优化白名单</string>
 
     <!-- 自定义平台字段标签 -->
     <string name="custom_item_title">自定义平台</string>

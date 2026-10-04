@@ -43,6 +43,48 @@ public final class Autostart {
 
     private Autostart() { }
 
+    /**
+     * 是否已在**电池优化白名单**里。
+     *
+     * 这和"自启动"是两件事，缺一不可：
+     *   - 自启动白名单（国产 ROM 特有）：决定闹钟能不能唤醒本应用
+     *   - 电池优化白名单（Android 6+ 标准）：决定 Doze 深度睡眠时闹钟会不会被推迟
+     * 实测这台机器自启动已给、电池优化却没进 —— 闹钟虽然排上了，
+     * 但 Doze 下会被显著推迟（观察到的 window 就有 15 分钟）。
+     */
+    public static boolean isIgnoringBattery(Context c) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT < 23) return true;   // 6.0 以下无此机制
+            android.os.PowerManager pm = (android.os.PowerManager)
+                    c.getSystemService(Context.POWER_SERVICE);
+            return pm != null && pm.isIgnoringBatteryOptimizations(c.getPackageName());
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * 请求加入电池优化白名单。
+     * 系统会弹一个标准确认框，用户点一下即可，比让他在设置里翻菜单省事得多。
+     */
+    public static void requestIgnoreBattery(Context c) {
+        if (c == null) return;
+        try {
+            if (android.os.Build.VERSION.SDK_INT < 23) return;
+            Intent it = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            it.setData(Uri.fromParts("package", c.getPackageName(), null));
+            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            c.startActivity(it);
+        } catch (Throwable t) {
+            /* 部分 ROM 没有这个系统对话框 → 退到"电池优化"列表页让用户自己找 */
+            try {
+                Intent it = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                c.startActivity(it);
+            } catch (Throwable ig) { }
+        }
+    }
+
     private static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
     }
@@ -82,24 +124,39 @@ public final class Autostart {
     public static void ensure(final Activity act, boolean force) {
         if (act == null || act.isFinishing()) return;
         if (android.os.Build.VERSION.SDK_INT >= 17 && act.isDestroyed()) return;
-        if (!force && hasAsked(act)) return;
+
+        /* 电池优化没进白名单的话，即使用户点过"暂不"也值得再提一次 ——
+           这一项直接影响闹钟准不准，比自启动更"硬"。 */
+        final boolean needBattery = !isIgnoringBattery(act);
+        if (!force && hasAsked(act) && !needBattery) return;
 
         markAsked(act);
 
         try {
-            new AlertDialog.Builder(act)
+            String msg = act.getString(R.string.autostart_msg, RefreshScheduler.bgMinutes(act));
+            if (needBattery) msg = msg + "\n\n" + act.getString(R.string.battery_msg);
+
+            AlertDialog.Builder b = new AlertDialog.Builder(act)
                     .setTitle(R.string.autostart_title)
-                    .setMessage(act.getString(R.string.autostart_msg,
-                            RefreshScheduler.bgMinutes(act)))
+                    .setMessage(msg)
                     .setPositiveButton(R.string.autostart_go,
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface d, int w) {
-                                    openSettings(act);
+                                    openSettings(act);          // 自启动白名单
                                 }
                             })
                     .setNegativeButton(R.string.autostart_later, null)
-                    .setCancelable(true)
-                    .show();
+                    .setCancelable(true);
+            if (needBattery) {
+                /* 多给一个入口：两项都要做，分两个按钮各管一个最清楚 */
+                b.setNeutralButton(R.string.battery_go,
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface d, int w) {
+                                requestIgnoreBattery(act);
+                            }
+                        });
+            }
+            b.show();
         } catch (Throwable ignored) { }
     }
 }
