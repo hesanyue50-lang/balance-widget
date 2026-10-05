@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 余额 · 自适应图标（Android 8+）
+     foreground 会被系统缩放到"遮罩视口"（只显示中心 72×72，外围 18 是出血区），
+     所以图形一律收在 18~90 的安全区内，圆形/方形/圆角遮罩都不会被切到。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 余额上升折线（白色，圆头圆角） -->
+    <path
+        android:pathData="M30,72 L47,57 L62,65 L76,45"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 末端圆点的柔光外圈 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.28"
+        android:pathData="M66,45 A10,10 0 1,0 86,45 A10,10 0 1,0 66,45 Z" />
+    <!-- 末端实心点（"当前余额"） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,45 A6,6 0 1,0 82,45 A6,6 0 1,0 70,45 Z" />
+</vector>

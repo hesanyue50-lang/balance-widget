@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 24~25 用的完整图标（那些版本没有自适应图标机制，
+     所以自己画好圆角底板，形状不会被系统改写）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 底板：蓝色渐变圆角方 -->
+    <path
+        android:pathData="M24,0 L84,0 A24,24 0 0 1 108,24 L108,84 A24,24 0 0 1 84,108 L24,108 A24,24 0 0 1 0,84 L0,24 A24,24 0 0 1 24,0 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="108" android:endY="108">
+                <item android:offset="0" android:color="#5686E8" />
+                <item android:offset="1" android:color="#2248A8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 上升折线 -->
+    <path
+        android:pathData="M30,72 L47,57 L62,65 L76,45"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.28"
+        android:pathData="M66,45 A10,10 0 1,0 86,45 A10,10 0 1,0 66,45 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,45 A6,6 0 1,0 82,45 A6,6 0 1,0 70,45 Z" />
+</vector>

@@ -249,7 +249,7 @@ public class ClashVpnService extends VpnService {
                     : new Notification.Builder(this);
             nb.setContentTitle("网络加速运行中")
               .setContentText("已接管全部应用流量")
-              .setSmallIcon(R.drawable.ic_launcher)
+              .setSmallIcon(R.drawable.ic_notify)
               .setOngoing(true);
 
             Intent open = new Intent(this, MainActivity.class);
@@ -273,7 +273,7 @@ public class ClashVpnService extends VpnService {
                     : new Notification.Builder(this);
             nb.setContentTitle("网络加速运行中")
               .setContentText(text)
-              .setSmallIcon(R.drawable.ic_launcher)
+              .setSmallIcon(R.drawable.ic_notify)
               .setOngoing(true);
             nm.notify(NOTI_ID, nb.build());
         } catch (Throwable ignored) { }
