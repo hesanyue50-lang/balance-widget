@@ -60,7 +60,10 @@
             android:orientation="vertical" />
     </LinearLayout>
 
-    <!-- ========== 启用中的订阅（配置） ========== -->
+    <!-- ========== 运行状态 ========== -->
+    <!-- 原来这里是「订阅地址输入框 + 更新配置 + 启动加速」：
+         地址框只是展示（编辑在上面的订阅管理里做），"更新配置"又和每行的
+         「更新」重复 —— 两块占地方却没多少用。现在改成真正的状态面板。 -->
     <LinearLayout style="@style/SectionCard">
 
         <TextView
@@ -68,73 +71,38 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_weight="0"
-            android:text="当前订阅配置" />
-
-        <TextView
-            style="@style/FieldHint"
-            android:layout_marginTop="4dp"
-            android:text="这里显示启用中的订阅地址。换订阅请到上面的「VPN 订阅管理」里点选。" />
-
-        <EditText
-            android:id="@+id/e_sub_url"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/input_bg"
-            android:hint="https://...  订阅链接"
-            android:inputType="textUri"
-            android:paddingLeft="20dp"
-            android:paddingRight="20dp"
-            android:paddingTop="18dp"
-            android:paddingBottom="18dp"
-            android:singleLine="true"
-            android:textColor="@color/tx"
-            android:textColorHint="@color/hint_c"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/btn_import_sub"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@drawable/mini_btn_border"
-                android:gravity="center"
-                android:paddingTop="11dp"
-                android:paddingBottom="11dp"
-                android:text="更新配置"
-                android:textColor="@color/accent"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/btn_proxy_run"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/mini_btn_border"
-                android:gravity="center"
-                android:paddingTop="11dp"
-                android:paddingBottom="11dp"
-                android:text="启动加速"
-                android:textColor="@color/accent"
-                android:textSize="13sp" />
-        </LinearLayout>
+            android:text="运行状态" />
 
         <TextView
             android:id="@+id/proxy_state"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="6dp"
             android:lineSpacingExtra="3dp"
             android:text="状态：未启动"
             android:textColor="@color/tx3"
-            android:textSize="11.5sp" />
+            android:textSize="12sp" />
+
+        <!-- 运行中才有内容：当前节点 / 本次运行 / 代理流量（代码动态填充） -->
+        <LinearLayout
+            android:id="@+id/run_kv"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/btn_proxy_run"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/mini_btn_border"
+            android:gravity="center"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="启动加速"
+            android:textColor="@color/accent"
+            android:textSize="14sp" />
     </LinearLayout>
 
     <!-- ========== 代理模式 ==========

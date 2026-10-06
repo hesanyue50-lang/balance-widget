@@ -69,10 +69,6 @@ public class VpnBinder {
             }, 300);
         }
 
-        View imp = root.findViewById(R.id.btn_import_sub);
-        if (imp != null) imp.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { updateActiveSub(); }
-        });
         View run = root.findViewById(R.id.btn_proxy_run);
         if (run != null) run.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { toggleRun(); }
@@ -270,6 +266,212 @@ public class VpnBinder {
         }
     }
 
+    /**
+     * 订阅流量进度条 + 一行说明文字。
+     *
+     * 用两个 View 按 weight 分宽度来做"填充条"，不用 ProgressBar：
+     * 系统进度条样式在各 ROM 上差异太大，跟新拟物风格对不上，自绘更可控。
+     */
+    private View buildTrafficBar(SubStore.Sub sub) {
+        long total = sub.total;
+        long used = sub.usedBytes();
+        float frac = total > 0 ? Math.min(1f, (float) used / (float) total) : 0f;
+
+        LinearLayout wrap = new LinearLayout(act);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(0, dp(6), 0, 0);
+
+        LinearLayout bar = new LinearLayout(act);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        android.graphics.drawable.GradientDrawable bg =
+                new android.graphics.drawable.GradientDrawable();
+        bg.setCornerRadius(dp(3));
+        bg.setColor(act.getColor(R.color.neu_sunken));
+        bar.setBackground(bg);
+
+        android.graphics.drawable.GradientDrawable fg =
+                new android.graphics.drawable.GradientDrawable();
+        fg.setCornerRadius(dp(3));
+        /* 用满 → 红；接近用满 → 橙；正常 → 主题蓝 */
+        fg.setColor(act.getColor(frac >= 0.9f ? R.color.danger
+                : (frac >= 0.7f ? R.color.warn : R.color.accent)));
+        View fill = new View(act);
+        fill.setBackground(fg);
+
+        /* weight 不能为 0（会算不出宽度），所以最小给 0.001f */
+        bar.addView(fill, new LinearLayout.LayoutParams(
+                0, dp(6), Math.max(0.001f, frac)));
+        bar.addView(new View(act), new LinearLayout.LayoutParams(
+                0, dp(6), Math.max(0.001f, 1f - frac)));
+        wrap.addView(bar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(6)));
+
+        TextView t = new TextView(act);
+        StringBuilder sb = new StringBuilder();
+        sb.append("已用 ").append(fmtBytes(used)).append(" / ").append(fmtBytes(total));
+        sb.append("  ·  剩余 ").append(fmtBytes(sub.leftBytes()));
+        if (sub.expire > 0) sb.append("  ·  ").append(fmtExpire(sub.expire)).append(" 到期");
+        t.setText(sb.toString());
+        t.setTextSize(11f);
+        t.setTextColor(act.getColor(R.color.tx3));
+        t.setPadding(0, dp(4), 0, 0);
+        wrap.addView(t);
+        return wrap;
+    }
+
+    /**
+     * 运行状态信息区：当前节点 / 本次运行 / 代理流量。
+     *
+     * 这些都要问本地控制接口，放后台线程取，免得卡住界面滚动。
+     * 只在运行中显示 —— 没跑的时候状态行已经写清楚了，摆一堆 "--" 反而更乱。
+     */
+    private void renderRunInfo(final boolean running) {
+        final LinearLayout box = (LinearLayout) root.findViewById(R.id.run_kv);
+        if (box == null) return;
+        box.removeAllViews();
+        if (!running) {
+            stopRunLoop();
+            return;
+        }
+        refreshRunInfo(box);      // 先立刻刷一次，别让用户等一个周期
+        startRunLoop();
+    }
+
+    /**
+     * 拉一次运行信息并刷新到界面。
+     *
+     * 运行时长/流量这些只有**重新读**才会变 —— 早期版本只在状态变化时渲染一次，
+     * 结果数字定在那儿不动（用户反馈："不刷新都不动"）。所以配了个定时器。
+     */
+    private void refreshRunInfo(final LinearLayout box) {
+        new Thread(new Runnable() {
+            public void run() {
+                /* 节点名带缓存；时长与流量每次都要新值 */
+                long now = System.currentTimeMillis();
+                if (cachedNode == null || now - cachedNodeAt > NODE_CACHE_MS) {
+                    cachedNode = Clash.currentNodeName();
+                    cachedNodeAt = now;
+                }
+                final String node = cachedNode == null ? "" : cachedNode;
+                final long up = Clash.uptimeMs();
+                final long[] tr = Clash.trafficTotals();
+                act.runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (!Clash.isRunning()) return;
+                        box.removeAllViews();
+                        addKv(box, "当前节点", node.length() == 0 ? "--" : node);
+                        addKv(box, "本次运行", fmtDuration(up));
+                        if (tr != null) {
+                            addKv(box, "代理流量",
+                                    "↑ " + fmtBytes(tr[0]) + "    ↓ " + fmtBytes(tr[1]));
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+
+    /** 刷新周期：1 秒（用户要求实时感） */
+    private static final long RUN_TICK_MS = 1000L;
+
+    /**
+     * 当前节点名的缓存时长。
+     *
+     * 为什么不跟着每秒一起刷：解析节点名要拉整个 /proxies，而那个响应
+     * 包含订阅里的**全部节点**（几十 KB），每秒解析一次纯属浪费 ——
+     * 何况"当前用的是哪个节点"本来就不是每秒都在变。
+     * 运行时长和流量是轻量数据，那两个照常每秒更新。
+     */
+    private static final long NODE_CACHE_MS = 5000L;
+    private String cachedNode = null;
+    private long cachedNodeAt = 0L;
+
+    private final android.os.Handler runHandler = new android.os.Handler();
+    private boolean runLoopOn = false;
+
+    private final Runnable runTick = new Runnable() {
+        public void run() {
+            if (act.isFinishing()
+                    || (android.os.Build.VERSION.SDK_INT >= 17 && act.isDestroyed())) {
+                runLoopOn = false;
+                return;
+            }
+            LinearLayout box = (LinearLayout) root.findViewById(R.id.run_kv);
+            if (box == null || !Clash.isRunning()) {
+                runLoopOn = false;          // 内核停了，循环也就没必要转
+                return;
+            }
+            /* 页面滚出视野时**不发请求**，但循环继续排着 ——
+               切回来立刻就有新数据，也不用管宿主 Activity 的生命周期。 */
+            android.graphics.Rect vis = new android.graphics.Rect();
+            if (box.getGlobalVisibleRect(vis)) refreshRunInfo(box);
+            runHandler.postDelayed(this, RUN_TICK_MS);
+        }
+    };
+
+    private void startRunLoop() {
+        if (runLoopOn) return;
+        runLoopOn = true;
+        cachedNode = null;              // 重新进入页面时立刻取一次真值
+        cachedNodeAt = 0;
+        runHandler.removeCallbacks(runTick);
+        runHandler.postDelayed(runTick, RUN_TICK_MS);
+    }
+
+    private void stopRunLoop() {
+        runLoopOn = false;
+        runHandler.removeCallbacks(runTick);
+    }
+
+    /** 一行「标签 + 值」 */
+    private void addKv(LinearLayout box, String k, String v) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(7), 0, 0);
+
+        TextView kt = new TextView(act);
+        kt.setText(k);
+        kt.setTextSize(12.5f);
+        kt.setTextColor(act.getColor(R.color.tx2));
+        kt.setWidth(dp(72));
+        row.addView(kt);
+
+        TextView vt = new TextView(act);
+        vt.setText(v);
+        vt.setTextSize(12.5f);
+        vt.setTextColor(act.getColor(R.color.tx));
+        row.addView(vt);
+
+        box.addView(row);
+    }
+
+    /** 运行时长：秒 → 人话 */
+    private static String fmtDuration(long ms) {
+        long s = ms / 1000;
+        if (s < 60) return s + " 秒";
+        long m = s / 60;
+        if (m < 60) return m + " 分钟";
+        return (m / 60) + " 小时 " + (m % 60) + " 分";
+    }
+
+    /** 字节数转成人看的写法 */
+    private static String fmtBytes(long b) {
+        if (b < 0) return "--";
+        double g = b / 1073741824.0;
+        if (g >= 1024) return String.format(java.util.Locale.US, "%.2f TB", g / 1024);
+        if (g >= 1)    return String.format(java.util.Locale.US, "%.2f GB", g);
+        double m = b / 1048576.0;
+        if (m >= 1)    return String.format(java.util.Locale.US, "%.0f MB", m);
+        return String.format(java.util.Locale.US, "%.0f KB", b / 1024.0);
+    }
+
+    /** 到期时间（秒级时间戳） */
+    private static String fmtExpire(long sec) {
+        if (sec <= 0) return "";
+        return new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                .format(new java.util.Date(sec * 1000L));
+    }
+
     /** 订阅列表：点一行启用，长按重命名/删除，每行右侧「更新」 */
     private void renderSubs() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.sub_list);
@@ -322,6 +524,8 @@ public class VpnBinder {
             meta.setTextColor(act.getColor(R.color.tx3));
             meta.setPadding(0, dp(2), 0, 0);
             col.addView(meta);
+            /* 机场给了流量才知道已用多少，没给就不显示（别摆一个空条） */
+            if (sub.hasTraffic()) col.addView(buildTrafficBar(sub));
             row.addView(col);
 
             TextView upd = new TextView(act);
@@ -359,13 +563,9 @@ public class VpnBinder {
     private void renderState() {
         TextView st = (TextView) root.findViewById(R.id.proxy_state);
         TextView run = (TextView) root.findViewById(R.id.btn_proxy_run);
-        EditText e = (EditText) root.findViewById(R.id.e_sub_url);
         if (st == null) return;
 
         SubStore.Sub a = SubStore.active(act);
-        if (e != null && !e.hasFocus() && a != null && a.url.length() > 0) {
-            e.setText(a.url);       // 只展示启用中的订阅地址，编辑请到上面的管理区
-        }
 
         boolean avail = Clash.abiSupported() && Clash.available(act);
         boolean on = Clash.enabled(act);
@@ -375,7 +575,9 @@ public class VpnBinder {
         if (!avail) {
             sb.append("状态：不可用 —— 内置内核仅支持 arm64 设备");
         } else if (running) {
-            sb.append("状态：运行中  ·  已运行 ").append(Clash.uptimeMs() / 1000).append(" 秒");
+            /* 运行时长在下面的信息区里单独一行显示（而且每秒在走），
+               这里再写一遍纯属重复 —— 只留状态本身。 */
+            sb.append("状态：运行中");
             sb.append("\n代理端口 127.0.0.1:").append(Clash.PROXY_PORT);
             if (a != null) sb.append("\n启用订阅：").append(a.name);
             String m = Clash.mode(act);
@@ -391,6 +593,7 @@ public class VpnBinder {
         }
         st.setText(sb.toString());
         st.setTextColor(act.getColor(running ? R.color.tx2 : R.color.tx3));
+        renderRunInfo(running);
 
         if (run != null) {
             run.setText(running ? "停止加速" : "启动加速");
@@ -769,8 +972,12 @@ public class VpnBinder {
             public void run() {
                 String err = null, yaml = null;
                 int cnt = 0;
+                Clash.SubInfo info = null;
                 try {
-                    yaml = Clash.fetchSubscription(act, sub.url);
+                    /* 用带响应头的那条链路下载 —— 机场的流量信息只存在于
+                       subscription-userinfo 响应头里，普通抓取会把头丢掉。 */
+                    info = Clash.fetchSubscriptionInfo(act, sub.url);
+                    yaml = info.yaml;
                     if (!Clash.looksLikeClash(yaml)) {
                         err = "不是 Clash 格式（可能是 SS/V2Ray 链接集，或需在机场换用 Clash 订阅）";
                     } else {
@@ -781,6 +988,7 @@ public class VpnBinder {
                 }
                 final String fErr = err, fYaml = yaml;
                 final int fCnt = cnt;
+                final Clash.SubInfo fInfo = info;
                 act.runOnUiThread(new Runnable() {
                     public void run() {
                         if (fErr != null) {
@@ -791,6 +999,15 @@ public class VpnBinder {
                             s.yaml = fYaml;
                             s.nodeCount = fCnt;
                             s.updatedAt = System.currentTimeMillis();
+                            /* 流量信息取不到就保留上一次的旧值 ——
+                               清成 -1 会让进度条凭空消失，比数字旧一点更糟。 */
+                            if (fInfo != null && fInfo.hasTraffic()) {
+                                s.up = fInfo.up;
+                                s.down = fInfo.down;
+                                s.total = fInfo.total;
+                                s.expire = fInfo.expire;
+                                s.trafficAt = System.currentTimeMillis();
+                            }
                             SubStore.update(act, s);
                             toast("「" + s.name + "」已更新，共 " + fCnt + " 个节点");
                             // 启用中的那份更新了，要重启内核才用得上新节点
@@ -813,17 +1030,8 @@ public class VpnBinder {
     private void updateActiveSub() {
         SubStore.Sub a = SubStore.active(act);
         if (a == null) {
-            EditText e = (EditText) root.findViewById(R.id.e_sub_url);
-            String url = e == null ? "" : e.getText().toString().trim();
-            if (url.length() == 0) {
-                toast("还没有订阅，请点「VPN 订阅管理」右上角新增");
-                return;
-            }
-            // 兜底：用户直接在输入框里填了地址
-            String id = SubStore.add(act, null, url);
-            SubStore.setActive(act, id);
-            a = SubStore.byId(act, id);
-            renderSubs();
+            toast("还没有订阅，请点「VPN 订阅管理」右上角新增");
+            return;
         }
         downloadSub(a, false);
     }

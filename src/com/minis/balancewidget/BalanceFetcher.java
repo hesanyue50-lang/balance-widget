@@ -563,6 +563,17 @@ public class BalanceFetcher {
         return get(url, bearer, timeoutMs);
     }
 
+    /**
+     * 最近一次响应里的 `subscription-userinfo`（机场流量信息）。
+     *
+     * 为什么用 ThreadLocal 而不是给一串方法加"输出响应头"的参数：
+     * 这条链路（手写 socket + 多地址回退 + 代理回退）是实测能用的，
+     * 而换成 HttpURLConnection 在部分机场上会被直接掐断
+     * （实测 SSLHandshakeException: connection closed）。所以只在这里
+     * "顺手"把头带出来，主流程一行不动。
+     */
+    public static final ThreadLocal<String> SUB_USERINFO = new ThreadLocal<String>();
+
     /** 服务器已明确应答（非网络问题）时抛出，用于终止多地址重试。 */
     private static class StatusException extends Exception {
         StatusException(String m) { super(m); }
@@ -800,6 +811,7 @@ public class BalanceFetcher {
             while ((line = readLine(in2)) != null && line.length() > 0) {
                 String l = line.toLowerCase();
                 if (l.startsWith("transfer-encoding") && l.indexOf("chunked") >= 0) chunked = true;
+                else if (l.startsWith("subscription-userinfo")) captureUserInfo(line);
             }
             String body = chunked ? readChunked(in2) : readRest(in2);
             if (code < 200 || code >= 300) {
@@ -852,6 +864,7 @@ public class BalanceFetcher {
             while ((line = readLine(in)) != null && line.length() > 0) {
                 String l = line.toLowerCase();
                 if (l.startsWith("transfer-encoding") && l.indexOf("chunked") >= 0) chunked = true;
+                else if (l.startsWith("subscription-userinfo")) captureUserInfo(line);
             }
             String body = chunked ? readChunked(in) : readRest(in);
             if (code < 200 || code >= 300) {
@@ -905,6 +918,14 @@ public class BalanceFetcher {
             readLine(in);
         }
         return new String(out.toByteArray(), "UTF-8");
+    }
+
+    /** 记下响应头里的流量信息（只有订阅请求会带这个头，别的不受影响） */
+    private static void captureUserInfo(String headerLine) {
+        try {
+            int c = headerLine.indexOf(':');
+            if (c > 0) SUB_USERINFO.set(headerLine.substring(c + 1).trim());
+        } catch (Throwable ignored) { }
     }
 
     /** 解析不出任何地址时的兜底：交回系统默认行为。 */

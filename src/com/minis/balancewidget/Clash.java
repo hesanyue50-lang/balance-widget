@@ -393,7 +393,119 @@ public final class Clash {
             }
         }
         if (direct != null) return direct;
-        throw new Exception("订阅下载失败（直连与代理都没成功）");
+        /* 失败原因说具体点：用户看到"失败"最需要知道的是"接下来能做什么"。
+           常见情形是节点只通 HTTP、HTTPS 链路不通（订阅站基本都是 HTTPS），
+           换个节点往往就好了。 */
+        throw new Exception("订阅下载失败：直连与代理都没拿到配置。\n"
+                + "可在上方节点列表里换个节点后重试；订阅站多为 HTTPS，节点只通 HTTP 时会失败");
+    }
+
+    // ---------- 订阅流量信息 ----------
+
+    /**
+     * 订阅下载结果：配置正文 + 机场给出的流量信息。
+     *
+     * 流量来自响应头 `subscription-userinfo` —— 这是 Clash / Shadowrocket 的通用约定：
+     *     upload=123; download=456; total=789; expire=1735689600
+     * 单位是**字节**，expire 是秒级时间戳。机场不一定给，缺的字段保持 -1。
+     */
+    public static class SubInfo {
+        public String yaml = "";
+        public long up = -1, down = -1, total = -1, expire = -1;
+
+        public boolean hasTraffic() { return total > 0; }
+        public long used() { return Math.max(0, up) + Math.max(0, down); }
+    }
+
+    /**
+     * 当前生效的出口节点名。
+     *
+     * /proxies 里每个组都有 now 字段，但第一个组未必是真正在用的那个
+     * （机场常把「官网：xxx 请收藏」这类占位节点放在前面），
+     * 所以优先返回第一个**不是 DIRECT/REJECT** 的组的 now。
+     */
+    public static String currentNodeName() {
+        try {
+            java.util.List<Group> gs = listGroups();
+            String fallback = "";
+            for (int i = 0; i < gs.size(); i++) {
+                Group g = gs.get(i);
+                String now = g.now == null ? "" : g.now;
+                if (now.length() == 0) continue;
+                if (fallback.length() == 0) fallback = now;
+                if (!"DIRECT".equalsIgnoreCase(now) && !"REJECT".equalsIgnoreCase(now)) {
+                    return now;
+                }
+            }
+            return fallback;
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    /**
+     * 内核**本次运行**以来的累计流量，返回 [上行, 下行] 字节；取不到返回 null。
+     * 数据来自控制接口 /connections 的 uploadTotal / downloadTotal。
+     */
+    public static long[] trafficTotals() {
+        try {
+            String body = apiGet("/connections", 2500);
+            org.json.JSONObject o = new org.json.JSONObject(body);
+            long up = o.optLong("uploadTotal", -1);
+            long down = o.optLong("downloadTotal", -1);
+            if (up < 0 && down < 0) return null;
+            return new long[]{ Math.max(0, up), Math.max(0, down) };
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 解析 subscription-userinfo 头 */
+    static void parseUserInfo(String s, SubInfo o) {
+        if (s == null || s.length() == 0) return;
+        String[] parts = s.split(";");
+        for (int i = 0; i < parts.length; i++) {
+            String p = parts[i].trim();
+            int eq = p.indexOf('=');
+            if (eq <= 0) continue;
+            String k = p.substring(0, eq).trim().toLowerCase();
+            long n;
+            try { n = Long.parseLong(p.substring(eq + 1).trim()); }
+            catch (Exception e) { continue; }
+            if ("upload".equals(k)) o.up = n;
+            else if ("download".equals(k)) o.down = n;
+            else if ("total".equals(k)) o.total = n;
+            else if ("expire".equals(k)) o.expire = n;
+        }
+    }
+
+    /**
+     * 下载订阅，并尽量把流量信息一起带回来。
+     *
+     * 直接复用 fetchSubscription 那条**实测可用**的链路（直连 → 代理 → 多地址回退），
+     * 只额外读一下 `BalanceFetcher.SUB_USERINFO` —— 底层解析响应头时顺手存的。
+     *
+     * 曾经试着改用 HttpURLConnection 自己发请求（那样能直接读头），
+     * 结果在部分机场上被掐断（SSLHandshakeException: connection closed），
+     * 反而把本来能用的下载搞坏了。**能跑通的链路别轻易换。**
+     */
+    public static SubInfo fetchSubscriptionInfo(Context c, String url) {
+        SubInfo out = new SubInfo();
+        BalanceFetcher.SUB_USERINFO.remove();       // 清掉上一次的，免得读到旧值
+        try {
+            out.yaml = fetchSubscription(c, url);
+            parseUserInfo(BalanceFetcher.SUB_USERINFO.get(), out);
+            BalanceFetcher.diag(c, "订阅下载完成，流量头="
+                    + (out.hasTraffic()
+                       ? (out.used() + "/" + out.total + " 字节，到期 " + out.expire)
+                       : "机场未提供"));
+        } catch (Throwable t) {
+            out.yaml = "";
+            BalanceFetcher.diag(c, "订阅下载失败：" + t);
+        } finally {
+            BalanceFetcher.SUB_USERINFO.remove();
+        }
+        return out;
     }
 
     /** 判断拿到的是不是 Clash 配置（有的机场对 Clash 的 UA 才返回 YAML，否则给 base64 节点串） */

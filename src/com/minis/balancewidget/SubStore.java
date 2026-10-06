@@ -37,6 +37,19 @@ public final class SubStore {
         public String yaml = "";
         public long updatedAt = 0;
         public int nodeCount = 0;
+        /** 机场流量（字节；-1 = 机场没提供）。expire 是秒级时间戳 */
+        public long up = -1, down = -1, total = -1, expire = -1;
+        /** 流量信息的取得时间（下载订阅时一并更新） */
+        public long trafficAt = 0;
+
+        public boolean hasTraffic() { return total > 0; }
+
+        public long usedBytes() { return Math.max(0, up) + Math.max(0, down); }
+
+        public long leftBytes() {
+            if (total <= 0) return -1;
+            return Math.max(0, total - usedBytes());
+        }
 
         public boolean ready() {
             return yaml != null && yaml.length() > 0;
@@ -75,6 +88,11 @@ public final class SubStore {
                 sub.yaml = j.optString("yaml", "");
                 sub.updatedAt = j.optLong("updatedAt", 0);
                 sub.nodeCount = j.optInt("nodeCount", 0);
+                sub.up = j.optLong("up", -1);
+                sub.down = j.optLong("down", -1);
+                sub.total = j.optLong("total", -1);
+                sub.expire = j.optLong("expire", -1);
+                sub.trafficAt = j.optLong("trafficAt", 0);
                 if (sub.id.length() == 0) continue;
                 out.add(sub);
             }
@@ -168,6 +186,11 @@ public final class SubStore {
                 j.put("yaml", s.yaml == null ? "" : s.yaml);
                 j.put("updatedAt", s.updatedAt);
                 j.put("nodeCount", s.nodeCount);
+                j.put("up", s.up);
+                j.put("down", s.down);
+                j.put("total", s.total);
+                j.put("expire", s.expire);
+                j.put("trafficAt", s.trafficAt);
                 arr.put(j);
             }
             sp(c).edit().putString(K_SUBS, arr.toString()).apply();
