@@ -142,8 +142,17 @@ public final class ClashImport {
        用一格静态标记把请求交接过去，由加速页绑定/刷新时取走执行。 */
     private static String pendingDownloadId;
 
+    /** 待办被设置时的通知（宿主用来立刻刷新加速页） */
+    public static Runnable onPending;
+
     public static void requestDownload(String subId) {
         pendingDownloadId = subId;
+        /* 主动喊一声，别干等着下次 bind()。
+           原来只有 bind() 会取走待办，而导入时加速页早已 bind 过 ——
+           于是待办一直躺着，用户必须切走再切回才能看到新订阅。 */
+        if (onPending != null) {
+            try { onPending.run(); } catch (Throwable ignored) { }
+        }
     }
 
     /** 取走待办的下载请求（取一次就清空，避免重复下载） */

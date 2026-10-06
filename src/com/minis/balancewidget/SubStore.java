@@ -41,6 +41,11 @@ public final class SubStore {
         public long up = -1, down = -1, total = -1, expire = -1;
         /** 流量信息的取得时间（下载订阅时一并更新） */
         public long trafficAt = 0;
+        /** 自动更新：打开应用时若距上次更新超过 AUTO_UPDATE_GAP，就自动刷一次 */
+        public boolean autoUpdate = false;
+
+        /** 自动更新的最小间隔：6 小时。订阅里换节点又不是天天换，更勤没意义还费流量 */
+        public static final long AUTO_UPDATE_GAP = 6L * 60 * 60 * 1000;
 
         public boolean hasTraffic() { return total > 0; }
 
@@ -93,6 +98,7 @@ public final class SubStore {
                 sub.total = j.optLong("total", -1);
                 sub.expire = j.optLong("expire", -1);
                 sub.trafficAt = j.optLong("trafficAt", 0);
+                sub.autoUpdate = j.optBoolean("autoUpdate", false);
                 if (sub.id.length() == 0) continue;
                 out.add(sub);
             }
@@ -191,6 +197,7 @@ public final class SubStore {
                 j.put("total", s.total);
                 j.put("expire", s.expire);
                 j.put("trafficAt", s.trafficAt);
+                j.put("autoUpdate", s.autoUpdate);
                 arr.put(j);
             }
             sp(c).edit().putString(K_SUBS, arr.toString()).apply();

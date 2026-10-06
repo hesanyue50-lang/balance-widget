@@ -465,6 +465,97 @@ public final class Ledger extends SQLiteOpenHelper {
         return n;
     }
 
+    // ---------- 备份导出 / 导入 ----------
+
+    /** 全部快照，形如 [[key_id, ts, balance, topped_up], ...]（备份用） */
+    public org.json.JSONArray exportSnapshots() {
+        org.json.JSONArray a = new org.json.JSONArray();
+        try {
+            Cursor cur = getReadableDatabase().rawQuery(
+                    "SELECT key_id, ts, balance, topped_up FROM " + T_SNAP
+                    + " ORDER BY ts ASC", null);
+            while (cur.moveToNext()) {
+                org.json.JSONArray r = new org.json.JSONArray();
+                r.put(cur.getString(0));
+                r.put(cur.getLong(1));
+                r.put(cur.getDouble(2));
+                r.put(cur.isNull(3) ? -1 : cur.getDouble(3));
+                a.put(r);
+            }
+            cur.close();
+        } catch (Throwable ignored) { }
+        return a;
+    }
+
+    /** 全部充值记录（备份用） */
+    public org.json.JSONArray exportRecharges() {
+        org.json.JSONArray a = new org.json.JSONArray();
+        try {
+            Cursor cur = getReadableDatabase().rawQuery(
+                    "SELECT key_id, ts, delta, matched, amount FROM " + T_RECH
+                    + " ORDER BY ts ASC", null);
+            while (cur.moveToNext()) {
+                org.json.JSONArray r = new org.json.JSONArray();
+                r.put(cur.getString(0));
+                r.put(cur.getLong(1));
+                r.put(cur.getDouble(2));
+                r.put(cur.isNull(3) ? -1 : cur.getDouble(3));
+                r.put(cur.getDouble(4));
+                a.put(r);
+            }
+            cur.close();
+        } catch (Throwable ignored) { }
+        return a;
+    }
+
+    /**
+     * 用备份内容**整体替换**账本（先清空再写）。
+     * 放在一个事务里，中途失败不会留下半截数据。
+     */
+    public int importAll(org.json.JSONArray snaps, org.json.JSONArray rechs) {
+        int n = 0;
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                db.delete(T_SNAP, null, null);
+                db.delete(T_RECH, null, null);
+                if (snaps != null) {
+                    for (int i = 0; i < snaps.length(); i++) {
+                        org.json.JSONArray r = snaps.optJSONArray(i);
+                        if (r == null || r.length() < 3) continue;
+                        ContentValues cv = new ContentValues();
+                        cv.put("key_id", r.optString(0));
+                        cv.put("ts", r.optLong(1));
+                        cv.put("balance", r.optDouble(2));
+                        double t = r.optDouble(3, -1);
+                        if (t >= 0) cv.put("topped_up", t);
+                        db.insert(T_SNAP, null, cv);
+                        n++;
+                    }
+                }
+                if (rechs != null) {
+                    for (int i = 0; i < rechs.length(); i++) {
+                        org.json.JSONArray r = rechs.optJSONArray(i);
+                        if (r == null || r.length() < 5) continue;
+                        ContentValues cv = new ContentValues();
+                        cv.put("key_id", r.optString(0));
+                        cv.put("ts", r.optLong(1));
+                        cv.put("delta", r.optDouble(2));
+                        double m = r.optDouble(3, -1);
+                        if (m >= 0) cv.put("matched", m);
+                        cv.put("amount", r.optDouble(4));
+                        db.insert(T_RECH, null, cv);
+                    }
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        } catch (Throwable ignored) { }
+        return n;
+    }
+
     // ---------- 清理 ----------
 
     /** 只留最近 N 天（设置里可调） */

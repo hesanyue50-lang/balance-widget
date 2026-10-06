@@ -132,6 +132,8 @@ public class MainActivity extends Activity {
 
         /* 机场网页点「导入 Clash」跳进来：确认后自动添加订阅并下载 */
         handleImportIntent(getIntent());
+        /* 冷启动就是"点开备份文件"进来的情况 */
+        BackupUi.handleViewIntent(this, getIntent());
 
         // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
         findViewById(R.id.settings_container).postDelayed(new Runnable() {
@@ -564,6 +566,18 @@ public class MainActivity extends Activity {
         } else if (page == 2) {
             if (vpnBinder == null) vpnBinder = new VpnBinder(this, findViewById(R.id.vpn_page));
             vpnBinder.bind();
+            /* 导入订阅时立刻刷新加速页（否则要切走再切回才看得到新订阅） */
+            ClashImport.onPending = new Runnable() {
+                public void run() {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            if (vpnBinder != null) {
+                                try { vpnBinder.refreshAfterImport(); } catch (Throwable ignored) { }
+                            }
+                        }
+                    });
+                }
+            };
             dropEditFocus();
         } else if (page == 3) {
             buildSettingsPanel();
@@ -1227,6 +1241,8 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         /* singleTask 模式下应用已在运行时会走到这里，而不是重新 onCreate */
         setIntent(intent);
+        /* 用户在文件管理器里点开 .apibak 备份 → 直接恢复 */
+        if (BackupUi.handleViewIntent(this, intent)) return;
         handleImportIntent(intent);
     }
 
@@ -1249,6 +1265,8 @@ public class MainActivity extends Activity {
             try { settingsBinder.refreshKeys(); } catch (Throwable ignored) { }
         }
         refresh();
+        /* 开了「自动更新」的订阅，趁打开应用时顺带刷一下（内部有 6 小时闸门） */
+        try { Clash.autoUpdateSubs(this); } catch (Throwable ignored) { }
         // 前台：按设置的间隔自动刷新（页面可见时才跑，省电省流量）
         autoHandler.removeCallbacks(autoTask);
         autoHandler.postDelayed(autoTask, RefreshScheduler.fgMillis(this));
@@ -1262,6 +1280,21 @@ public class MainActivity extends Activity {
         autoHandler.removeCallbacks(autoTask);
         // 切到后台：改由 AlarmManager 按后台间隔唤醒刷新（用于余额预警）
         RefreshScheduler.schedule(this);
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        if (BackupUi.onResult(this, req, res, data)) {
+            /* 恢复完成后刷新界面与小组件，让用户立刻看到数据回来 */
+            if (req == BackupUi.REQ_RESTORE) {
+                try {
+                    if (vpnBinder != null) vpnBinder.refreshAfterImport();
+                } catch (Throwable ignored) { }
+                try { refresh(true); } catch (Throwable ignored) { }
+            }
+            return;
+        }
+        super.onActivityResult(req, res, data);
     }
 
     @Override

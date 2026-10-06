@@ -236,6 +236,16 @@ public class SettingsBinder {
         // ---- 安全与密码（内联，与密钥区同级）----
         buildSecuritySection();
 
+        // ---- 备份 / 恢复 ----
+        View bk = root.findViewById(R.id.btn_backup);
+        if (bk != null) bk.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { BackupUi.backup(act); }
+        });
+        View rs = root.findViewById(R.id.btn_restore);
+        if (rs != null) rs.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { BackupUi.restore(act); }
+        });
+
         // ---- 桌面固定引导 ----
         View pin = root.findViewById(R.id.btn_pin);
         if (pin != null) pin.setOnClickListener(new View.OnClickListener() {
@@ -820,7 +830,7 @@ public class SettingsBinder {
                     LockDialog.choose(act, "密码保护", new String[] { "修改密码", "清除密码" },
                             new LockDialog.OnPick() {
                                 public void pick(int which) {
-                                    if (which == 0) LockDialog.setup(act, null);
+                                    if (which == 0) changePassword(btn);
                                     else clearWithQuestion(btn);
                                 }
                             });
@@ -833,6 +843,26 @@ public class SettingsBinder {
         });
         box.addView(btn);
         parent.addView(box);
+    }
+
+    /**
+     * 修改密码：**必须先验证当前密码**。
+     *
+     * 之前这里直接进"设置新密码"，等于给了个后门 ——
+     * 拿到手机的人不用知道原密码，点两下就能改掉，然后正大光明看密钥，
+     * 「密码保护」形同虚设。（"清除密码"那条路径一直是有验证的，只有改密码漏了。）
+     */
+    private void changePassword(final TextView btn) {
+        LockDialog.ask(act, "输入当前密码", new LockDialog.OnPass() {
+            public void ok() {
+                LockDialog.setup(act, new LockDialog.OnPass() {
+                    public void ok() {
+                        btn.setText("密码保护已开启（点击修改或清除）");
+                        Toast.makeText(act, "密码已更新", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
     }
 
     /** 清除密码保护：必须先回答密保问题（未设问题则退化为验证原密码） */

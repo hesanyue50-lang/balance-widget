@@ -326,6 +326,36 @@
                 android:textColor="@color/tx"
                 android:textSize="13sp" />
 
+            <TextView
+                android:id="@+id/btn_backup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:text="💾 备份到文件"
+                android:textColor="@color/tx"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/btn_restore"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:text="♻️ 从备份文件恢复"
+                android:textColor="@color/tx"
+                android:textSize="13sp" />
+
+            <TextView style="@style/FieldHint"
+                android:layout_marginTop="8dp"
+                android:text="备份包含 API 密钥、VPN 订阅、设置与全部历史曲线，存成一个文件放到你选的位置。以后直接点开这个文件就能恢复（密钥是加密保存的，换设备可能解不开）。" />
+
             <TextView style="@style/FieldHint"
                 android:layout_marginTop="16dp"
                 android:text="@string/cfg_note" />

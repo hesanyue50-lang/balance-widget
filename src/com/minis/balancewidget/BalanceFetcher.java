@@ -89,6 +89,20 @@ public class BalanceFetcher {
         return mimoSession(c).length() == 0 || mimoExpired(c);
     }
 
+    /**
+     * 从备份恢复数据后调用：清掉内存里的缓存。
+     * 不清的话，恢复完还继续用上一次运行的旧密钥/旧会话，看着像"没恢复成功"。
+     */
+    public static void onDataRestored(Context c) {
+        try {
+            sessionCached = false;
+            sessionCache = "";
+            SUB_USERINFO.remove();
+            SUB_UA.remove();
+            diag(c, "备份恢复：内存缓存已清理");
+        } catch (Throwable ignored) { }
+    }
+
     /** 清除 MiMo 过期标记（保活确认会话有效、或取数成功时调用） */
     public static void clearMimoExpired(Context c) {
         if (c == null) return;
@@ -574,6 +588,18 @@ public class BalanceFetcher {
      */
     public static final ThreadLocal<String> SUB_USERINFO = new ThreadLocal<String>();
 
+    /**
+     * 订阅请求专用的 User-Agent。
+     *
+     * **机场普遍按 UA 决定返回什么格式**：带 clash 字样 → 返回 Clash YAML；
+     * 其它 UA → 返回 base64 编码的节点串（v2ray/ss 通用订阅）。
+     * 用默认 UA 去要 Clash 配置，拿回来一堆 base64，就被判成"不是 Clash 订阅"。
+     *
+     * 只对订阅请求生效（用 ThreadLocal 传），不动余额查询那条链路 ——
+     * 各家 API 的 WAF 对 UA 的偏好不一样，没必要一起去改。
+     */
+    public static final ThreadLocal<String> SUB_UA = new ThreadLocal<String>();
+
     /** 服务器已明确应答（非网络问题）时抛出，用于终止多地址重试。 */
     private static class StatusException extends Exception {
         StatusException(String m) { super(m); }
@@ -645,6 +671,24 @@ public class BalanceFetcher {
         else         { ordered.addAll(v6); ordered.addAll(v4); }
         Log.i(TAG, "GET " + host + " → " + v4.size() + " IPv4 / " + v6.size() + " IPv6，本机有IPv4出口="
                 + localV4 + "，试序 " + ordered);
+        /* 剔除内核的 fake-ip。
+           Clash 接管 DNS 后，分流里走代理的域名会被解析成 198.18.0.0/15 的假地址 ——
+           那个地址只在内核内部有意义，拿它去"直连"必然失败，而且会白等一整个超时
+           （实测日志里就是 198.18.0.34=SSLHandshakeException）。 */
+        java.util.Iterator<InetAddress> fakeIt = ordered.iterator();
+        int fakes = 0;
+        while (fakeIt.hasNext()) {
+            if (isFakeIp(fakeIt.next())) { fakeIt.remove(); fakes++; }
+        }
+        if (fakes > 0) {
+            diag(null, "剔除 " + fakes + " 个内核 fake-ip（该域名分流走代理）" + host);
+        }
+        if (ordered.isEmpty() && !forceDirect && useProxyNow() && Clash.proxyAlive()) {
+            /* 解析结果全是假地址 → 直连这条路本来就不通，直接走代理省时间 */
+            try {
+                return getThroughProxy(host, port, https, path, bearer, cookie, timeoutMs);
+            } catch (Throwable ig) { }
+        }
         if (ordered.isEmpty()) return getViaHost(url, bearer, cookie, timeoutMs);
 
         StringBuilder tried = new StringBuilder();
@@ -692,6 +736,16 @@ public class BalanceFetcher {
             }
         }
         throw new Exception("所有地址均失败 [" + (tried.length() == 0 ? "无" : tried.toString().trim()) + "]");
+    }
+
+    /** 内核 fake-ip 段：Clash 默认用 198.18.0.0/15，这类地址只有内核自己认识 */
+    private static boolean isFakeIp(InetAddress a) {
+        try {
+            String ip = a.getHostAddress();
+            return ip != null && (ip.startsWith("198.18.") || ip.startsWith("198.19."));
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** DNS 解析（失败不抛，交给调用方决定要不要重试） */
@@ -790,7 +844,8 @@ public class BalanceFetcher {
             sb.append("Host: ").append(host).append("\r\n");
             sb.append("Accept: application/json\r\n");
             sb.append("Accept-Encoding: identity\r\n");
-            sb.append("User-Agent: MinisWidget/1.2\r\n");
+            String _ua = SUB_UA.get();
+            sb.append("User-Agent: ").append(_ua == null ? "MinisWidget/1.2" : _ua).append("\r\n");
             sb.append("Connection: close\r\n");
             if (bearer != null) sb.append("Authorization: Bearer ").append(bearer).append("\r\n");
             if (cookie != null && cookie.length() > 0) sb.append("Cookie: ").append(cookie).append("\r\n");
@@ -843,7 +898,8 @@ public class BalanceFetcher {
             sb.append("Host: ").append(host).append("\r\n");
             sb.append("Accept: application/json\r\n");
             sb.append("Accept-Encoding: identity\r\n");
-            sb.append("User-Agent: MinisWidget/1.2\r\n");
+            String _ua = SUB_UA.get();
+            sb.append("User-Agent: ").append(_ua == null ? "MinisWidget/1.2" : _ua).append("\r\n");
             sb.append("Connection: close\r\n");
             if (bearer != null) sb.append("Authorization: Bearer ").append(bearer).append("\r\n");
             if (cookie != null && cookie.length() > 0) sb.append("Cookie: ").append(cookie).append("\r\n");
@@ -935,7 +991,8 @@ public class BalanceFetcher {
         c.setReadTimeout(timeoutMs);
         c.setRequestMethod("GET");
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "MinisWidget/1.2");
+        String _ua2 = SUB_UA.get();
+        c.setRequestProperty("User-Agent", _ua2 == null ? "MinisWidget/1.2" : _ua2);
         if (bearer != null) c.setRequestProperty("Authorization", "Bearer " + bearer);
         if (cookie != null && cookie.length() > 0) c.setRequestProperty("Cookie", cookie);
         try {
@@ -1156,10 +1213,15 @@ public class BalanceFetcher {
         for (int i = 0; i < aks.size(); i++) {
             KeyStore.ApiKey ak = aks.get(i);
             String plat = ak.platform == null ? "" : ak.platform;
-            /* 百炼 / 魔搭是展示型：没 Key 也该出现在列表里，方便点官网 */
-            boolean displayOnly = "dashscope".equals(plat) || "modelscope".equals(plat)
-                    || "mimo".equals(plat);
-            if (!ak.isConfigured() && !displayOnly) continue;
+            /* 没配置的平台**不出现在余额列表里**。
+               原来把百炼/魔搭/MiMo 当"展示型"始终显示，结果它们在卡片区摆着
+               "见控制台""免费""需登录"—— 用户会以为这些平台已经有数据了。
+               要看有哪些平台、去哪里配置，走「设置 → API 密钥与平台」。
+
+               MiMo 是例外：它的凭据是**登录态**而不是 API Key，
+               所以"登录过"就算已配置。 */
+            boolean mimoReady = "mimo".equals(plat) && mimoSession(ctx).length() > 0;
+            if (!ak.isConfigured() && !mimoReady) continue;
             if (ak.hideCard) { diag(ctx, "隐藏卡片·跳过 " + ak.id); continue; }   // 用户在「隐藏 API」里关掉卡片显示的，不出卡片/小组件
 
             Item it = new Item();
@@ -1206,38 +1268,11 @@ public class BalanceFetcher {
             }
         }
 
-        /* 展示型平台（百炼 / 魔搭）即使没填 Key 也给一张卡，方便点官网 */
-        for (int i = 0; i < PRESETS.length; i++) {
-            Preset p = PRESETS[i];
-            if (!"dashscope".equals(p.id) && !"modelscope".equals(p.id)
-                    && !"mimo".equals(p.id)) continue;
-            boolean already = false;
-            for (int j = 0; j < items.size(); j++) {
-                if (p.id.equals(items.get(j).platform)) { already = true; break; }
-            }
-            if (already) continue;
-            // 用户把该展示型平台的所有 Key 都设为「在卡片中隐藏」时，不再补卡
-            boolean userHidden = false;
-            for (int k = 0; k < aks.size(); k++) {
-                KeyStore.ApiKey kk = aks.get(k);
-                if (kk.hideCard && p.id.equals(kk.platform)) { userHidden = true; break; }
-            }
-            if (userHidden) { diag(ctx, "隐藏卡片·跳过补位 " + p.id); continue; }
-            Item it = new Item();
-            it.id = p.id;
-            it.platform = p.id;
-            it.alertKey = p.id;
-            it.label = p.name;
-            it.tag = p.unit;
-            it.kind = p.kind;
-            it.foreign = p.foreign;
-            it.viaProxy = p.viaProxy;
-            items.add(it);
-            custs.add(null);
-            keys.add("");
-            apiKeys.add(null);  // 展示型平台没有 ApiKey
-            res.configured++;
-        }
+        /* 这里原来有一段"展示型平台补位"：百炼 / 魔搭 / MiMo 即使没填 Key
+           也硬塞一张卡，理由是"方便点官网"。
+           但那会让未配置的平台出现在余额列表里，看着像已经有数据了
+           （用户反馈："没填 Key 就不该显示"）。现在一律不补 ——
+           要看平台清单、去配置，走「设置 → API 密钥与平台」。 */
 
         List<Custom> cs = loadCustom(ctx);
         for (int i = 0; i < cs.size(); i++) {

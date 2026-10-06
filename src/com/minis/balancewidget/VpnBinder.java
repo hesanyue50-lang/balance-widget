@@ -54,6 +54,27 @@ public class VpnBinder {
         this.root = r;
     }
 
+    /**
+     * 导入订阅后由宿主调用：立刻重画列表并把待办的下载取走执行。
+     * 不这么做的话，用户看到的是"导入完了但列表里没有"，像失败了一样。
+     */
+    public void refreshAfterImport() {
+        renderSubs();
+        renderState();
+        takePendingAndDownload();
+    }
+
+    /** 取走待办的下载请求并执行（没有就什么都不做） */
+    private void takePendingAndDownload() {
+        String pending = ClashImport.takePendingDownload();
+        if (pending == null) return;
+        final SubStore.Sub s0 = SubStore.byId(act, pending);
+        if (s0 == null) return;
+        root.postDelayed(new Runnable() {
+            public void run() { downloadSub(s0, false); }
+        }, 300);
+    }
+
     public void bind() {
         if (built) { render(); return; }
         built = true;
@@ -878,6 +899,12 @@ public class VpnBinder {
                         }
                         String id = SubStore.add(act, eName.getText().toString(), url);
                         SubStore.Sub s = SubStore.byId(act, id);
+                        /* 先把新订阅画出来再下载。
+                           下载要好几秒，不先刷一遍的话列表看起来毫无反应，
+                           用户会以为"没添加上"，得切走再切回才看得见
+                           （手动新增这条路径之前就是这样漏刷的）。 */
+                        renderSubs();
+                        renderState();
                         if (s != null) downloadSub(s, true);
                     }
                 })
@@ -889,14 +916,83 @@ public class VpnBinder {
     private void subMenu(final SubStore.Sub sub) {
         new AlertDialog.Builder(act)
                 .setTitle(sub.name)
-                .setItems(new String[] { "重命名", "更新配置", "删除" },
+                /* 「重命名」已并入「编辑」，不再单列 —— 同一个动作两个入口只会让人犹豫 */
+                .setItems(new String[] { "编辑", "更新配置", "删除" },
                         new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int which) {
-                                if (which == 0) renameDialog(sub);
+                                if (which == 0) editDialog(sub);
                                 else if (which == 1) downloadSub(sub, false);
                                 else confirmDelete(sub);
                             }
                         })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /**
+     * 编辑订阅：改名字 / 看完整链接 / 开关自动更新。
+     *
+     * 链接做成可选择文本 —— 用户想复制到别处用（比如贴到其它客户端）时，
+     * 不用再回机场官网翻一遍。
+     */
+    private void editDialog(final SubStore.Sub sub) {
+        LinearLayout p = new LinearLayout(act);
+        p.setOrientation(LinearLayout.VERTICAL);
+        p.setPadding(dp(20), dp(12), dp(20), 0);
+
+        TextView l1 = new TextView(act);
+        l1.setText("名称");
+        l1.setTextSize(12);
+        l1.setTextColor(act.getColor(R.color.tx3));
+        p.addView(l1);
+
+        final EditText eName = new EditText(act);
+        eName.setText(sub.name);
+        eName.setTextSize(14);
+        p.addView(eName);
+
+        TextView l2 = new TextView(act);
+        l2.setText("订阅链接（长按可复制）");
+        l2.setTextSize(12);
+        l2.setTextColor(act.getColor(R.color.tx3));
+        l2.setPadding(0, dp(14), 0, 0);
+        p.addView(l2);
+
+        TextView url = new TextView(act);
+        url.setText(sub.url == null || sub.url.length() == 0 ? "（没有填写链接）" : sub.url);
+        url.setTextSize(12);
+        url.setTextColor(act.getColor(R.color.tx2));
+        url.setTextIsSelectable(true);          // 可选中 / 长按复制
+        url.setPadding(0, dp(4), 0, 0);
+        p.addView(url);
+
+        final android.widget.CheckBox cb = new android.widget.CheckBox(act);
+        cb.setText("自动更新订阅");
+        cb.setTextSize(13);
+        cb.setChecked(sub.autoUpdate);
+        cb.setPadding(0, dp(14), 0, 0);
+        p.addView(cb);
+
+        TextView note = new TextView(act);
+        note.setText("开启后，打开应用时会自动检查并更新（最快每 6 小时一次）");
+        note.setTextSize(11);
+        note.setTextColor(act.getColor(R.color.tx3));
+        p.addView(note);
+
+        new AlertDialog.Builder(act)
+                .setTitle("编辑订阅")
+                .setView(p)
+                .setPositiveButton("保存", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        String nm = eName.getText().toString().trim();
+                        if (nm.length() > 0) sub.name = nm;
+                        sub.autoUpdate = cb.isChecked();
+                        SubStore.update(act, sub);
+                        renderSubs();
+                        renderState();
+                        toast(sub.autoUpdate ? "已开启自动更新" : "已关闭自动更新");
+                    }
+                })
                 .setNegativeButton("取消", null)
                 .show();
     }

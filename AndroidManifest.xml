@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="377"
-    android:versionName="26.10.377">
+    android:versionCode="387"
+    android:versionName="26.10.387">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -65,7 +65,18 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="clash" />
             </intent-filter>
-        </activity>
+        
+            <!-- 点击 .apibak 备份文件直接打开本应用并恢复。
+                 mimeType 用自定义类型（备份时也按这个类型保存），
+                 file scheme 的 pathPattern 兜底老式文件管理器。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" android:mimeType="application/x-apibak" />
+                <data android:scheme="file" android:mimeType="application/x-apibak" />
+                <data android:scheme="file" android:pathPattern=".*\\.apibak" />
+            </intent-filter>
+</activity>
 
         <activity
             android:name=".SettingsActivity"

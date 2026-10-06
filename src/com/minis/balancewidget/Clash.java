@@ -375,29 +375,99 @@ public final class Clash {
      * 订阅服务器通常在国内可直连，但有些机场只给境外入口 ——
      * 所以先直连试一次，失败再经本地代理（内核已经在跑的话）来一次。
      */
+    /**
+     * 订阅请求依次尝试的 UA。
+     *
+     * 机场普遍按 UA 决定返回什么：带 clash 字样的给 Clash YAML，其它给 base64 节点串。
+     * 但**具体认哪一个**各机场不一样 —— 有的只认 Clash for Windows，
+     * 有的认 mihomo。所以拿到非 Clash 内容时换个 UA 再试，比自己猜一个更靠谱。
+     */
+    private static final String[] SUB_UAS = {
+        "clash-verge/v1.7.7",
+        "ClashforWindows/0.20.39",
+        "mihomo/1.19.32",
+    };
+    /** 兼容旧引用 */
+    private static final String SUB_UA_VALUE = SUB_UAS[0];
+
     public static String fetchSubscription(Context c, String url) throws Exception {
         String direct = null;
-        try {
-            direct = BalanceFetcher.httpGet(url, null, 20000);
-            if (looksLikeClash(direct)) return direct;
-        } catch (Throwable t) {
-            BalanceFetcher.diag(c, "订阅直连失败：" + t);
-        }
-        if (apiAlive()) {
+        String viaProxy = null;
+        /* 依次换 UA 试：拿到内容但不像 Clash 配置时，很可能是这个机场认别的客户端 */
+        for (int attempt = 0; attempt < SUB_UAS.length; attempt++) {
+            String ua = SUB_UAS[attempt];
+            direct = null;
+            viaProxy = null;
+            BalanceFetcher.SUB_UA.set(ua);            // 只影响本次（本线程）的请求
             try {
-                String via = BalanceFetcher.getViaProxy(url, null, null, 25000);
-                if (looksLikeClash(via)) return via;
-                if (direct == null) return via;
-            } catch (Throwable t) {
-                BalanceFetcher.diag(c, "订阅经代理失败：" + t);
+                try {
+                    direct = BalanceFetcher.httpGet(url, null, 20000);
+                    if (looksLikeClash(direct)) return direct;
+                } catch (Throwable t) {
+                    BalanceFetcher.diag(c, "订阅直连失败：" + t);
+                }
+                if (apiAlive()) {
+                    try {
+                        viaProxy = BalanceFetcher.getViaProxy(url, null, null, 25000);
+                        if (looksLikeClash(viaProxy)) return viaProxy;
+                    } catch (Throwable t) {
+                        BalanceFetcher.diag(c, "订阅经代理失败：" + t);
+                    }
+                }
+            } finally {
+                BalanceFetcher.SUB_UA.remove();
             }
+            String got = direct != null ? direct : viaProxy;
+            diagBody(c, "UA=" + ua, got);
+            /* 一个字都没拿到 = 网络不通，换 UA 没用，别再耗时间 */
+            if (got == null || got.length() == 0) break;
         }
-        if (direct != null) return direct;
-        /* 失败原因说具体点：用户看到"失败"最需要知道的是"接下来能做什么"。
-           常见情形是节点只通 HTTP、HTTPS 链路不通（订阅站基本都是 HTTPS），
-           换个节点往往就好了。 */
-        throw new Exception("订阅下载失败：直连与代理都没拿到配置。\n"
+
+        /* 内容拿到了但不像 Clash 配置 —— 大概率是机场按 UA 给了 base64 节点串。
+           把开头打出来，用户反馈时一眼能看出是哪一种。 */
+        String got = direct != null ? direct : viaProxy;
+        if (got != null && got.length() > 0) {
+            BalanceFetcher.diag(c, "订阅内容不是 Clash 格式，开头：" + clip(got, 120));
+            if (looksLikeBase64List(got)) {
+                throw new Exception("机场返回的是 base64 节点串，不是 Clash 配置。\n"
+                        + "请到机场后台选择「Clash」格式的订阅链接（通常叫 Clash 订阅 / Clash 专用）");
+            }
+            throw new Exception("拿到的内容不是 Clash 配置（开头：" + clip(got, 60) + "）");
+        }
+        throw new Exception("订阅下载失败：直连与代理都没拿到内容。\n"
                 + "可在上方节点列表里换个节点后重试；订阅站多为 HTTPS，节点只通 HTTP 时会失败");
+    }
+
+    /** 打一下订阅内容的开头（截断），用于判断机场到底返回了什么 */
+    private static void diagBody(Context c, String how, String body) {
+        if (body == null) return;
+        BalanceFetcher.diag(c, "订阅" + how + "拿到 " + body.length() + " 字符，开头："
+                + clip(body, 80));
+    }
+
+    /** 粗略判断是不是 base64 节点串（纯 base64 字符、很长、base64 解码后含 vmess:// 之类） */
+    private static boolean looksLikeBase64List(String s) {
+        try {
+            String t = s.trim();
+            if (t.length() < 40) return false;
+            for (int i = 0; i < t.length(); i++) {
+                char ch = t.charAt(i);
+                boolean ok = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+                        || (ch >= '0' && ch <= '9') || ch == '+' || ch == '/'
+                        || ch == '=' || ch == '-' || ch == '_'
+                        || ch == '\n' || ch == '\r';
+                if (!ok) return false;
+            }
+            return true;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    private static String clip(String s, int n) {
+        if (s == null) return "";
+        String t = s.replaceAll("\\s+", " ").trim();
+        return t.length() <= n ? t : t.substring(0, n) + "…";
     }
 
     // ---------- 订阅流量信息 ----------
@@ -458,6 +528,52 @@ public final class Clash {
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    /**
+     * 打开应用时顺带检查：开了「自动更新」的订阅，距上次更新超过 6 小时就刷一次。
+     *
+     * 没做独立的定时闹钟 —— 订阅只是拿节点列表，晚几小时无所谓；
+     * 而多一个后台唤醒源对省电是实打实的负担。跟着"打开应用"走就够了。
+     */
+    public static void autoUpdateSubs(final Context c) {
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    java.util.List<SubStore.Sub> subs = SubStore.all(c);
+                    long now = System.currentTimeMillis();
+                    for (int i = 0; i < subs.size(); i++) {
+                        SubStore.Sub s = subs.get(i);
+                        if (!s.autoUpdate) continue;
+                        if (now - s.updatedAt < SubStore.Sub.AUTO_UPDATE_GAP) continue;
+                        if (s.url == null || s.url.length() == 0) continue;
+                        BalanceFetcher.diag(c, "自动更新订阅：" + s.name);
+                        SubInfo info = fetchSubscriptionInfo(c, s.url);
+                        if (!looksLikeClash(info.yaml)) {
+                            BalanceFetcher.diag(c, "自动更新失败（内容不是 Clash 配置）：" + s.name);
+                            continue;
+                        }
+                        SubStore.Sub fresh = SubStore.byId(c, s.id);
+                        if (fresh == null) continue;
+                        fresh.yaml = info.yaml;
+                        fresh.nodeCount = countProxies(info.yaml);
+                        fresh.updatedAt = System.currentTimeMillis();
+                        if (info.hasTraffic()) {
+                            fresh.up = info.up;
+                            fresh.down = info.down;
+                            fresh.total = info.total;
+                            fresh.expire = info.expire;
+                            fresh.trafficAt = System.currentTimeMillis();
+                        }
+                        SubStore.update(c, fresh);
+                        BalanceFetcher.diag(c, "自动更新完成：" + s.name
+                                + "（" + fresh.nodeCount + " 个节点）");
+                    }
+                } catch (Throwable t) {
+                    BalanceFetcher.diag(c, "自动更新异常：" + t);
+                }
+            }
+        }).start();
     }
 
     /** 解析 subscription-userinfo 头 */
