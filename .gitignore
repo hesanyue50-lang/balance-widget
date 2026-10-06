@@ -4,6 +4,10 @@ build/
 *.idsig
 *.apk.idsig
 
+# ⚠️ 二进制一律不进 git（历史里曾经塞了几十份 24MB 的 APK，把 .git 撑到 500MB）。
+#    发布用 tools/release-apk.sh 上传到 GitHub Release。
+BalanceWidget.apk
+
 # 本地探测 jar（含运行时环境，不入库）
 tools/probe.jar
 

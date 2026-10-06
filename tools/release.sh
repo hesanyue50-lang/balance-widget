@@ -48,16 +48,11 @@ tar --exclude='./build' --exclude='./*.apk' --exclude='./*.idsig' \
     --exclude='./.git' --exclude='./.buildcount' --exclude='./tools/probe.jar' \
     -cf - -C "$SRC" . | tar -xf -
 
-# APK 单独复制（上面排除了 *.apk，这里显式更新）
-if [ -f "$SRC/$APK" ]; then
-    cp -f "$SRC/$APK" BalanceWidget.apk
-fi
-
 # ---------- ③ 提交 ----------
+# ⚠️ APK 不再进 git（二进制放 GitHub Release，用 tools/release-apk.sh 上传）。
+#    历史里曾经每个提交都塞一份 24MB 的 APK，把 .git 撑到 500MB，已清理。
 MSG="${1:-同步 $(date '+%Y-%m-%d %H:%M')}"
 git add -A
-[ -f BalanceWidget.apk ] && git add -f BalanceWidget.apk   # .gitignore 排除 *.apk，必须 -f
-
 if git diff --cached --quiet; then
     echo "✅ 无变更，跳过提交"
     exit 0
