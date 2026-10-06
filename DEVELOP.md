@@ -421,7 +421,24 @@ SHA-256 `ffd72134…c439f33`，**与首版完全一致** → 每次升级直接 
 cd /var/minis/mounts/AIWord/projects/balance-widget   # 源码母本在 AIWord
 sh tools/release.sh "提交说明"        # 一键：编译 → 同步到 git 仓库 → 提交 → 推送（带重试）
 sh tools/release.sh -n "只改了文档"   # 跳过编译
+
+sh tools/release-apk.sh              # 把编译好的 APK 上传到 GitHub Release
+sh tools/release-apk.sh v26.10.370 "更新说明"   # 指定标签与说明
 ```
+
+### ⚠️ 二进制不进 git
+
+`BalanceWidget.apk` 被 `.gitignore` 排除，**由 `tools/release-apk.sh` 上传到 GitHub Release**。
+
+这条规矩是踩过坑才立的：项目早期 `release.sh` 每次都用 `git add -f` 把 24MB 的 APK
+塞进提交，38 个提交攒出 **500MB** 的 `.git`。已用 `git filter-repo` 清理（现约 2MB），
+并且**强推改写过远端历史**——所以 2026-10-06 之前的 commit hash 全部变了。
+
+曾经那份 APK 的恢复方式（万一以后又需要）：
+GitHub 的孤儿提交在 GC 前仍可按 SHA 取回
+`https://api.github.com/repos/<slug>/contents/BalanceWidget.apk?ref=<旧SHA>`，
+但它**不支持 Range 断点续传**，24MB 在国内直连基本下不完整；
+走代理 + `raw.githubusercontent.com/<slug>/<SHA>/BalanceWidget.apk`（CDN 支持 Range）才稳。
 
 只编译 + 装到本机：
 

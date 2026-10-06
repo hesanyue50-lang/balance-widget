@@ -22,8 +22,10 @@ set -e
 SRC=/var/minis/mounts/AIWord/projects/balance-widget
 REPO=/var/minis/shared/balance-widget
 SLUG=hesanyue50-lang/balance-widget
-APK=com.minis.balancewidget.apk
 TRIES=3
+
+# ⚠️ 本脚本只发源码。APK 不进 git（二进制会把仓库撑爆），
+#    编完另跑：sh tools/release-apk.sh   （上传到 GitHub Release）
 
 DO_BUILD=1
 if [ "$1" = "-n" ] || [ "$1" = "--no-build" ]; then
