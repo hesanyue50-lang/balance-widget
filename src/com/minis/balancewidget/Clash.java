@@ -206,6 +206,8 @@ public final class Clash {
      * @param cfgText 完整的 Clash 配置文本（由 {@link #buildConfig} 生成）
      */
     public static synchronized String start(Context c, String cfgText) {
+        /* 先把上次遗留的内核清掉 —— 它占着 7890，不清的话这次必然启动失败 */
+        killStaleCore(c);
         return startInternal(c, cfgText, -1);
     }
 
@@ -239,12 +241,18 @@ public final class Clash {
                轮询 /version 最直接（比 sleep 固定时长稳）。 */
             for (int i = 0; i < 40; i++) {         // 最多约 8 秒
                 if (!isRunning()) {
-                    return "内核启动失败：" + tail(log, 200);
+                    /* core.log 在**私有目录**，用户/排查工具读不到 ——
+                       顺手抄一份到诊断日志里，否则"内核启动失败"永远只有结论没有原因。 */
+                    String why = tail(log, 400);
+                    BalanceFetcher.diag(c, "内核启动失败，core.log 末尾：\n" + why);
+                    return "内核启动失败：" + why;
                 }
                 if (apiAlive()) return null;
                 try { Thread.sleep(200); } catch (InterruptedException ig) { }
             }
-            return "内核启动超时（8 秒内控制端口未就绪）";
+            String why2 = tail(log, 400);
+            BalanceFetcher.diag(c, "内核启动超时，core.log 末尾：\n" + why2);
+            return "内核启动超时（8 秒内控制端口未就绪）\n" + why2;
         } catch (Throwable t) {
             BalanceFetcher.diag(c, "clash 启动异常 " + t);
             return "启动异常：" + t;
@@ -316,17 +324,33 @@ public final class Clash {
             for (int i = 0; i < lines.length; i++) {
                 String l = lines[i];
                 String t = l.trim();
-                // 跳过与上面重复/冲突的顶层键
-                if (t.startsWith("mixed-port:") || t.startsWith("port:")
-                        || t.startsWith("socks-port:") || t.startsWith("external-controller:")
-                        || t.startsWith("allow-lan:") || t.startsWith("bind-address:")
-                        || t.startsWith("mode:") || t.startsWith("log-level:")) {
-                    continue;
-                }
+                /* 头部已经写死的顶层键，订阅里若有同名的一律丢弃 ——
+                   否则同一个键在文档里出现两次，YAML 直接解析失败
+                   （实测内核报 "mapping key \"ipv6\" already defined at line 8"，
+                   就是漏了 ipv6 这一项）。
+
+                   ★ 只跳过**顶层**的：dns 段里的 ipv6 前面有缩进，是另一个层级的键，
+                     必须原样保留。判断办法就是看这一行有没有前导空白。 */
+                boolean topLevel = l.equals(t);
+                if (topLevel && isOwnedTopKey(t)) continue;
                 sb.append(l).append('\n');
             }
         }
         return sb.toString();
+    }
+
+    /** buildConfig 头部自己写死的顶层键 —— 订阅里的同名项要丢掉，免得重复定义 */
+    private static final String[] OWNED_TOP_KEYS = {
+        "mixed-port:", "port:", "socks-port:", "external-controller:",
+        "allow-lan:", "bind-address:", "mode:", "log-level:",
+        "ipv6:", "unified-delay:", "tcp-concurrent:",
+    };
+
+    private static boolean isOwnedTopKey(String trimmedLine) {
+        for (int i = 0; i < OWNED_TOP_KEYS.length; i++) {
+            if (trimmedLine.startsWith(OWNED_TOP_KEYS[i])) return true;
+        }
+        return false;
     }
 
     /**
@@ -384,18 +408,37 @@ public final class Clash {
      */
     private static final String[] SUB_UAS = {
         "clash-verge/v1.7.7",
+        "ClashMetaForAndroid/2.11.6",
         "ClashforWindows/0.20.39",
         "mihomo/1.19.32",
+        "Clash/1.18.0",
     };
+
+    /** 用户自定义 UA 的存放键（设置里填了就优先用它，且只用它） */
+    public static final String KEY_CUSTOM_UA = "sub_user_agent";
     /** 兼容旧引用 */
     private static final String SUB_UA_VALUE = SUB_UAS[0];
 
     public static String fetchSubscription(Context c, String url) throws Exception {
         String direct = null;
         String viaProxy = null;
+
+        /* UA 候选：用户自己填了就用它（能对上 ClashMeta 之类客户端的口径），
+           没填才依次试内置那几个。 */
+        String custom = "";
+        try {
+            custom = c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                    .getString(KEY_CUSTOM_UA, "");
+            if (custom == null) custom = "";
+            custom = custom.trim();
+        } catch (Throwable ignored) { }
+        String[] uas = custom.length() > 0 ? new String[]{ custom } : SUB_UAS;
+        if (custom.length() > 0) BalanceFetcher.diag(c, "订阅使用自定义 UA：" + custom);
+
         /* 依次换 UA 试：拿到内容但不像 Clash 配置时，很可能是这个机场认别的客户端 */
-        for (int attempt = 0; attempt < SUB_UAS.length; attempt++) {
-            String ua = SUB_UAS[attempt];
+        for (int attempt = 0; attempt < uas.length; attempt++) {
+            String ua = uas[attempt];
+            BalanceFetcher.SUB_ACCEPT.set("*/*");     // 订阅要 YAML，不能用 application/json
             direct = null;
             viaProxy = null;
             BalanceFetcher.SUB_UA.set(ua);            // 只影响本次（本线程）的请求
@@ -416,6 +459,7 @@ public final class Clash {
                 }
             } finally {
                 BalanceFetcher.SUB_UA.remove();
+                BalanceFetcher.SUB_ACCEPT.remove();
             }
             String got = direct != null ? direct : viaProxy;
             diagBody(c, "UA=" + ua, got);
@@ -438,11 +482,23 @@ public final class Clash {
                 + "可在上方节点列表里换个节点后重试；订阅站多为 HTTPS，节点只通 HTTP 时会失败");
     }
 
+    /** 数一下子串出现几次（判断配置里有几段 proxy-groups / rules） */
+    private static int countOccur(String s, String sub) {
+        if (s == null || s.length() == 0) return 0;
+        int n = 0, i = 0;
+        while ((i = s.indexOf(sub, i)) >= 0) { n++; i += sub.length(); }
+        return n;
+    }
+
     /** 打一下订阅内容的开头（截断），用于判断机场到底返回了什么 */
     private static void diagBody(Context c, String how, String body) {
         if (body == null) return;
-        BalanceFetcher.diag(c, "订阅" + how + "拿到 " + body.length() + " 字符，开头："
-                + clip(body, 80));
+        /* 换行数单列出来：YAML 全靠换行分层，一旦被压成一行就解析不出任何东西
+           （实测机场返回 22KB 内容、0 个换行 → 节点数 0）。 */
+        int nl = 0;
+        for (int i = 0; i < body.length(); i++) if (body.charAt(i) == '\n') nl++;
+        BalanceFetcher.diag(c, "订阅" + how + "拿到 " + body.length() + " 字符，换行数=" + nl
+                + "，开头：" + clip(body, 80));
     }
 
     /** 粗略判断是不是 base64 节点串（纯 base64 字符、很长、base64 解码后含 vmess:// 之类） */
@@ -576,6 +632,71 @@ public final class Clash {
         }).start();
     }
 
+    // ---------- 残留进程清理 ----------
+
+    /**
+     * 清理上一次运行残留的内核进程。
+     *
+     * **为什么必须做**：内核是本应用 fork 出来的子进程，App 被 force-stop
+     * 或被系统回收时，子进程**不一定跟着退出** —— 实测残留了 3 个 mihomo，
+     * 把 7890 端口占死，于是「启动加速」永远报"内核启动失败"。
+     * （外部工具如 pkill 反而没权限杀它 —— 只有同 uid 的本应用能杀。）
+     */
+    private static void killStaleCore(Context c) {
+        int killed = 0;
+        try {
+            int me = android.os.Process.myUid();
+            int myPid = android.os.Process.myPid();
+            java.io.File[] ps = new java.io.File("/proc").listFiles();
+            if (ps == null) return;
+            for (int i = 0; i < ps.length; i++) {
+                String name = ps[i].getName();
+                if (name.length() == 0 || !Character.isDigit(name.charAt(0))) continue;
+                int pid;
+                try { pid = Integer.parseInt(name); } catch (Exception e) { continue; }
+                if (pid == myPid) continue;
+                String cmd = readProcFile(ps[i], "cmdline");
+                if (cmd == null || cmd.indexOf("mihomo") < 0) continue;
+                if (procUid(ps[i]) != me) continue;          // 只动自己的进程
+                android.os.Process.killProcess(pid);
+                killed++;
+            }
+        } catch (Throwable ignored) { }
+        if (killed > 0) BalanceFetcher.diag(c, "清理残留内核进程 " + killed + " 个");
+    }
+
+    /** 读 /proc/<pid>/xxx 的前若干字节 */
+    private static String readProcFile(java.io.File dir, String name) {
+        try {
+            java.io.File f = new java.io.File(dir, name);
+            if (!f.exists() || f.length() == 0) return null;
+            byte[] buf = new byte[(int) Math.min(f.length(), 512)];
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            int n = in.read(buf);
+            in.close();
+            return n <= 0 ? null : new String(buf, 0, n, "UTF-8");
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 取进程 uid（/proc/<pid>/status 里的 Uid 行） */
+    private static int procUid(java.io.File dir) {
+        try {
+            String st = readProcFile(dir, "status");
+            if (st == null) return -1;
+            int i = st.indexOf("Uid:");
+            if (i < 0) return -1;
+            int j = i + 4;
+            while (j < st.length() && st.charAt(j) == ' ') j++;
+            int k = j;
+            while (k < st.length() && Character.isDigit(st.charAt(k))) k++;
+            return Integer.parseInt(st.substring(j, k));
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
     /** 解析 subscription-userinfo 头 */
     static void parseUserInfo(String s, SubInfo o) {
         if (s == null || s.length() == 0) return;
@@ -611,10 +732,27 @@ public final class Clash {
         try {
             out.yaml = fetchSubscription(c, url);
             parseUserInfo(BalanceFetcher.SUB_USERINFO.get(), out);
-            BalanceFetcher.diag(c, "订阅下载完成，流量头="
+            BalanceFetcher.diag(c, "订阅下载完成，长度=" + out.yaml.length()
+                    + " 节点数=" + countProxies(out.yaml)
+                    + " 策略组=" + countOccur(out.yaml, "proxy-groups:")
+                    + " 规则=" + countOccur(out.yaml, "rules:")
+                    + " 流量头="
                     + (out.hasTraffic()
                        ? (out.used() + "/" + out.total + " 字节，到期 " + out.expire)
-                       : "机场未提供"));
+                       : "机场未提供")
+                    + " 读取=" + BalanceFetcher.LAST_BODY_INFO
+                    + "\n开头=" + clip(out.yaml, 200));
+            /* 顺手留一份原始订阅到 App 外部目录：
+               排查"下到了但解析不出节点"这类问题时能直接看原文。 */
+            try {
+                java.io.File dir = c.getExternalFilesDir(null);
+                if (dir != null) {
+                    java.io.FileWriter w = new java.io.FileWriter(
+                            new java.io.File(dir, "last_subscription.yaml"), false);
+                    w.write(out.yaml);
+                    w.close();
+                }
+            } catch (Throwable ig) { }
         } catch (Throwable t) {
             out.yaml = "";
             BalanceFetcher.diag(c, "订阅下载失败：" + t);

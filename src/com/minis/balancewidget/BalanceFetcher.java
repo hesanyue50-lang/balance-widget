@@ -600,6 +600,27 @@ public class BalanceFetcher {
      */
     public static final ThreadLocal<String> SUB_UA = new ThreadLocal<String>();
 
+    /**
+     * 订阅请求专用的 Accept。
+     *
+     * 余额接口都是 JSON（用 application/json 没问题），但**订阅要的是 YAML** ——
+     * 拿 application/json 去要 YAML，部分机场（尤其 Cloudflare 后面那些）
+     * 会直接给个错误响应甚至掐掉连接。订阅这一路用通配 Accept 最稳
+     * （写死在代码里是 "星号斜杠星号"，这里注释没法直接写那两个字符）。
+     */
+    public static final ThreadLocal<String> SUB_ACCEPT = new ThreadLocal<String>();
+
+    /**
+     * 最近一次响应体的读取情况（诊断用）：走的是 chunked 还是定长、
+     * 多少字符、**含多少个换行**。
+     *
+     * 为什么要专门记这个：订阅 YAML 全靠换行分层，一旦被压成一行就解析不出
+     * 任何节点（实测机场返回 22KB、0 个换行 → 节点数 0）。
+     * 而这条读取链路有好几处（直连 / 代理 / chunked / 定长），
+     * 不记下来根本不知道该修哪一处。
+     */
+    public static volatile String LAST_BODY_INFO = "";
+
     /** 服务器已明确应答（非网络问题）时抛出，用于终止多地址重试。 */
     private static class StatusException extends Exception {
         StatusException(String m) { super(m); }
@@ -738,6 +759,14 @@ public class BalanceFetcher {
         throw new Exception("所有地址均失败 [" + (tried.length() == 0 ? "无" : tried.toString().trim()) + "]");
     }
 
+    /** 数一下字符串里有几个换行 */
+    private static int countNl(String s) {
+        if (s == null) return -1;
+        int n = 0;
+        for (int i = 0; i < s.length(); i++) if (s.charAt(i) == '\n') n++;
+        return n;
+    }
+
     /** 内核 fake-ip 段：Clash 默认用 198.18.0.0/15，这类地址只有内核自己认识 */
     private static boolean isFakeIp(InetAddress a) {
         try {
@@ -842,7 +871,8 @@ public class BalanceFetcher {
             StringBuilder sb = new StringBuilder();
             sb.append("GET ").append(path).append(" HTTP/1.1\r\n");
             sb.append("Host: ").append(host).append("\r\n");
-            sb.append("Accept: application/json\r\n");
+            String _acc = SUB_ACCEPT.get();
+            sb.append("Accept: ").append(_acc == null ? "application/json" : _acc).append("\r\n");
             sb.append("Accept-Encoding: identity\r\n");
             String _ua = SUB_UA.get();
             sb.append("User-Agent: ").append(_ua == null ? "MinisWidget/1.2" : _ua).append("\r\n");
@@ -869,6 +899,8 @@ public class BalanceFetcher {
                 else if (l.startsWith("subscription-userinfo")) captureUserInfo(line);
             }
             String body = chunked ? readChunked(in2) : readRest(in2);
+            LAST_BODY_INFO = "代理 chunked=" + chunked
+                    + " len=" + body.length() + " nl=" + countNl(body);
             if (code < 200 || code >= 300) {
                 if (code == 401 || code == 403) throw new StatusException("Key 无效或未授权 (" + code + ")");
                 if (code == 429) throw new StatusException("请求过于频繁 (429)");
@@ -896,7 +928,8 @@ public class BalanceFetcher {
             StringBuilder sb = new StringBuilder();
             sb.append("GET ").append(path).append(" HTTP/1.1\r\n");
             sb.append("Host: ").append(host).append("\r\n");
-            sb.append("Accept: application/json\r\n");
+            String _acc = SUB_ACCEPT.get();
+            sb.append("Accept: ").append(_acc == null ? "application/json" : _acc).append("\r\n");
             sb.append("Accept-Encoding: identity\r\n");
             String _ua = SUB_UA.get();
             sb.append("User-Agent: ").append(_ua == null ? "MinisWidget/1.2" : _ua).append("\r\n");
@@ -923,6 +956,8 @@ public class BalanceFetcher {
                 else if (l.startsWith("subscription-userinfo")) captureUserInfo(line);
             }
             String body = chunked ? readChunked(in) : readRest(in);
+            LAST_BODY_INFO = "直连 chunked=" + chunked
+                    + " len=" + body.length() + " nl=" + countNl(body);
             if (code < 200 || code >= 300) {
                 if (code == 401 || code == 403) throw new StatusException("Key 无效或未授权 (" + code + ")");
                 if (code == 404) throw new StatusException("接口地址不存在 (404)");
@@ -990,7 +1025,8 @@ public class BalanceFetcher {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestMethod("GET");
-        c.setRequestProperty("Accept", "application/json");
+        String _acc2 = SUB_ACCEPT.get();
+        c.setRequestProperty("Accept", _acc2 == null ? "application/json" : _acc2);
         String _ua2 = SUB_UA.get();
         c.setRequestProperty("User-Agent", _ua2 == null ? "MinisWidget/1.2" : _ua2);
         if (bearer != null) c.setRequestProperty("Authorization", "Bearer " + bearer);
@@ -1002,7 +1038,13 @@ public class BalanceFetcher {
             if (is != null) {
                 BufferedReader r = new BufferedReader(new InputStreamReader(is, "UTF-8"));
                 String line;
-                while ((line = r.readLine()) != null) sb.append(line);
+                /* ★ 换行必须补回来！
+                   readLine() 会把行尾的 \n 吃掉，直接 append 得到的是"一行到底"的文本。
+                   对 JSON 无所谓（JSON 不靠换行分层），但对 **YAML 是致命的** ——
+                   订阅配置全是靠缩进和换行分层的，压成一行后一个节点都解析不出来
+                   （实测机场返回 22KB、0 个换行 → 节点数 0、内核 0 个策略组）。
+                   这个坑一直埋着，直到 fake-ip 过滤让解析结果为空、改走这条兜底路径才暴露。 */
+                while ((line = r.readLine()) != null) sb.append(line).append('\n');
                 r.close();
             }
             if (code < 200 || code >= 300) {
