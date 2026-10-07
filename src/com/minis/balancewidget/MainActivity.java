@@ -916,18 +916,13 @@ public class MainActivity extends Activity {
                     java.util.Arrays.fill(empty, Double.NaN);
                     if (!Double.isNaN(live)) {
                         empty[DAYS - 1] = live * mul;      // 最新一个槽位 = 现在
-                        /* 积分类先把积分本身报出来（那才是账户里的真数），
-                           折算金额跟在后面 —— 只给钱的话用户对不上自己的积分。 */
-                        if (isAsset) {
-                            detail.append(name).append("   当前 ")
-                                  .append(String.format("%.0f", live / mul)).append(" 积分")
-                                  .append(" ≈ ¥").append(String.format("%.2f", live))
-                                  .append("   历史数据积累中\n");
-                        } else {
-                            detail.append(name).append("   当前 ").append(String.format("%.2f", live * mul))
-                                  .append("   历史数据积累中\n");
-                        }
-                    } else {
+                    }
+                    /* 明细区是「充值/消耗」列表，不是余额列表 —— 走到这里说明
+                       该平台一个历史点都没有（ptsAny==0），既没充值也没消耗记录，
+                       把当前余额抄一行进去毫无信息量（网关卡片就是这么冒出来的）。
+                       折线仍保留：历史可以慢慢积累，但不占充消清单的位置。
+                       MiMo 例外 —— 它的"没数据"是有原因的，得告诉用户去登录。 */
+                    if ("mimo".equals(plat)) {
                         detail.append(name).append(mimoExpired
                                 ? "   登录已过期 · 点卡片重新登录\n"
                                 : (needLogin
