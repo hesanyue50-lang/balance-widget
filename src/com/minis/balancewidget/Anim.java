@@ -36,6 +36,15 @@ public final class Anim {
      */
     private static void animateHeight(final View v, final int from, final int to,
                                       final Runnable end) {
+        /* 视图还没被 addView 时 getLayoutParams() 是 null —— 动态 new 出来的控件
+           在挂上父容器之前调过来就会撞上（原来的 setVisibility 不需要布局参数，
+           所以换动画之前一直没暴露）。这时没法补间高度，直接落定即可，
+           绝不能为了动画把应用搞崩。 */
+        if (v.getLayoutParams() == null) {
+            v.setVisibility(to == 0 ? View.GONE : View.VISIBLE);
+            if (end != null) end.run();
+            return;
+        }
         v.getLayoutParams().height = from;
         v.requestLayout();
         ValueAnimator a = ValueAnimator.ofInt(from, to);
@@ -44,6 +53,7 @@ public final class Anim {
         a.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             public void onAnimationUpdate(ValueAnimator an) {
                 ViewGroup.LayoutParams lp = v.getLayoutParams();
+                if (lp == null) return;         // 动画途中被摘出父容器
                 lp.height = (Integer) an.getAnimatedValue();
                 v.requestLayout();
             }
@@ -52,10 +62,12 @@ public final class Anim {
             @Override
             public void onAnimationEnd(Animator an) {
                 ViewGroup.LayoutParams lp = v.getLayoutParams();
-                /* 收回收起态时要留成 0，展开态交还 wrap_content ——
-                   固定死高度的话，里面内容一变化就会被裁掉 */
-                lp.height = (to == 0) ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
-                v.requestLayout();
+                if (lp != null) {
+                    /* 收回收起态时要留成 0，展开态交还 wrap_content ——
+                       固定死高度的话，里面内容一变化就会被裁掉 */
+                    lp.height = (to == 0) ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
+                    v.requestLayout();
+                }
                 if (end != null) end.run();
             }
         });
@@ -64,9 +76,9 @@ public final class Anim {
 
     /** 量出这个视图在"不受高度约束"下的自然高度 */
     private static int naturalHeight(View v) {
-        View parent = (View) v.getParent();
-        int w = parent != null && parent.getWidth() > 0
-                ? parent.getWidth()
+        Object p = v.getParent();
+        int w = (p instanceof View && ((View) p).getWidth() > 0)
+                ? ((View) p).getWidth()
                 : v.getResources().getDisplayMetrics().widthPixels;
         v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
