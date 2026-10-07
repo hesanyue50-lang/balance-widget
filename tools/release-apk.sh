@@ -16,6 +16,15 @@ SLUG=hesanyue50-lang/balance-widget
 APK=$SRC/com.minis.balancewidget.apk
 ASSET=BalanceWidget.apk
 API=https://api.github.com/repos/$SLUG
+
+# 沙盒直连 github 常年不稳，先确保代理可用（curl 认 http(s)_proxy 环境变量）。
+if command -v vpnup >/dev/null 2>&1; then
+    if vpnup --fast >/dev/null 2>&1 || vpnup >/dev/null 2>&1; then
+        export http_proxy=http://127.0.0.1:7891
+        export https_proxy=http://127.0.0.1:7891
+        echo "🌐 走代理上传（$https_proxy）"
+    fi
+fi
 TRIES=3
 
 [ -n "$GITHUB_TOKEN" ] || { echo "❌ 缺少 GITHUB_TOKEN 环境变量"; exit 1; }

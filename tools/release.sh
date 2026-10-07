@@ -71,15 +71,32 @@ echo "📝 已提交：$MSG (versionName=$VER)"
 #   ② github.com 在沙盒里可达性抖动，一次失败不代表凭证有问题，重试通常就好。
 URL="https://x-access-token:$GITHUB_TOKEN@github.com/$SLUG.git"
 LOG=/tmp/bw-push.log
+
+# ⚠️ git 不读 http_proxy/https_proxy 环境变量（只认 -c http.proxy 或 .gitconfig），
+#    而沙盒直连 github.com 常年不可靠 → 必须显式把代理传给 git。
+#    代理本身用 vpnup 自愈：没跑就拉起、节点不通就换一个。
+PROXY=""
+if command -v vpnup >/dev/null 2>&1; then
+    if vpnup --fast >/dev/null 2>&1 || vpnup >/dev/null 2>&1; then
+        PROXY="http://127.0.0.1:7891"
+        echo "🌐 走代理推送（$PROXY）"
+    fi
+fi
+
 i=1
 while [ "$i" -le "$TRIES" ]; do
     echo "🚀 推送（第 $i/$TRIES 次）…"
-    if git push "$URL" HEAD:main >"$LOG" 2>&1; then
+    if [ -n "$PROXY" ]; then
+        git -c http.proxy="$PROXY" -c https.proxy="$PROXY" \
+            push "$URL" HEAD:main >"$LOG" 2>&1
+    else
+        git push "$URL" HEAD:main >"$LOG" 2>&1
+    fi && {
         grep -v '^remote:' "$LOG" | sed "s/$GITHUB_TOKEN/<token>/g"
         rm -f "$LOG"
         echo "✅ 完成"
         exit 0
-    fi
+    }
     sed "s/$GITHUB_TOKEN/<token>/g" "$LOG" | tail -3
     i=$((i + 1))
     [ "$i" -le "$TRIES" ] && { echo "⏳ 5 秒后重试…"; sleep 5; }
