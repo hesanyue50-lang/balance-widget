@@ -29,14 +29,14 @@ public final class Busy {
         if (ov == null) return;
         TextView t = (TextView) a.findViewById(R.id.busy_text);
         if (t != null) t.setText(msg == null ? "正在加载…" : msg);
-        ov.setVisibility(View.VISIBLE);
         ov.bringToFront();
+        Anim.fade(ov);          // 遮罩用纯淡入（带位移会露出底下的内容）
     }
 
     public static void hide(Activity a) {
         if (a == null) return;
         View ov = a.findViewById(R.id.busy_overlay);
-        if (ov != null) ov.setVisibility(View.GONE);
+        if (ov != null) Anim.fadeOut(ov);
     }
 
     /**

@@ -1152,8 +1152,13 @@ public class MainActivity extends Activity {
                 public void run() {
                     head.setText((open[0] ? "已隐藏的 API (" + hn + ")  ▴"
                                           : "已隐藏的 API (" + hn + ")  ▾"));
-                    hiddenContainer.setVisibility(open[0] ? android.view.View.VISIBLE
-                                                          : android.view.View.GONE);
+                    /* 状态没变就不动 —— 初始化时正好靠这句跳过动画，
+                       否则一进页面这块会自己弹一下 */
+                    boolean want = open[0];
+                    boolean shown = hiddenContainer.getVisibility() == android.view.View.VISIBLE;
+                    if (want == shown) return;
+                    if (want) Anim.expand(hiddenContainer);
+                    else Anim.collapse(hiddenContainer);
                 }
             };
             sync.run();
@@ -1255,8 +1260,14 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onDestroy() {
+        /* 主界面销毁时把这个引用让出来，避免静态字段拖住已结束的实例 */
+        if (settingsBinder != null) settingsBinder.detach();
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onResume() {        super.onResume();
         // 放在 onResume：界面已可见，避免弹窗盖在未初始化的界面上，
         // 也避免用户从后台返回时错过提示。内部有"问过就不再弹"的闸门。
         NotifyPermission.ensure(this, null, false);
@@ -1387,6 +1398,9 @@ public class MainActivity extends Activity {
                 BalanceFetcher.sampleIfDue(ctx, r);
                 // 判定阈值并发通知（内部有防重复，重复调用安全）
                 Alert.check(ctx, r);
+                /* 到点就自动备份一份。放后台线程 ——
+                   导出要读整个账本，不能压在 UI 上 */
+                Backup.maybeAutoBackup(ctx);
                 runOnUiThread(new Runnable() {
                     public void run() {
                         /* Activity 可能已经 finish/销毁（用户退出、转屏重建）——
@@ -1574,6 +1588,9 @@ public class MainActivity extends Activity {
 
     private void render(BalanceFetcher.Result r) {
         lastResult = r;
+        /* 首次渲染（列表本来是空的）才播入场动画 ——
+           自动刷新时也播的话，每几分钟整页闪一次，反而烦 */
+        final boolean firstFill = cards.getChildCount() == 0;
         cards.removeAllViews();
         BalanceFetcher.diag(this, "卡片渲染 " + r.items.size() + " 项");
 
@@ -1718,6 +1735,7 @@ public class MainActivity extends Activity {
                 rows.setTextColor(getColor(R.color.danger));
             }
             cards.addView(v);
+            if (firstFill) Anim.stagger(v, cards.getChildCount() - 1);
         }
     }
 

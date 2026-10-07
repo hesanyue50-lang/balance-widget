@@ -41,6 +41,18 @@ public class SettingsBinder {
     /** 页面顺序/隐藏/主页面 改动后的回调（宿主重建导航条） */
     public Runnable onPagesChanged;
 
+    /**
+     * 最近一次绑定的实例。
+     *
+     * <b>为什么要有</b>：备份走的是系统文件选择器（另一个 Activity），
+     * 备份完成回到本应用时，设置面板并不知道"刚才多了一份备份"，
+     * 于是列表还是旧的（用户看到"0 份"，其实文件已经存下了）。
+     * 借这个静态引用回调一下即可。
+     *
+     * 生命周期由宿主负责：Activity onDestroy 时置空，避免拖住已销毁的实例。
+     */
+    public static SettingsBinder active;
+
     public SettingsBinder(Activity a, View r, Runnable onChanged) {
         this.act = a; this.root = r; this.onChanged = onChanged;
     }
@@ -52,6 +64,8 @@ public class SettingsBinder {
     }
 
     public void bind() {
+        active = this;
+
         // ---- 刷新间隔（修改即保存） ----
         eFg = (EditText) root.findViewById(R.id.e_fg_min);
         eBg = (EditText) root.findViewById(R.id.e_bg_min);
@@ -166,10 +180,10 @@ public class SettingsBinder {
             keyToggle.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     boolean now = keyCard.getVisibility() != View.VISIBLE;
-                    keyCard.setVisibility(now ? View.VISIBLE : View.GONE);
                     prefs().edit().putBoolean("key_opened", now).apply();
                     keyToggle.setText(now ? "收起 ▴" : "展开 ▾");
-                    if (now) keyFadeIn(keyCard);
+                    if (now) Anim.expand(keyCard);
+                    else Anim.collapse(keyCard);
                 }
             });
         }
@@ -182,8 +196,12 @@ public class SettingsBinder {
             st.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     boolean vis = sb.getVisibility() == View.VISIBLE;
-                    sb.setVisibility(vis ? View.GONE : View.VISIBLE);
-                    if (!vis) sb.requestFocus();
+                    if (vis) {
+                        Anim.collapse(sb);
+                    } else {
+                        Anim.expand(sb);
+                        sb.requestFocus();
+                    }
                 }
             });
             sb.setOnEditorActionListener(new TextView.OnEditorActionListener() {
@@ -209,14 +227,24 @@ public class SettingsBinder {
         // ---- 隐藏 API（默认收起）----
         final View hideCard = root.findViewById(R.id.hide_card);
         final TextView hideToggle = (TextView) root.findViewById(R.id.hide_toggle);
-        if (hideToggle != null) hideToggle.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                boolean now = hideCard.getVisibility() != View.VISIBLE;
-                hideCard.setVisibility(now ? View.VISIBLE : View.GONE);
-                hideToggle.setText(now ? "收起 ▴" : "展开 ▾");
-                if (now) { renderHides(); keyFadeIn(hideCard); }
-            }
-        });
+        if (hideToggle != null) {
+            /* 布局里写的是不带箭头的「展开」，进来先按当前状态补一次 ——
+               否则初始状态没有箭头，点一下才出现，看着像坏了一半 */
+            hideToggle.setText(hideCard != null && hideCard.getVisibility() == View.VISIBLE
+                    ? "收起 ▴" : "展开 ▾");
+            hideToggle.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    boolean now = hideCard.getVisibility() != View.VISIBLE;
+                    hideToggle.setText(now ? "收起 ▴" : "展开 ▾");
+                    if (now) {
+                        renderHides();          // 先把内容建出来，动画才有高度可量
+                        Anim.expand(hideCard);
+                    } else {
+                        Anim.collapse(hideCard);
+                    }
+                }
+            });
+        }
 
         // ---- 页面管理 ----
         View pagesBtn = root.findViewById(R.id.btn_pages);
@@ -236,7 +264,7 @@ public class SettingsBinder {
         // ---- 安全与密码（内联，与密钥区同级）----
         buildSecuritySection();
 
-        // ---- 备份 / 恢复 ----
+        // ---- 备份 / 恢复（含本机备份记录列表）----
         View bk = root.findViewById(R.id.btn_backup);
         if (bk != null) bk.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { BackupUi.backup(act); }
@@ -245,6 +273,49 @@ public class SettingsBinder {
         if (rs != null) rs.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { BackupUi.restore(act); }
         });
+        View bClear = root.findViewById(R.id.btn_backup_clear);
+        if (bClear != null) bClear.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { confirmClearBackups(); }
+        });
+
+        // ---- 自动备份 ----
+        final android.widget.Switch swAuto =
+                (android.widget.Switch) root.findViewById(R.id.sw_auto_backup);
+        final EditText eAuto = (EditText) root.findViewById(R.id.e_auto_hours);
+        if (eAuto != null) eAuto.setText(String.valueOf(Backup.autoHours(act)));
+        if (swAuto != null) swAuto.setChecked(Backup.autoOn(act));
+        renderAutoHint();
+
+        if (swAuto != null) {
+            swAuto.setOnCheckedChangeListener(
+                    new android.widget.CompoundButton.OnCheckedChangeListener() {
+                        public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
+                            Backup.setAuto(act, on, readAutoHours(eAuto));
+                            renderAutoHint(true);
+                            if (on) {
+                                Toast.makeText(act, "已开启自动备份（每 "
+                                        + Backup.autoHours(act) + " 小时一次）",
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+        }
+        if (eAuto != null) {
+            /* 失焦或按回车时收下新值 —— 和刷新间隔一个套路 */
+            eAuto.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+                public void onFocusChange(View v, boolean has) {
+                    if (!has) saveAutoHours(eAuto);
+                }
+            });
+            eAuto.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+                public boolean onEditorAction(TextView v, int actionId, android.view.KeyEvent e) {
+                    saveAutoHours(eAuto);
+                    return false;
+                }
+            });
+        }
+
+        renderBackups();
 
         // ---- 桌面固定引导 ----
         View pin = root.findViewById(R.id.btn_pin);
@@ -265,7 +336,8 @@ public class SettingsBinder {
                 android.content.pm.PackageInfo pi =
                         act.getPackageManager().getPackageInfo(act.getPackageName(), 0);
                 ver.setText("版本 " + pi.versionName + " (" + pi.versionCode + ")\n"
-                        + "GitHub：github.com/hesanyue50-lang/balance-widget");
+                        + "源码仓库（GitHub）：hesanyue50-lang/balance-widget\n"
+                        + "点击这里在浏览器中打开仓库 →");
                 ver.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) {
                         try {
@@ -276,12 +348,120 @@ public class SettingsBinder {
                 });
             }
         } catch (Throwable ignored) { }
+
+        // ---- 栏目标题折叠（最后做：上面对各区块的引用已经拿完了）----
+        setupCollapsible();
     }
 
+    // ---------- 栏目标题折叠 ----------
+
+    /**
+     * 把「栏目标题 + 紧随其后的卡片」配成一组：点标题展开/收起，状态记住。
+     *
+     * 靠布局里的 {@code android:tag="sec_title" / "sec_card"} 配对，
+     * 而不是按样式名猜 —— 后者拿不到 style，前者还能避开那些
+     * 自带开关按钮的区块（「API 密钥」「隐藏 API」有自己的折叠逻辑）。
+     */
+    private void setupCollapsible() {
+        /* 注意：root 是外层容器（FrameLayout / 页面容器），
+           栏目标题在它下面的 include 里，层级不止一层 —— 必须递归找，
+           按"直接子 View"遍历是找不到的。 */
+        java.util.List<View> titles = new java.util.ArrayList<View>();
+        collectByTag(root, "sec_title", titles);
+        for (int i = 0; i < titles.size(); i++) {
+            View t = titles.get(i);
+            View card = nextSiblingWithTag(t, "sec_card");
+            if (card != null) bindCollapse(t, card);
+        }
+    }
+
+    private void collectByTag(View v, String tag, java.util.List<View> out) {
+        if (v == null) return;
+        if (tag.equals(tagOf(v))) out.add(v);
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) collectByTag(g.getChildAt(i), tag, out);
+        }
+    }
+
+    /** 在同一个父容器里，找它后面第一个带指定 tag 的兄弟 */
+    private View nextSiblingWithTag(View v, String tag) {
+        if (!(v.getParent() instanceof ViewGroup)) return null;
+        ViewGroup p = (ViewGroup) v.getParent();
+        int idx = p.indexOfChild(v);
+        for (int i = idx + 1; i < p.getChildCount(); i++) {
+            View s = p.getChildAt(i);
+            if (tag.equals(tagOf(s))) return s;
+        }
+        return null;
+    }
+
+    private void bindCollapse(final View title, final View card) {
+        final String base = String.valueOf(((TextView) title).getText());
+        final String storeKey = "collapse_" + base;
+
+        /* 把光秃秃的标题换成「标题 + 右侧展开按钮」的一行 ——
+           标题本身没地方放按钮，只能在代码里包一层，
+           这样和「API 密钥与平台」「隐藏 API」的交互完全一致。 */
+        if (!(title.getParent() instanceof ViewGroup)) return;
+        final ViewGroup parent = (ViewGroup) title.getParent();
+        int idx = parent.indexOfChild(title);
+        ViewGroup.LayoutParams lp = title.getLayoutParams();
+        parent.removeView(title);
+
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutParams(lp);          // 沿用原标题的位置参数（含 marginTop/Left/Bottom）
+
+        TextView tv = (TextView) title;
+        tv.setText(base);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(tv);
+
+        final TextView btn = new TextView(act);
+        btn.setBackgroundResource(R.drawable.mini_btn_border);
+        btn.setGravity(Gravity.CENTER);
+        btn.setMinWidth(dp(64));
+        btn.setPadding(dp(14), dp(8), dp(14), dp(8));
+        btn.setTextColor(color(R.color.accent));
+        btn.setTextSize(13);
+        btn.setTypeface(null, Typeface.BOLD);
+        row.addView(btn);
+
+        parent.addView(row, idx);
+
+        boolean open = prefs().getBoolean(storeKey, false);      // 默认收起
+        applyCollapse(btn, card, open, false);                   // 初始化不播动画
+        btn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                boolean now = card.getVisibility() != View.VISIBLE;
+                prefs().edit().putBoolean(storeKey, now).apply();
+                applyCollapse(btn, card, now, true);
+            }
+        });
+    }
+
+    /** 与「API 密钥与平台」用同一套文案与行为 */
+    private void applyCollapse(TextView btn, View card, boolean open, boolean animate) {
+        btn.setText(open ? "收起 ▴" : "展开 ▾");
+        if (!animate) {
+            card.setVisibility(open ? View.VISIBLE : View.GONE);
+            return;
+        }
+        if (open) Anim.expand(card);
+        else Anim.collapse(card);
+    }
+
+    private String tagOf(View v) {
+        Object t = v.getTag();
+        return t == null ? "" : String.valueOf(t);
+    }
+
+    /** 淡入动效统一走 Anim —— 参数只在一处定，各处手感才不会跑偏 */
     private void keyFadeIn(View v) {
-        v.setAlpha(0f);
-        v.setTranslationY(-dp(10));
-        v.animate().alpha(1f).translationY(0f).setDuration(200).start();
+        Anim.fadeIn(v, 0);
     }
 
     private void saveIntervals() {
@@ -719,6 +899,211 @@ public class SettingsBinder {
     }
 
     // ---------------- 自定义平台 ----------------
+
+    // ---------- 自动备份 ----------
+
+    private int readAutoHours(EditText e) {
+        if (e == null) return Backup.autoHours(act);
+        try {
+            int v = Integer.parseInt(e.getText().toString().trim());
+            return v < Backup.AUTO_MIN_HOURS ? Backup.AUTO_MIN_HOURS : v;
+        } catch (Throwable t) {
+            return Backup.autoHours(act);
+        }
+    }
+
+    private void saveAutoHours(EditText e) {
+        if (e == null) return;
+        int h = readAutoHours(e);
+        e.setText(String.valueOf(h));          // 收敛后的值回写，用户看得见
+        Backup.setAuto(act, Backup.autoOn(act), h);
+        renderAutoHint();
+    }
+
+    private void renderAutoHint() {
+        renderAutoHint(false);
+    }
+
+    /**
+     * @param animate 用户切换开关时为 true —— 初始化（从 prefs 恢复）时不播动画，
+     *                否则一进设置页那行就自己弹一下，像出了故障
+     */
+    private void renderAutoHint(boolean animate) {
+        boolean on = Backup.autoOn(act);
+
+        /* 关掉自动备份时，下面的「备份间隔」整行都没有意义 ——
+           留着只会让人以为关了还在按那个间隔跑 */
+        View rowHours = root.findViewById(R.id.row_auto_hours);
+        if (rowHours != null) {
+            boolean shown = rowHours.getVisibility() == View.VISIBLE;
+            if (!animate) {
+                rowHours.setVisibility(on ? View.VISIBLE : View.GONE);
+            } else if (on != shown) {
+                if (on) Anim.expand(rowHours);
+                else Anim.collapse(rowHours);
+            }
+        }
+
+        TextView h = (TextView) root.findViewById(R.id.hint_auto_backup);
+        if (h == null) return;
+        String s;
+        if (!on) {
+            s = "开启后会按间隔自动备份到本机（最短 2 小时），不会弹出文件选择框。";
+        } else {
+            long last = Backup.autoLast(act);
+            s = last <= 0
+                    ? "已开启，还没备份过 —— 下次刷新余额时会做第一次。"
+                    : "已开启，上次自动备份于 " + new java.text.SimpleDateFormat(
+                            "MM-dd HH:mm", java.util.Locale.US)
+                            .format(new java.util.Date(last))
+                            + "。每次刷新余额时检查是否到点。";
+        }
+        h.setText(s);
+    }
+
+    // ---------- 本机备份记录 ----------
+
+    /** 供外部（备份 / 删除完成后）通知列表刷新 */
+    public void refreshBackups() {
+        try { renderBackups(); } catch (Throwable ignored) { }
+    }
+
+    /** 宿主销毁时调用：只清掉属于自己的那个静态引用（别人可能刚接管） */
+    public void detach() {
+        if (active == this) active = null;
+    }
+
+    /** 渲染「本机备份记录」列表（可恢复 / 可删除） */
+    private void renderBackups() {
+        LinearLayout box = (LinearLayout) root.findViewById(R.id.backup_list);
+        if (box == null) return;
+        box.removeAllViews();
+
+        List<BackupStore.Item> items = BackupStore.list(act);
+
+        TextView empty = (TextView) root.findViewById(R.id.backup_empty);
+        if (empty != null) empty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+        View clear = root.findViewById(R.id.btn_backup_clear);
+        if (clear != null) clear.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+
+        TextView head = (TextView) root.findViewById(R.id.backup_local_head);
+        if (head != null) {
+            head.setText(items.isEmpty()
+                    ? "本机备份记录"
+                    : "本机备份记录（" + items.size() + " 份 · "
+                      + humanSize(BackupStore.totalSize(act)) + "）");
+        }
+
+        for (int i = 0; i < items.size(); i++) {
+            final BackupStore.Item it = items.get(i);
+            final boolean ok = BackupStore.isUsable(it);
+            LinearLayout row = new LinearLayout(act);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            if (i > 0) row.setPadding(0, dp(12), 0, 0);
+
+            TextView t = new TextView(act);
+            String line = ok
+                    ? (it.label() + " · " + it.sizeText())
+                    : (it.label() + " · ⚠ 已损坏");
+            String fn = it.fileLabel();
+            if (fn != null) line += "\n📄 " + fn;
+            t.setText(line);
+            t.setTextColor(ok ? color(R.color.tx) : color(R.color.tx2));
+            t.setTextSize(13);
+            t.setLayoutParams(new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(t);
+
+            /* 损坏的就不给"恢复"按钮了，但保留"删除" —— 用户总得能清掉它 */
+            if (ok) {
+                TextView rest = mkBtn("恢复", color(R.color.accent));
+                rest.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) { askRestoreBackup(it); }
+                });
+                row.addView(rest);
+            }
+
+            TextView del = mkBtn("删除", color(R.color.danger));
+            del.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { askDeleteBackup(it); }
+            });
+            row.addView(del);
+
+            box.addView(row);
+            Anim.stagger(row, i);      // 逐条错开淡入
+        }
+    }
+
+    private void askRestoreBackup(final BackupStore.Item it) {
+        new AlertDialog.Builder(act)
+                .setTitle("恢复这条备份？")
+                .setMessage(it.label() + "\n\n"
+                        + "当前的密钥、订阅、设置与历史曲线都会被这条备份覆盖，"
+                        + "覆盖后无法撤销。")
+                .setPositiveButton("恢复", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        BackupUi.restoreLocal(act, it.name, new Runnable() {
+                            public void run() { afterRestore(); }
+                        });
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void askDeleteBackup(final BackupStore.Item it) {
+        final String fn = it.fileLabel();
+        new AlertDialog.Builder(act)
+                .setTitle("删除这条备份？")
+                .setMessage(it.label() + " · " + it.sizeText()
+                        + (fn == null ? "" : "\n文件：" + fn)
+                        + "\n\n会同时删掉本机记录"
+                        + (fn == null ? "" : "和它导出的那份文件")
+                        + "；如果系统不允许删文件，会引导你去文件夹手动处理。")
+                .setPositiveButton("删除", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        BackupUi.deleteLocal(act, it, new Runnable() {
+                            public void run() { renderBackups(); }
+                        });
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmClearBackups() {
+        final int n = BackupStore.list(act).size();
+        if (n == 0) { renderBackups(); return; }
+        new AlertDialog.Builder(act)
+                .setTitle("清空全部本机备份？")
+                .setMessage("将删除本机保存的 " + n + " 份备份。\n\n"
+                        + "只影响本机这些记录，你已经导出到其他位置的文件不会被删除。")
+                .setPositiveButton("全部删除", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        final int done = BackupStore.deleteAll(act);
+                        Toast.makeText(act, "已删除 " + done + " 份",
+                                Toast.LENGTH_SHORT).show();
+                        renderBackups();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 恢复完成后：配置全变了，把界面与余额重新拉一遍 */
+    private void afterRestore() {
+        Busy.run(act, "正在刷新…", new Runnable() {
+            public void run() { renderCustoms(); renderKeys(); kick(); renderBackups(); }
+        });
+    }
+
+    private String humanSize(long b) {
+        if (b < 1024) return b + " B";
+        long kb = b / 1024;
+        if (kb < 1024) return kb + " KB";
+        return String.format(java.util.Locale.US, "%.1f MB", kb / 1024.0);
+    }
 
     private void renderCustoms() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.custom_fields);

@@ -279,6 +279,7 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onDestroy() {
         searchHandler.removeCallbacks(searchFilterTask);   // 退出后不再重建列表
+        if (binder != null) binder.detach();
         super.onDestroy();
     }
 
@@ -1183,8 +1184,12 @@ public class SettingsActivity extends Activity {
         // 设置页布局已默认高亮「设置」（无需指示块）
 
         // 设置主体统一由 SettingsBinder 绑定（与主界面第三面板同一份逻辑）
-        new SettingsBinder(this, findViewById(R.id.settings_root)).bind();
+        binder = new SettingsBinder(this, findViewById(R.id.settings_root));
+        binder.bind();
     }
+
+    /** 保存一份引用，onDestroy 时用于解绑静态通知（见 SettingsBinder.active） */
+    private SettingsBinder binder;
 
     /** 通知不可用时，在设置页顶部显著提示 */
     private void refreshNotifyState() {

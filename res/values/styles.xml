@@ -6,6 +6,20 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">@color/tx</item>
         <item name="android:textColorSecondary">@color/tx2</item>
+        <!-- 全应用的 AlertDialog 都走这一套主题（含出现/消失动画）。
+             挂在主题上比在每个 show() 后面手动设 windowAnimations 可靠 ——
+             后者漏掉一处就少一个动画，而且新写的弹窗很容易忘。 -->
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+    </style>
+
+    <!-- 弹窗统一外观 + 动画 -->
+    <style name="AppDialogTheme" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+    </style>
+
+    <style name="DialogAnim">
+        <item name="android:windowEnterAnimation">@anim/dialog_in</item>
+        <item name="android:windowExitAnimation">@anim/dialog_out</item>
     </style>
 
     <!-- 设置页分组样式 -->

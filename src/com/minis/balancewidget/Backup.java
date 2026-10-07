@@ -133,6 +133,67 @@ public final class Backup {
                 + "." + EXT;
     }
 
+    // ---------- 自动备份 ----------
+
+    /** 自动备份的最小间隔（小时） */
+    public static final int AUTO_MIN_HOURS = 2;
+    /** 自动备份的默认间隔（小时） */
+    public static final int AUTO_DEFAULT_HOURS = 24;
+
+    private static final String K_AUTO_ON = "auto_backup_on";
+    private static final String K_AUTO_HOURS = "auto_backup_hours";
+    private static final String K_AUTO_LAST = "auto_backup_last";
+
+    public static boolean autoOn(Context c) {
+        return sp(c).getBoolean(K_AUTO_ON, false);
+    }
+
+    /** 间隔小时数，收敛到 [AUTO_MIN_HOURS, ∞) */
+    public static int autoHours(Context c) {
+        int h = sp(c).getInt(K_AUTO_HOURS, AUTO_DEFAULT_HOURS);
+        return h < AUTO_MIN_HOURS ? AUTO_MIN_HOURS : h;
+    }
+
+    public static void setAuto(Context c, boolean on, int hours) {
+        if (hours < AUTO_MIN_HOURS) hours = AUTO_MIN_HOURS;
+        sp(c).edit()
+                .putBoolean(K_AUTO_ON, on)
+                .putInt(K_AUTO_HOURS, hours)
+                .apply();
+    }
+
+    /** 上次自动备份的时间戳（0 = 还没备份过） */
+    public static long autoLast(Context c) {
+        return sp(c).getLong(K_AUTO_LAST, 0L);
+    }
+
+    /**
+     * 该不该自动备份了。到点就把内容写进**本机备份记录**
+     * （不弹文件选择器 —— 后台没人能点它）。
+     *
+     * @return 真的备份了返回 true
+     */
+    public static boolean maybeAutoBackup(Context c) {
+        try {
+            if (!autoOn(c)) return false;
+            long gap = autoHours(c) * 3600000L;
+            long last = autoLast(c);
+            long now = System.currentTimeMillis();
+            if (last > 0 && now - last < gap) return false;
+
+            String json = exportJson(c);
+            if (json.length() == 0) return false;
+            /* uri 传 null：自动备份只落本机，用户导出到哪是他自己的事 */
+            String name = BackupStore.save(c, json, null, "自动备份");
+            if (name == null) return false;
+            sp(c).edit().putLong(K_AUTO_LAST, now).apply();
+            return true;
+        } catch (Throwable t) {
+            BalanceFetcher.diag(c, "自动备份失败：" + t);
+            return false;
+        }
+    }
+
     private static SharedPreferences sp(Context c) {
         return c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
     }

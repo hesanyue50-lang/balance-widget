@@ -37,6 +37,31 @@ public final class UiInsets {
             }
         } catch (Throwable ignored) { }
 
+        // ② 系统栏本身透明 + 图标配色跟着应用主题走
+        try {
+            android.view.Window w = act.getWindow();
+            /* 内容伸到状态栏下面了，状态栏自己就不能再有底色，
+               否则顶部会有一条突兀的色带 */
+            w.setStatusBarColor(android.graphics.Color.TRANSPARENT);
+            w.setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+
+            View decor = w.getDecorView();
+            /* 应用是浅色底，图标/文字要深色才看得见。
+               用 WindowInsetsController（API 30+）或旧的 systemUiVisibility 两套写法。 */
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.view.WindowInsetsController c = w.getInsetsController();
+                if (c != null) {
+                    c.setSystemBarsAppearance(
+                            android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+                            android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+                    /* 导航栏保持浅色图标：应用底部是深色卡片，深色图标会看不见 */
+                }
+            } else {
+                decor.setSystemUiVisibility(decor.getSystemUiVisibility()
+                        | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+            }
+        } catch (Throwable ignored) { }
+
         final View header = act.findViewById(headerId);
         if (header == null) return;
         final View[] scrolls = new View[scrollIds.length];

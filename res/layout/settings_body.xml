@@ -7,9 +7,10 @@
             android:paddingBottom="28dp">
 
             <!-- ========== 刷新频率 ========== -->
-            <TextView style="@style/SectionTitle" android:text="@string/sec_refresh" />
+            <TextView style="@style/SectionTitle" android:tag="sec_title"
+                android:text="@string/sec_refresh" />
 
-            <LinearLayout style="@style/SectionCard">
+            <LinearLayout style="@style/SectionCard" android:tag="sec_card">
 
                 <LinearLayout style="@style/FieldRow">
                     <TextView style="@style/FieldLabel"
@@ -164,15 +165,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:background="@drawable/card_bg"
+                        android:background="@drawable/input_bg"
                         android:hint="输入平台名或 Key 关键字，按回车过滤…"
                         android:inputType="text"
                         android:imeOptions="actionSearch"
                         android:maxLines="1"
-                        android:paddingLeft="14dp"
-                        android:paddingRight="14dp"
-                        android:paddingTop="10dp"
-                        android:paddingBottom="10dp"
+                        android:paddingLeft="16dp"
+                        android:paddingRight="16dp"
+                        android:paddingTop="12dp"
+                        android:paddingBottom="12dp"
                         android:textColor="@color/tx"
                         android:textColorHint="@color/tx3"
                         android:textSize="13sp"
@@ -283,13 +284,116 @@
                     android:orientation="vertical" />
             </LinearLayout>
 
-            
-            <!-- ========== 页面管理 ========== -->
+            <!-- ========== 备份与恢复 ========== -->
+            <TextView style="@style/SectionTitle" android:tag="sec_title"
+                android:text="备份与恢复" />
+
+            <LinearLayout style="@style/SectionCard" android:tag="sec_card">
+
+                <TextView
+                    android:id="@+id/btn_backup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:text="💾 备份到文件"
+                    android:textColor="@color/tx"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/btn_restore"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:text="♻️ 从备份文件恢复"
+                    android:textColor="@color/tx"
+                    android:textSize="13sp" />
+
+                <TextView style="@style/FieldHint"
+                    android:layout_marginTop="10dp"
+                    android:text="备份包含 API 密钥、VPN 订阅、设置与全部历史曲线，存成一个文件放到你选的位置（密钥是加密保存的，换设备可能解不开）。备份的同时会在本机也留一份，下面可以直接恢复或删除。" />
+
+                <!-- ===== 自动备份 ===== -->
+                <LinearLayout style="@style/FieldRow" android:layout_marginTop="22dp">
+                    <TextView style="@style/FieldLabel" android:text="自动备份" />
+                    <Switch
+                        android:id="@+id/sw_auto_backup"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/row_auto_hours"
+                    style="@style/FieldRow"
+                    android:layout_marginTop="14dp">
+                    <TextView style="@style/FieldLabel" android:text="备份间隔" />
+                    <EditText
+                        android:id="@+id/e_auto_hours"
+                        style="@style/FieldInput"
+                        android:inputType="number"
+                        android:hint="24" />
+                    <TextView style="@style/FieldUnit" android:text="小时" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/hint_auto_backup"
+                    style="@style/FieldHint"
+                    android:layout_marginTop="8dp"
+                    android:text="最短 2 小时。开启后按间隔自动备份到本机，不会弹出文件选择框，所以在外面随时能恢复。" />
+
+                <!-- 本机备份记录（下面这块由 SettingsBinder.renderBackups 动态填充） -->
+                <TextView
+                    android:id="@+id/backup_local_head"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="本机备份记录"
+                    android:textColor="@color/tx2"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/backup_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/backup_empty"
+                    style="@style/FieldHint"
+                    android:layout_marginTop="6dp"
+                    android:text="还没有本机备份。点上面的「备份到文件」就会自动留一份。" />
+
+                <TextView
+                    android:id="@+id/btn_backup_clear"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:paddingTop="11dp"
+                    android:paddingBottom="11dp"
+                    android:text="🗑 清空全部本机备份"
+                    android:textColor="@color/tx2"
+                    android:textSize="13sp" />
+
+            </LinearLayout>
+
+            <!-- ========== 操作 ==========（「保存并刷新」已移除：修改即保存） -->
+
+            <!-- ========== 其它（未分类的入口统一放底部）========== -->
+
             <TextView
                 android:id="@+id/btn_pages"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="26dp"
                 android:background="@drawable/mini_btn_border"
                 android:gravity="center"
                 android:paddingTop="13dp"
@@ -297,8 +401,6 @@
                 android:text="📑 页面管理（主页面 / 隐藏 / 排序）"
                 android:textColor="@color/tx"
                 android:textSize="13sp" />
-
-            <!-- ========== 操作 ==========（「保存并刷新」已移除：修改即保存） -->
 
             <TextView
                 android:id="@+id/btn_help"
@@ -325,36 +427,6 @@
                 android:text="@string/cfg_pin"
                 android:textColor="@color/tx"
                 android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/btn_backup"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="@drawable/mini_btn_border"
-                android:gravity="center"
-                android:paddingTop="12dp"
-                android:paddingBottom="12dp"
-                android:text="💾 备份到文件"
-                android:textColor="@color/tx"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/btn_restore"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/mini_btn_border"
-                android:gravity="center"
-                android:paddingTop="12dp"
-                android:paddingBottom="12dp"
-                android:text="♻️ 从备份文件恢复"
-                android:textColor="@color/tx"
-                android:textSize="13sp" />
-
-            <TextView style="@style/FieldHint"
-                android:layout_marginTop="8dp"
-                android:text="备份包含 API 密钥、VPN 订阅、设置与全部历史曲线，存成一个文件放到你选的位置。以后直接点开这个文件就能恢复（密钥是加密保存的，换设备可能解不开）。" />
 
             <TextView style="@style/FieldHint"
                 android:layout_marginTop="16dp"

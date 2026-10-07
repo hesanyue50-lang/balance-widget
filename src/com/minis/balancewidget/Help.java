@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.Typeface;
 import android.util.TypedValue;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -31,6 +32,7 @@ public final class Help {
         { "按住图表左右拖动", "图表上方浮出该时间点各平台的余额。图表区不参与左右翻页（已设独立手势），可以放心拖动查看；松手即收起" },
         { "点日期范围「近 N 天 ▽」", "切换 5 / 7 / 14 / 30 / 90 / 180 日" },
         { "长按设置里的密钥条目", "查看 / 复制这条密钥（需先过查看密码）" },
+        { "点设置里的「展开 ▾」", "「刷新频率」「API 密钥与平台」「隐藏 API」「备份与恢复」这些栏目都能折叠。展开/收起的状态会记住，下次进设置还是上次的样子" },
         { "点空白处", "收起键盘（设置页里输入到一半想收手时用）" },
     };
 
@@ -58,6 +60,17 @@ public final class Help {
         { "两项都要给", "「自启动」和「电池优化白名单」是**两套独立机制**，缺一样后台都不正常：前者决定闹钟能不能唤醒，后者决定唤醒准不准时" },
     };
 
+    /** 备份与恢复：{标题, 说明} */
+    private static final String[][] BACKUP = {
+        { "备份到文件", "把 API 密钥、VPN 订阅、全部设置和历史曲线打包成一个 .apibak 文件，存到你选的位置（下载目录、网盘同步目录都行）。内容多也不大，通常几十 KB。建议定期做一次" },
+        { "本机备份记录", "每次备份都会在应用内也留一份，列表里能看到时间、大小，以及它导出成的那个文件名。点「恢复」直接还原，点「删除」清掉这条" },
+        { "从备份文件恢复", "在设置 → 备份与恢复 → 「从备份文件恢复」里挑一个 .apibak。选择器会自动落在你上次备份的文件夹；也可以直接在文件管理器里点开备份文件，应用会自动接手" },
+        { "换设备 / 重装后恢复", "把 .apibak 拷到新设备再恢复即可。注意：密钥是用本机设备密钥加密的，换设备可能解不开（会提示恢复失败）；同一台设备上恢复没问题" },
+        { "恢复会覆盖当前数据", "恢复是用备份整体替换现有数据 —— 密钥、订阅、设置、历史曲线全部被覆盖，且不可撤销，所以操作前会二次确认" },
+        { "删除备份时文件删不掉？", "系统通常不允许应用直接删你选中的文件。这时会先删掉本机记录，再弹窗告诉你是哪个文件，并提供「去文件夹」按钮带你过去手动删" },
+        { "备份文件被我手动删了？", "应用内那条记录不会自动消失，看到后手动点「删除」清掉即可；如果文件已经打不开，列表里会标注出来，不影响其他记录" },
+    };
+
     /** 常见问题：{问题, 回答} */
     private static final String[][] FAQ = {
         { "统计页没有曲线？", "曲线靠每 6 小时一条的余额快照累积。刚加的平台会先打一个当前余额的点，之后逐渐连成线。被关掉的平台收在「已隐藏的 API」里。" },
@@ -71,8 +84,18 @@ public final class Help {
         { "后台会不会很耗电？", "后台每次唤醒只做一件事：拉一次余额、判断是否低于预警线。可以在「设置 → 刷新频率」开「省电模式」把后台间隔拉到 1 小时以上，并跳过汇率等非必要请求。余额变化本身很慢，拉长间隔对预警影响很小。" },
         { "图表上看不到某天的具体数值？", "在图表上按住并左右拖动，顶部会浮出该时间点各平台的余额；松手收起。这个区域已和应用翻页手势分开，拖动不会误翻页。" },
         { "余额对不上？", "同一平台多个密钥取最大值（同一账户余额相同，避免重复累计）。充值记录由余额突增自动推断，不准时可用统计页的「修正充值」手动改。" },
-        { "数据存在哪？", "密钥与订阅都用设备级密钥加密后存在应用私有目录，历史账本在本地 SQLite。换设备或清除应用数据后需要重新填写。" },
+        { "数据存在哪？", "密钥与订阅都用设备级密钥加密后存在应用私有目录，历史账本在本地 SQLite。换设备或清除应用数据后需要重新填写。所有数据都在本机，不上传任何服务器 —— 也正因为如此，卸载或清除数据前请先做一次备份（设置 → 备份与恢复）" },
     };
+
+    /** 章节标题（顺序即显示顺序） */
+    private static final String[] SECTIONS = {
+        "快捷手势", "网络加速", "后台与省电", "备份与恢复", "常见问题",
+    };
+
+    /** 各章节内容，与 {@link #SECTIONS} 一一对应 */
+    private static String[][][] contents() {
+        return new String[][][] { GESTURES, VPN, POWER, BACKUP, FAQ };
+    }
 
     public static void show(Activity a) {
         if (a == null) return;
@@ -81,28 +104,38 @@ public final class Help {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(a, 20), dp(a, 12), dp(a, 20), dp(a, 12));
 
-        box.addView(section(a, "快捷手势"));
-        for (int i = 0; i < GESTURES.length; i++) {
-            box.addView(item(a, GESTURES[i][0], GESTURES[i][1]));
-        }
+        final String[][][] data = contents();
 
-        box.addView(section(a, "网络加速"));
-        for (int i = 0; i < VPN.length; i++) {
-            box.addView(item(a, VPN[i][0], VPN[i][1]));
-        }
+        /* 每个章节 = 「可点的标题」+「跟着标题就地展开的内容」。
+           不做跳转目录 —— 帮助页本来就是"查一条看一条"，
+           跳到下面还得自己往回翻，反而不如就地展开。 */
+        for (int i = 0; i < SECTIONS.length; i++) {
+            final String title = SECTIONS[i];
 
-        box.addView(section(a, "后台与省电"));
-        for (int i = 0; i < POWER.length; i++) {
-            box.addView(item(a, POWER[i][0], POWER[i][1]));
-        }
+            final LinearLayout body = new LinearLayout(a);
+            body.setOrientation(LinearLayout.VERTICAL);
+            for (int j = 0; j < data[i].length; j++) {
+                body.addView(item(a, data[i][j][0], data[i][j][1]));
+            }
+            body.setVisibility(View.GONE);      // 默认全部收起
 
-        box.addView(section(a, "常见问题"));
-        for (int i = 0; i < FAQ.length; i++) {
-            box.addView(item(a, FAQ[i][0], FAQ[i][1]));
+            final TextView head = section(a, title + "    ▸");
+            head.setPadding(0, dp(a, 16), 0, dp(a, 10));
+            head.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    boolean open = body.getVisibility() != View.VISIBLE;
+                    head.setText(title + (open ? "    ▾" : "    ▸"));
+                    if (open) Anim.expand(body);
+                    else Anim.collapse(body);
+                }
+            });
+
+            box.addView(head);
+            box.addView(body);
         }
 
         TextView foot = new TextView(a);
-        foot.setText("版本 " + version(a));
+        foot.setText("版本 " + version(a) + "\n点标题可展开或收起");
         foot.setTextSize(11f);
         foot.setTextColor(0xFFA2ABB9);
         foot.setPadding(0, dp(a, 16), 0, 0);

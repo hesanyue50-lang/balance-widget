@@ -627,11 +627,14 @@ public class VpnBinder {
         TextView hint = (TextView) root.findViewById(R.id.node_hint);
         TextView gp = (TextView) root.findViewById(R.id.group_pick);
         if (box == null) return;
+        /* 只在列表本来是空的时候播入场动画 —— 切节点、测速都会重建这个列表，
+           每次都播的话界面会一直闪 */
+        final boolean firstFill = box.getChildCount() == 0;
         box.removeAllViews();
 
         if (!Clash.isRunning()) {
             if (hint != null) hint.setText("加速启动后这里会列出订阅里的节点。");
-            if (gp != null) gp.setVisibility(View.GONE);
+            if (gp != null) Anim.fadeOut(gp);
             return;
         }
         if (groups.isEmpty()) {
@@ -670,14 +673,14 @@ public class VpnBinder {
                 }
             }).start();
             if (hint != null) hint.setText("正在读取节点…");
-            if (gp != null) gp.setVisibility(View.GONE);
+            if (gp != null) Anim.fadeOut(gp);
             return;
         }
 
         if (groupIdx >= groups.size()) groupIdx = 0;
         final Clash.Group g = groups.get(groupIdx);
         if (gp != null) {
-            gp.setVisibility(View.VISIBLE);
+            Anim.fade(gp);
             gp.setText("策略组：" + g.name + "   (" + g.nodes.size() + " 个)  ▾");
         }
         if (hint != null) hint.setText("点节点即切换；点右侧延迟可单独重测。");
@@ -725,6 +728,7 @@ public class VpnBinder {
                 public void onClick(View v) { switchTo(idx, n.name); }
             });
             box.addView(row);
+            if (firstFill) Anim.stagger(row, box.getChildCount() - 1);
 
             View line = new View(act);
             line.setLayoutParams(new LinearLayout.LayoutParams(

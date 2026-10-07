@@ -48,6 +48,7 @@ public final class PageManager {
         self[0] = new Runnable() {
             public void run() {
                 box.removeAllViews();
+                box.setAlpha(0f);      // 配合末尾的 Anim.fade，重建时才有"浮现"的过程
 
                 TextView tip = new TextView(act);
                 tip.setText("点「设为主页」= 打开应用直接进这一页，并自动排到最左。\n"
@@ -165,6 +166,9 @@ public final class PageManager {
                     line.setBackgroundColor(0x148A94A3);
                     box.addView(line);
                 }
+                /* 排完序整体淡入一次 —— 不然点了 ▲▼ 界面直接跳到新顺序，
+                   眼睛跟不上，看不出"哪两行换了位置" */
+                Anim.fade(box);
             }
         };
         self[0].run();
