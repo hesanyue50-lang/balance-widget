@@ -555,6 +555,8 @@ public class BalanceFetcher {
         public String gatewayUrl = "";
         /** 剩余百分比（-1 = 不适用）。积分有"总量"概念才画得出来，钱的平台用不上 */
         public int pctLeft = -1;
+        /** 该平台有"总额度"分母（积分制），数据未到时 UI 可显示占位而不是留空。 */
+        public boolean hasQuota = false;
         /** 覆盖单位显示（网关是"积分"不是货币，不能套 ¥ 符号） */
         public String unitOverride = "";
         /** 金额是折算估算值（积分 × 折算率），界面标「估」 */
@@ -1911,14 +1913,17 @@ public class BalanceFetcher {
                 if (pct < 0) pct = 0;
             }
             it.pctLeft = pct;
+            /* 标一下"这个平台是有额度分母的"，供 UI 在数据未到时显示占位。
+               不靠 amount 是否为空判断 —— 那太间接，别的平台也可能为空。 */
+            it.hasQuota = true;
             /* 折算金额恒定显示 —— 卡片上写着 2442 积分，用户自然想知道值多少钱，
                这是"信息展示"，跟"要不要计入总资产"是两码事。
                开关只管 it.cny（汇总口径），不管显示。 */
             double disc = StatsOpt.rate(ctx, "workbuddy");   // 元/积分
             it.unitOverride = "积分" + tail;
-            /* 放 it.conv 而不是拼进 rows —— rows 在卡片最底部，
-               而折算值应该紧跟百分比显示。money() 自带 ¥，别再手写一次，
-               否则会显示成 "≈ ¥¥48.84"。 */
+            /* 放 it.conv —— 渲染层会按 isAssetRow 把它送到 p_conv2（百分比下方）。
+               顺序读下来是「2442 积分 → 剩余 62% → ≈¥48.84」：先给账户里的真数，
+               再看用了多少，最后才是值多少钱。money() 自带 ¥，别再手写一次。 */
             it.conv = "≈ " + money(total * disc, false)
                     + "（1 积分 ≈ " + fmtRate(disc) + " 元）";
             if (StatsOpt.inStats(ctx, "workbuddy")) {

@@ -1937,7 +1937,23 @@ public class MainActivity extends Activity {
                         }
                     });
                 } else {
-                    pctBox.setVisibility(View.GONE);
+                    /* 有额度分母但数据还没回来 → 显示"统计中"而不是整块消失。
+                       卡片先缺一块、过几秒再长出来，用户会以为坏了。
+                       没有额度概念的平台（纯余额、订阅）照旧隐藏，不给多余占位。 */
+                    if (it.hasQuota) {
+                        pctBox.setVisibility(View.VISIBLE);
+                        pctTxt.setText("额度统计中…");
+                        final View bar = pctBar;
+                        bar.post(new Runnable() {
+                            public void run() {
+                                android.view.ViewGroup.LayoutParams lp = bar.getLayoutParams();
+                                lp.width = 0;
+                                bar.setLayoutParams(lp);
+                            }
+                        });
+                    } else {
+                        pctBox.setVisibility(View.GONE);
+                    }
                 }
             } else {
                 amount.setText("—");
