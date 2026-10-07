@@ -1784,8 +1784,10 @@ public class BalanceFetcher {
         }
         it.bal = bal;
 
-        /* 只有「余额制」才算资产进总额；订阅余量 / 后付费账单 / 免费额度都不是钱 */
-        boolean isAsset = "balance".equals(it.kind);
+        /* 余额制的才算资产；订阅余量 / 后付费账单 / 免费额度都不是钱。
+           注意：这只决定"折不折进总资产"，不决定卡片上要不要显示折算金额 ——
+           只要是美元余额，卡片就值得把人民币估算显示出来（用户看得懂 USD 更好）。 */
+        boolean isBalanceKind = "balance".equals(it.kind);
 
         if (c.suffix != null && c.suffix.length() > 0) {
             /* 订阅类：显示成「62%」「12/20 次」这种，不做货币格式化 */
@@ -1793,9 +1795,9 @@ public class BalanceFetcher {
             it.conv = "";
         } else {
             it.amount = money(bal, usd);
-            it.conv = (usd && isAsset) ? "≈¥" + String.format("%.2f", bal * rate) : "";
+            it.conv = usd ? "≈¥" + String.format("%.2f", bal * rate) : "";
         }
-        it.cny = isAsset ? (usd ? bal * rate : bal) : 0;
+        it.cny = isBalanceKind ? (usd ? bal * rate : bal) : 0;
         it.rows = ("balance".equals(it.kind) ? "余额  " : "数值  ") + money(bal, usd);
     }
 
@@ -1909,19 +1911,21 @@ public class BalanceFetcher {
                 if (pct < 0) pct = 0;
             }
             it.pctLeft = pct;
+            /* 折算金额恒定显示 —— 卡片上写着 2442 积分，用户自然想知道值多少钱，
+               这是"信息展示"，跟"要不要计入总资产"是两码事。
+               开关只管 it.cny（汇总口径），不管显示。 */
+            double disc = StatsOpt.rate(ctx, "workbuddy");   // 元/积分
+            it.unitOverride = "积分" + tail;
+            /* 放 it.conv 而不是拼进 rows —— rows 在卡片最底部，
+               而折算值应该紧跟百分比显示。money() 自带 ¥，别再手写一次，
+               否则会显示成 "≈ ¥¥48.84"。 */
+            it.conv = "≈ " + money(total * disc, false)
+                    + "（1 积分 ≈ " + fmtRate(disc) + " 元）";
             if (StatsOpt.inStats(ctx, "workbuddy")) {
-                double disc = StatsOpt.rate(ctx, "workbuddy");   // 元/积分
                 it.cny = total * disc;
                 it.estimated = true;
-                it.unitOverride = "积分" + tail;
-                /* 放 it.conv 而不是拼进 rows —— rows 在卡片最底部，
-                   而折算值应该紧跟百分比显示。money() 自带 ¥，别再手写一次，
-                   否则会显示成 "≈ ¥¥48.84"。 */
-                it.conv = "≈ " + money(total * disc, false)
-                        + "（1 积分 ≈ " + fmtRate(disc) + " 元）";
             } else {
                 it.cny = 0;   // 不参与汇总，封死任何累加路径
-                it.unitOverride = "积分" + tail;
             }
             it.rows = sb.toString().trim();
             return;
