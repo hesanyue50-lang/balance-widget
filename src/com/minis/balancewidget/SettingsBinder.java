@@ -801,6 +801,30 @@ public class SettingsBinder {
            写死一个反而会让人以为"填过了"而忽略。 */
         final EditText[] eBase = new EditText[1];
         if ("workbuddy".equals(platform)) {
+            /* 这个界面填的是「别人开源的网关项目」的地址，不是某个官方平台。
+               说明放最上面 —— 先讲清楚"你在接什么"，再让人填地址，
+               否则一进来只看到"网关地址"四个字，不知道背后是什么东西。 */
+            TextView src1 = new TextView(act);
+            src1.setText("本功能对接的是开源网关项目：");
+            src1.setTextColor(color(R.color.tx2));
+            src1.setTextSize(12);
+            src1.setPadding(0, dp(4), 0, 0);
+            panel.addView(src1);
+
+            TextView lnk = new TextView(act);
+            lnk.setText(GATEWAY_REPO);
+            lnk.setTextColor(0xFF3D6FD6);
+            lnk.setTextSize(12);
+            lnk.setPaintFlags(lnk.getPaintFlags()
+                    | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
+            lnk.setPadding(0, dp(2), 0, 0);
+            /* 点链接走系统浏览器 —— 用户可能要先看 README、拉代码再回来填地址，
+               在应用内开个 WebView 反而看不全、也存不了书签。 */
+            lnk.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { openRepo(act, GATEWAY_REPO); }
+            });
+            panel.addView(lnk);
+
             TextView lw = new TextView(act);
             lw.setText("网关地址（必填）");
             lw.setTextColor(color(R.color.tx2));
@@ -1445,6 +1469,18 @@ public class SettingsBinder {
             Intent it = new Intent(act, BalanceWidgetProvider.class);
             it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             act.sendBroadcast(it);
+        } catch (Throwable ignored) { }
+    }
+
+    /** 对接的开源网关项目地址。填错一个字用户就找不到源头，所以集中成常量。 */
+    static final String GATEWAY_REPO =
+            "https://github.com/linguo2625469/workbuddy2api-panel";
+
+    /** 用系统浏览器打开链接。没装浏览器/被拦时静默失败，不打断填表流程。 */
+    static void openRepo(android.content.Context ctx, String url) {
+        try {
+            ctx.startActivity(new Intent(Intent.ACTION_VIEW,
+                    android.net.Uri.parse(url)));
         } catch (Throwable ignored) { }
     }
 
