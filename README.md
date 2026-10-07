@@ -175,12 +175,13 @@ MiMo 开放平台**没有可用的余额查询接口**——网关 `api.xiaomimi
 
 遇到问题、想加平台、有想法，都欢迎找我。下面几个渠道我手机上都有推送：
 
-| 腾讯频道 ⭐ | 酷安 | 爱发电 |
-|:---:|:---:|:---:|
-| <img src="docs/contact-tencent.jpg" width="180"> | <img src="docs/contact-coolapk.png" width="180"> | <img src="docs/contact-afdian.jpg" width="180"> |
-| **反馈最快** · 频道号 `pd95669245` | 扫一扫，来酷安找我 | 请我喝杯咖啡 |
+| QQ 群 ⭐ | 腾讯频道 | 酷安 | 爱发电 |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/contact-qqgroup.jpg" width="150"> | <img src="docs/contact-tencent.jpg" width="150"> | <img src="docs/contact-coolapk.png" width="150"> | <img src="docs/contact-afdian.jpg" width="150"> |
+| **AI开发交流群**<br>群号 `1108314670` | 频道号 `pd95669245` | 扫一扫，来酷安找我 | 请我喝杯咖啡 |
 
-- 📣 **腾讯频道** —— 我手机上第一时间能看到，版本更新也在这里发。**推荐优先用这个。**
+- 💬 **QQ 群** —— 有问题直接在群里问，**推荐优先用这个**：发截图方便，也能看到别人踩过的坑
+- 📣 **腾讯频道** —— 版本更新会在这里发，想第一时间知道更新可以关注
 - 🖼 **酷安** —— 适合贴截图、聊得长一点的讨论
 - 🐛 **GitHub [Issue](https://github.com/hesanyue50-lang/balance-widget/issues)** —— 正式的 bug 和功能需求建议开一条：能留档，别人也搜得到
 - ☕️ **爱发电** —— 定制需求私信，或者单纯请我喝杯咖啡
