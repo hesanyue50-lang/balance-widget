@@ -158,13 +158,26 @@ public class BalanceFetcher {
             for (int i = 0; i < raw.size(); i++) {
                 Item it = raw.get(i);
                 if (it.noData) continue;                    // 未登录之类：没数就是没数，别写 0
-                if (it.ok && it.bal >= 0 && "balance".equals(it.kind)) {
-                    /* 写入前先清掉历史假点：否则下一个点会以假值为基准算差值，
-                       把 23.9 误判成"又充值了 9.38 元"。 */
-                    try { lg.dropCacheArtifacts(ctx, it.id); } catch (Throwable ig) { }
-                    lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag));
-                    who.append(it.id).append(' ');
-                    n++;
+                if (it.ok && it.bal >= 0) {
+                    /* 钱的平台照记；积分类也要记账 —— 否则"用量统计"里永远没有它的历史，
+                       打开统计开关后曲线还是空的。存的是**原始积分**，不是折后价：
+                       折算率用户可以随时改，存折后价会让历史数据跟着变，越查越乱。
+                       折算是画图时现算的（见 liveBalanceOf / buildStats）。 */
+                    boolean isMoney = "balance".equals(it.kind);
+                    /* 记账是为了画图 —— 所以看 inChart，不是 inStats。
+                       只算钱不画图（inStats 开、inChart 关）时不需要攒历史点。 */
+                    boolean isAsset = !isMoney && StatsOpt.inChart(ctx, it.platform);
+                    if (isMoney || isAsset) {
+                        /* 写入前先清掉历史假点：否则下一个点会以假值为基准算差值，
+                           把 23.9 误判成"又充值了 9.38 元"。 */
+                        try { lg.dropCacheArtifacts(ctx, it.id); } catch (Throwable ig) { }
+                        /* 积分类的变动刻度是 1 分，用"元"那套 0.005 阈值会把
+                           每次刷新都记成一个点，图上全是没意义的密集点。 */
+                        double eps = isMoney ? 0.005 : 0.5;
+                        lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag), eps);
+                        who.append(it.id).append(' ');
+                        n++;
+                    }
                 }
             }
             /* 顺手清理超期数据（默认留 90 天） */
@@ -269,6 +282,14 @@ public class BalanceFetcher {
         + "|data.available|available|data.money|money|data.balance_amount";
 
     public static final Preset[] PRESETS = {
+        /* WorkBuddy 网关：本机自建服务（CodeBuddy 账号 → OpenAI 兼容网关）。
+           特点：①地址由用户自己填（可能换端口 / 局域网别机）②余额接口只收 POST
+           ③服务没跑时查不到，需要提示 + 一键拉起。
+           url 留空 —— 真实地址从 Key.baseUrl 来，走专门分支。 */
+        /* kind 用 asset：积分不是钱，不参与「余额统计」与消耗计算（见 countsInTotal） */
+        new Preset("workbuddy", "WorkBuddy 网关", "", "", "积分", "asset",
+                   "自建网关地址（如 http://127.0.0.1:7863）+ 网关 api_key",
+                   "", ""),
         new Preset("deepseek", "DeepSeek", "", "", "CNY", "balance",
                    "platform.deepseek.com → API Keys",
                    "https://platform.deepseek.com/usage",
@@ -527,6 +548,18 @@ public class BalanceFetcher {
         /** 走代理访问 */
         public boolean viaProxy;
 
+        /* ---- WorkBuddy 网关专用 ---- */
+        /** 网关没在运行（或地址没填）—— 界面据此显示「拉起网关」按钮，而不是当成查询失败 */
+        public boolean gatewayDown;
+        /** 该条目的网关地址，拉起时要用 */
+        public String gatewayUrl = "";
+        /** 剩余百分比（-1 = 不适用）。积分有"总量"概念才画得出来，钱的平台用不上 */
+        public int pctLeft = -1;
+        /** 覆盖单位显示（网关是"积分"不是货币，不能套 ¥ 符号） */
+        public String unitOverride = "";
+        /** 金额是折算估算值（积分 × 折算率），界面标「估」 */
+        public boolean estimated = false;
+
         /**
          * 字段级副本。
          *
@@ -540,6 +573,8 @@ public class BalanceFetcher {
             o.id = id; o.platform = platform; o.label = label; o.tag = tag;
             o.kind = kind; o.amount = amount; o.conv = conv; o.rows = rows;
             o.error = error; o.cny = cny; o.bal = bal; o.threshold = threshold;
+            o.gatewayDown = gatewayDown; o.gatewayUrl = gatewayUrl;
+            o.unitOverride = unitOverride;
             o.alertKey = alertKey; o.low = low; o.ok = ok; o.subEndMs = subEndMs;
             o.mergeCount = mergeCount; o.usageTokens = usageTokens;
             o.debug = debug; o.noData = noData; o.foreign = foreign;
@@ -563,6 +598,8 @@ public class BalanceFetcher {
         /** 合并前的逐密钥原始条目（供账本按密钥记录快照用） */
         public java.util.List<Item> rawItems;
         public double totalCny = 0;
+        /** 总额里含有折算来的估值（积分 × 折算率）→ 界面要给总额标 ≈ */
+        public boolean totalEstimated = false;
         public int configured = 0;
         public int failed = 0;
         public List<Item> items = new ArrayList<Item>();
@@ -1019,18 +1056,125 @@ public class BalanceFetcher {
         } catch (Throwable ignored) { }
     }
 
+    /* ==================== WorkBuddy 网关支持 ==================== */
+
+    /**
+     * 该条目是否计入「总额」。
+     *
+     * 总额是人民币汇总，只应包含真正的钱。积分性质跟钱不同（1 积分 ≠ 1 元），
+     * 混进去会让总额变成一个看不懂的数字 —— 所以默认排除。
+     *
+     * 但"要不要算"最终由用户在卡片菜单里决定（开关存在 StatsOpt），
+     * 开了统计就按折算率折成人民币参与汇总，界面上会标「估」。
+     */
+    public static boolean countsInTotal(Context ctx, Item it) {
+        if (it == null) return false;
+        if ("balance".equals(it.kind)) return true;   // 本来就是钱，天然入账
+        return StatsOpt.inStats(ctx, it.platform);    // 积分类看用户开关
+    }
+
+    /**
+     * 探测网关是否在运行。
+     *
+     * 用 /healthz 而不是余额接口，理由：①它不需要 api_key，密钥没填也能先判断进程在不在
+     * ②它极轻（几乎不查上游账号），适合"每次刷新都探一下"。
+     * 任何异常都当"没在跑"处理 —— 探活失败本来就不该区分是拒绝连接还是超时。
+     */
+    public static boolean probeGateway(String base, int timeoutMs) {
+        try {
+            String raw = getViaHost(normalizeBase(base) + "/healthz", null, null, timeoutMs, "GET", null);
+            return raw != null && raw.indexOf("\"service\"") >= 0;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /** 服务地址规范化：补协议、去尾部斜杠。用户常只填 127.0.0.1:7863 */
+    public static String normalizeBase(String base) {
+        if (base == null) return "";
+        String s = base.trim();
+        if (s.length() == 0) return "";
+        if (!s.startsWith("http://") && !s.startsWith("https://")) s = "http://" + s;
+        while (s.endsWith("/")) s = s.substring(0, s.length() - 1);
+        return s;
+    }
+
+    /** POST 一小段 JSON 并取回响应文本（网关的余额接口只收 POST） */
+    private static String postJson(String url, String bearer, String body, int timeoutMs) throws Exception {
+        return getViaHost(url, bearer, null, timeoutMs, "POST",
+                body == null || body.length() == 0 ? "{}" : body);
+    }
+
+    /** 积分是整数，别显示成 2464.0 */
+    /** 折算率显示：0.02 别写成 0.0200000001 */
+    private static String fmtRate(double v) {
+        String s = String.format(java.util.Locale.US, "%.4f", v);
+        while (s.endsWith("0") && s.indexOf('.') < s.length() - 2) {
+            s = s.substring(0, s.length() - 1);
+        }
+        return s;
+    }
+
+    /** 积分整数显示：别显示成 2464.0 */
+    private static String fmtInt(double v) {
+        if (v == Math.floor(v) && !Double.isInfinite(v)) return String.valueOf((long) v);
+        return String.format("%.1f", v);
+    }
+
+    /**
+     * 到期时间 → MM-dd（非今年补年份）。
+     *
+     * 网关返回的是 ISO 8601 字符串（2026-10-31T23:59:59+08:00），不是时间戳数字。
+     * 直接 substring 取 yyyy-MM-dd 就行 —— 前面固定 10 个字符，不用引 SimpleDateFormat
+     * （后者还得处理时区，反而更容易出错）。
+     */
+    private static String fmtExpiry(String iso) {
+        if (iso == null) return "";
+        String s = iso.trim();
+        if (s.length() < 10) return s;
+        String date = s.substring(0, 10);                    // yyyy-MM-dd
+        if (date.charAt(4) != '-' || date.charAt(7) != '-') return s;
+        String y = date.substring(0, 4);
+        String md = date.substring(5);                       // MM-dd
+        String nowY = new java.text.SimpleDateFormat("yyyy").format(new java.util.Date());
+        return nowY.equals(y) ? md : y + "-" + md;
+    }
+
+    /* ==================== 通用解析 ==================== */
+
     /** 解析不出任何地址时的兜底：交回系统默认行为。 */
     private static String getViaHost(String url, String bearer, String cookie, int timeoutMs) throws Exception {
+        return getViaHost(url, bearer, cookie, timeoutMs, "GET", null);
+    }
+
+    /**
+     * 兜底路径（可指定方法与请求体）。
+     *
+     * 为什么要 POST：WorkBuddy 网关的余额接口 /panel/api/balance_all 只接受 POST
+     * （GET 返回 405）。这是本工具里唯一一个非 GET 的平台，所以单开一个参数，
+     * 不改动既有调用点的行为。
+     */
+    private static String getViaHost(String url, String bearer, String cookie, int timeoutMs,
+                                     String method, String body) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
-        c.setRequestMethod("GET");
+        c.setRequestMethod(method == null ? "GET" : method);
         String _acc2 = SUB_ACCEPT.get();
         c.setRequestProperty("Accept", _acc2 == null ? "application/json" : _acc2);
         String _ua2 = SUB_UA.get();
         c.setRequestProperty("User-Agent", _ua2 == null ? "MinisWidget/1.2" : _ua2);
         if (bearer != null) c.setRequestProperty("Authorization", "Bearer " + bearer);
         if (cookie != null && cookie.length() > 0) c.setRequestProperty("Cookie", cookie);
+        if (body != null) {
+            c.setDoOutput(true);
+            c.setRequestProperty("Content-Type", "application/json");
+            c.setFixedLengthStreamingMode(body.getBytes("UTF-8").length);
+            java.io.OutputStream os = c.getOutputStream();
+            os.write(body.getBytes("UTF-8"));
+            os.flush();
+            os.close();
+        }
         try {
             int code = c.getResponseCode();
             InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
@@ -1415,7 +1559,12 @@ public class BalanceFetcher {
         for (int i = 0; i < n; i++) {
             Item it = items.get(i);
             if (it.ok) {
-                res.totalCny += it.cny;
+                /* 钱的平台直接加；积分类平台按开关 + 折算率换算（未开则跳过） */
+                double add = countsInTotal(ctx, it) ? it.cny : Double.NaN;
+                if (!Double.isNaN(add)) {
+                    res.totalCny += add;
+                    if (it.estimated) res.totalEstimated = true;
+                }
             } else {
                 res.failed++;
                 if (it.amount == null || it.amount.length() == 0) it.amount = "—";
@@ -1454,7 +1603,10 @@ public class BalanceFetcher {
             it.id = it.platform;           // 卡片/刷新/预警统一用平台标识
             it.alertKey = it.platform;
             if (it.ok) {
-                res.totalCny += it.cny;
+                if (countsInTotal(ctx, it)) {
+                    res.totalCny += it.cny;
+                    if (it.estimated) res.totalEstimated = true;
+                }
                 if (it.mergeCount > 1 && it.rows != null) {
                     it.rows = it.rows + "\n（同平台 " + it.mergeCount + " 个密钥，取最大）";
                 }
@@ -1662,6 +1814,118 @@ public class BalanceFetcher {
         String id = it.platform;              // 解析逻辑按「平台」选，不按 Key
         boolean usd = "USD".equals(it.tag);
         String key = apiKey != null ? apiKey.key : "";
+
+        /* WorkBuddy 网关：本机自建服务。
+           流程 = 探活 → 取余额。
+           探活走 GET /healthz（不需要鉴权，能最快判断"进程在不在"）；
+           余额走 POST /panel/api/balance_all（该接口 GET 返回 405）。
+           服务没跑时抛专门异常，界面据此提示 + 给「拉起网关」按钮。 */
+        if ("workbuddy".equals(id)) {
+            String base = apiKey != null ? apiKey.baseUrl : "";
+            base = normalizeBase(base);
+            if (base.length() == 0) {
+                it.ok = false;
+                it.gatewayDown = true;          // 地址没填，同样按"服务不可用"引导
+                it.gatewayUrl = "";
+                it.error = "还没填网关地址";
+                it.amount = "\u2014";
+                return;
+            }
+            it.gatewayUrl = base;
+
+            /* ① 探活：/healthz 不需要 key，服务活着就能通 */
+            if (!probeGateway(base, Math.min(t, 4000))) {
+                it.ok = false;
+                it.gatewayDown = true;
+                it.error = "网关未运行";
+                it.amount = "\u2014";
+                return;
+            }
+
+            /* ② 取余额 */
+            String json = postJson(base + "/panel/api/balance_all", key, "", Math.max(t, 8000));
+            JSONObject root = new JSONObject(json);
+            JSONArray accounts = root.optJSONArray("accounts");
+            if (accounts == null) accounts = new JSONArray();
+
+            double total = 0, totalCap = 0;
+            int n = 0, cooling = 0;
+            StringBuilder sb = new StringBuilder();
+            String firstName = "";
+            for (int i = 0; i < accounts.length(); i++) {
+                JSONObject a = accounts.optJSONObject(i);
+                if (a == null) continue;
+                String nick = a.optString("nickname", a.optString("uid", "账号" + (i + 1)));
+                double c = num(a, "credits");
+                if (Double.isNaN(c)) continue;      // credits 是主字段，没有就没法显示
+                boolean cool = a.optBoolean("cooling", false);
+                String expiry = a.optString("credits_earliest_expiry", "");
+                double expRemain = num(a, "credits_earliest_remaining");
+                /* 积分上限：接口给的是 credits_total（总额度） */
+                double cap = num(a, "credits_total");
+
+                total += c;
+                if (!Double.isNaN(cap) && cap > 0) totalCap += cap;
+                n++;
+                if (cool) cooling++;
+                if (i == 0) firstName = nick;
+
+                if (accounts.length() > 1) {
+                    sb.append(nick).append("  ").append(fmtInt(c)).append(" 积分");
+                    if (cool) sb.append("（冷却中）");
+                    sb.append("\n");
+                } else {
+                    if (!Double.isNaN(cap) && cap > 0) {
+                        sb.append("总积分  ").append(fmtInt(cap)).append("\n");
+                    }
+                    if (a.has("checkin_done")) {
+                        sb.append("签到  ").append(a.optBoolean("checkin_done") ? "今日已签" : "今日未签").append("\n");
+                    }
+                    if (expiry != null && expiry.length() > 0) {
+                        sb.append("最近到期  ").append(fmtExpiry(expiry));
+                        if (!Double.isNaN(expRemain) && expRemain > 0) {
+                            sb.append("（").append(fmtInt(expRemain)).append(" 分）");
+                        }
+                        sb.append("\n");
+                    }
+                    if (cool) sb.append("状态  冷却中\n");
+                }
+            }
+            if (n == 0) throw new Exception("网关没有返回账号");
+
+            it.cny = total;
+            it.bal = total;
+            /* 主体永远显示积分（那才是账户里的真数）。
+               人民币写进卡片正文（"≈¥49"），单位位留"积分"就行 ——
+               总资产卡片那边已经有 ¥ 汇总了，这里再挂汇率只是重复。 */
+            it.amount = fmtInt(total);
+            String tail = n > 1 ? "（" + n + " 账号合计）" : "";
+            /* 剩余百分比：本周期还剩多少没用。用 credits_total 当分母 ——
+               那是这轮额度的总量，剩下 2442/2650 = 92.2%。 */
+            int pct = -1;
+            if (totalCap > 0) {
+                pct = (int) Math.round(total / totalCap * 100.0);
+                if (pct > 100) pct = 100;
+                if (pct < 0) pct = 0;
+            }
+            it.pctLeft = pct;
+            if (StatsOpt.inStats(ctx, "workbuddy")) {
+                double disc = StatsOpt.rate(ctx, "workbuddy");   // 元/积分
+                it.cny = total * disc;
+                it.estimated = true;
+                it.unitOverride = "积分" + tail;
+                /* 放 it.conv 而不是拼进 rows —— rows 在卡片最底部，
+                   而折算值应该紧跟百分比显示。money() 自带 ¥，别再手写一次，
+                   否则会显示成 "≈ ¥¥48.84"。 */
+                it.conv = "≈ " + money(total * disc, false)
+                        + "（1 积分 ≈ " + fmtRate(disc) + " 元）";
+            } else {
+                it.cny = 0;   // 不参与汇总，封死任何累加路径
+                it.unitOverride = "积分" + tail;
+            }
+            it.rows = sb.toString().trim();
+            return;
+        }
 
         /* 百炼：按计费模式分流 —— 余额制查账户余额，订阅制查套餐实例 */
         if ("dashscope".equals(id)) {

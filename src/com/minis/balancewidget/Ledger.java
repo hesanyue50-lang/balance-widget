@@ -109,6 +109,16 @@ public final class Ledger extends SQLiteOpenHelper {
      * 返回本次推导出的消费额（没有充值就是余额的减少量；余额不降则为 0）。
      */
     public double record(Context c, String keyId, double balance, double toppedUp, boolean usd) {
+        return record(c, keyId, balance, toppedUp, usd, SAME_EPS);
+    }
+
+    /**
+     * @param eps 判定"余额没变"的阈值。
+     *            钱的平台传 SAME_EPS（0.005 元）；积分类要传 0.5 ——
+     *            积分的刻度是 1，用 0.005 会把每次刷新都当成"变了"而记一堆重复点。
+     */
+    public double record(Context c, String keyId, double balance, double toppedUp,
+                         boolean usd, double eps) {
         double consumed = 0;
         try {
             SQLiteDatabase db = getWritableDatabase();
@@ -132,7 +142,7 @@ public final class Ledger extends SQLiteOpenHelper {
             if (!Double.isNaN(prevBal)) {
                 long gap = now - prevTs;
                 if (gap < SAMPLE_MIN_MS) return 0;
-                if (Math.abs(balance - prevBal) < SAME_EPS && gap < SAMPLE_MS) return 0;
+                if (Math.abs(balance - prevBal) < eps && gap < SAMPLE_MS) return 0;
             }
 
             if (!Double.isNaN(prevBal)) {

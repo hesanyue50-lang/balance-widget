@@ -813,8 +813,11 @@ public class MainActivity extends Activity {
             for (int i = 0; i < ks.size(); i++) if (ks.get(i).draw) anyDraw = true;
             platformDraw.put(plat, Boolean.valueOf(anyDraw));
 
-            if (!"balance".equals(kind)) {
-                // 免费/无余额接口的平台：贴 0 直线，开关有可见效果
+            /* 没有余额接口的平台（免费/无数据）：贴 0 直线，开关有可见效果。
+               但积分类要放行 —— 它的 kind 是 asset，跟"免费平台"共用同一个分支，
+               若在这里 continue 就永远只画一条 0 线（网关"用量统计一直是 0"的真因）。 */
+            boolean isAsset = !"balance".equals(kind);
+            if (isAsset && !StatsOpt.inChart(this, plat)) {
                 if (anyDraw) {
                     int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
                     platformColor.put(plat, Integer.valueOf(zc));
@@ -823,6 +826,14 @@ public class MainActivity extends Activity {
                     balIdx++;
                 }
                 continue;
+            }
+            /* 积分类的纵轴要按折算率换算成人民币，才能和其它平台画在一张图上
+               （2458 积分和 ¥30 不是同一量纲，直接画会把别的线压成一条平线）。 */
+            if (isAsset) {
+                mul = StatsOpt.rate(this, plat);   // 覆盖 usd 判断：积分按用户设的折算率走
+                detail.append(name).append("   积分折算（1 积分 ≈ ")
+                      .append(String.format("%.4f", mul).replaceAll("0+$", "")
+                              .replaceAll("\\.$", "")).append(" 元）\n");
             }
 
             // 聚合该平台所有 Key（同一账户多密钥余额相同 → 取最大值，避免重复计算）
@@ -905,8 +916,17 @@ public class MainActivity extends Activity {
                     java.util.Arrays.fill(empty, Double.NaN);
                     if (!Double.isNaN(live)) {
                         empty[DAYS - 1] = live * mul;      // 最新一个槽位 = 现在
-                        detail.append(name).append("   当前 ").append(String.format("%.2f", live * mul))
-                              .append("   历史数据积累中\n");
+                        /* 积分类先把积分本身报出来（那才是账户里的真数），
+                           折算金额跟在后面 —— 只给钱的话用户对不上自己的积分。 */
+                        if (isAsset) {
+                            detail.append(name).append("   当前 ")
+                                  .append(String.format("%.0f", live / mul)).append(" 积分")
+                                  .append(" ≈ ¥").append(String.format("%.2f", live))
+                                  .append("   历史数据积累中\n");
+                        } else {
+                            detail.append(name).append("   当前 ").append(String.format("%.2f", live * mul))
+                                  .append("   历史数据积累中\n");
+                        }
                     } else {
                         detail.append(name).append(mimoExpired
                                 ? "   登录已过期 · 点卡片重新登录\n"
@@ -1192,9 +1212,17 @@ public class MainActivity extends Activity {
         for (int i = 0; i < liveItems.size(); i++) {
             BalanceFetcher.Item it = liveItems.get(i);
             if (it.noData || !it.ok) continue;
-            if (!"balance".equals(it.kind)) continue;
             if (!plat.equals(it.platform)) continue;
-            if (Double.isNaN(best) || it.bal > best) best = it.bal;
+            /* 统一走统计口径：钱的平台恒为 true；积分类由用户开关决定。
+               注意别再单独判 kind —— 那会把 kind=asset 的积分类提前跳过，
+               开关打开了也永远出不来数据。 */
+            if (!BalanceFetcher.countsInTotal(this, it)) continue;
+            /* 积分类要折算成人民币才能跟别的平台画在同一条纵轴上
+               （否则 2458 积分和 ¥30 会被当成同一量纲） */
+            double v = "balance".equals(it.kind)
+                     ? it.bal
+                     : it.bal * StatsOpt.rate(this, it.platform);
+            if (Double.isNaN(best) || v > best) best = v;
         }
         return best;
     }
@@ -1448,9 +1476,100 @@ public class MainActivity extends Activity {
     /**
      * 控制台直达：点击直接打开控制台，不再弹「控制台/充值」子菜单。
      */
+    /**
+     * 让用户改积分折算率（元/积分）。
+     *
+     * 默认 0.02 是按官方套餐反推的（¥99/4000分 ≈ 0.0248、¥199/9000 ≈ 0.0221、
+     * ¥999/50000 = 0.0200），但用户实际的套餐档位/是否年付只有他自己知道，
+     * 所以给个入口手工覆盖 —— 存的是"1 积分值多少钱"，不是"1 元买多少积分"，
+     * 界面上要写清楚免得填反。
+     */
+    private void askRate(final String platform) {
+        double cur = StatsOpt.rate(this, platform);
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setText(fmtRate2(cur));
+        et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        et.setHint("0.02");
+        int pad = (int) (getResources().getDisplayMetrics().density * 20);
+        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
+        box.setPadding(pad, pad / 2, pad, 0);
+        box.addView(et);
+
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("积分折算率")
+            .setMessage("1 积分值多少元？\n"
+                    + "官方套餐参考：99 元/4000 分 ≈ 0.025，999 元/50000 分 = 0.02。\n"
+                    + "积分不能提现，这只是估算。")
+            .setView(box)
+            .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) {
+                    String s = et.getText().toString().trim();
+                    try {
+                        double v = Double.parseDouble(s);
+                        if (v > 0) StatsOpt.setRate(MainActivity.this, platform, v);
+                    } catch (Throwable ig) { }
+                    /* 折算率变了，已缓存的折算结果就旧了 —— 重算一遍 */
+                    recomputeTotals();
+                    if (lastResult != null) render(lastResult);
+                    buildStats();
+                }
+            })
+            .setNegativeButton("取消", null)
+            .show();
+    }
+
+    /** 折算率显示成 "0.02"，别写成 "0.0200000001" */
+    private static String fmtRate2(double v) {
+        String s = String.format(java.util.Locale.US, "%.4f", v);
+        while (s.endsWith("0") && s.indexOf('.') < s.length() - 2) {
+            s = s.substring(0, s.length() - 1);
+        }
+        return s;
+    }
+
+    /** 看密钥：先过密码锁，再列出该平台下所有 Key */
+    private void showKeys(final BalanceFetcher.Item fi) {
+        final String plat = fi.platform;
+        final String platName = fi.label;
+        LockDialog.ask(this, "查看「" + platName + "」的全部密钥", new LockDialog.OnPass() {
+            public void ok() {
+                // 显示该平台下的所有 Key（而不只是卡片对应那一个）
+                java.util.List<KeyStore.ApiKey> mine = KeyStore.get(MainActivity.this, plat);
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < mine.size(); i++) {
+                    KeyStore.ApiKey kk = mine.get(i);
+                    String lb = (kk.label == null || kk.label.length() == 0) ? "默认" : kk.label;
+                    sb.append(lb)
+                      .append(kk.isConfigured() ? "：" + kk.key : "：（未填）")
+                      .append("\n\n");
+                }
+                if (sb.length() == 0) sb.append("该平台下还没有 Key");
+                LockDialog.showKey(MainActivity.this,
+                    platName + " 的密钥（共 " + mine.size() + " 条）", sb.toString().trim());
+            }
+        });
+    }
+
+    /** 点卡片后在菜单里选「控制台」—— 网关走用户自填的地址，其余走内置官网表 */
     private void openSiteMenu(final BalanceFetcher.Item it) {
         final java.util.ArrayList<String> labels = new java.util.ArrayList<String>();
         final java.util.ArrayList<String> urls = new java.util.ArrayList<String>();
+        /* 网关没有官网 —— 控制台就是网关自带的面板页。
+           在用户填的地址后面接 /panel/，省得用户自己拼路径。
+           前面那次「让用户单独填控制台地址」的做法撤掉了：多一个输入框、多一处出错，
+           实际用起来 /panel/ 就是唯一会去的地方。 */
+        if ("workbuddy".equals(platformOf(it))) {
+            String base = BalanceFetcher.normalizeBase(
+                    it != null && it.gatewayUrl != null ? it.gatewayUrl : "");
+            if (base.length() == 0) {
+                android.widget.Toast.makeText(this, "还没填网关地址，去「设置」里填一个",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            openUrl(base + "/panel/");
+            return;
+        }
         int n = BalanceFetcher.collectSites(platformOf(it), labels, urls);
         if (n == 0) {
             android.widget.Toast.makeText(this, "这个平台还没收录官网地址",
@@ -1586,6 +1705,36 @@ public class MainActivity extends Activity {
         render(lastResult);
     }
 
+    /**
+     * 按当前统计开关重算总额。
+     *
+     * 汇总规则必须和 BalanceFetcher 完全一致，否则界面显示的总额会跟
+     * "刷新后"的数字对不上 —— 那种不一致最难查，所以这里只调同一个
+     * countsInTotal 判定，不自己写一套条件。
+     */
+    private void recomputeTotals() {
+        if (lastResult == null) return;
+        double sum = 0;
+        boolean est = false;
+        for (int i = 0; i < lastResult.items.size(); i++) {
+            BalanceFetcher.Item it = lastResult.items.get(i);
+            if (!it.ok) continue;
+            if (!BalanceFetcher.countsInTotal(this, it)) continue;
+            /* 积分类条目刷新时已按开关折算过 cny；开关刚打开而数据是旧的，
+               这里按当前折算率补算，省得用户还得手动刷一次。 */
+            double v = it.cny;
+            if (!"balance".equals(it.kind) && v == 0 && it.bal > 0) {
+                v = it.bal * StatsOpt.rate(this, it.platform);
+                it.cny = v;
+                it.estimated = true;
+            }
+            sum += v;
+            if (it.estimated) est = true;
+        }
+        lastResult.totalCny = sum;
+        lastResult.totalEstimated = est;
+    }
+
     private void render(BalanceFetcher.Result r) {
         lastResult = r;
         /* 首次渲染（列表本来是空的）才播入场动画 ——
@@ -1601,6 +1750,8 @@ public class MainActivity extends Activity {
             return;
         }
 
+        /* 总资产不再标 ≈：那点折算误差（0.02 vs 0.0221）在这个精度下没意义，
+           反而让数字看着不干净。真正的估算说明放在网关卡片自己身上。 */
         tTotal.setText("¥" + String.format("%.2f", r.totalCny));
         StringBuilder sb = new StringBuilder();
         sb.append("汇率 1 USD = ").append(String.format("%.2f", r.rate));
@@ -1644,6 +1795,47 @@ public class MainActivity extends Activity {
                             });
                         return;
                     }
+                    /* 网关卡片的菜单跟别的平台不同：
+                       ① 没有「充值」—— 积分是套餐里扣的，没有单独的充值页；
+                       ② 多了「计入余额统计」开关（积分默认按 0.02 元/积分折算成钱）；
+                       ③ 多了「控制台地址」（见下方 openSiteMenu 里的网关分支）。 */
+                    if ("workbuddy".equals(fi.platform)) {
+                        final boolean in = StatsOpt.inStats(MainActivity.this, fi.platform);
+                        final boolean inChart = StatsOpt.inChart(MainActivity.this, fi.platform);
+                        double cur = StatsOpt.rate(MainActivity.this, fi.platform);
+                        /* 两个开关是两件事，都只在这里出现（别的平台不需要）：
+                           计余额 = 折算成钱加进「总资产」；计统计 = 出现在用量统计图表里。
+                           想只画图不算钱、或只算钱不画图，都能调。 */
+                        LockDialog.choose(MainActivity.this, fi.label,
+                            new String[] { "刷新", "看密钥", "控制台",
+                                           in ? "计入余额汇总：开" : "计入余额汇总：关",
+                                           inChart ? "计入用量统计：开" : "计入用量统计：关",
+                                           "积分折算率（当前 1≈" + fmtRate2(cur) + " 元）" },
+                            new LockDialog.OnPick() {
+                                public void pick(int which) {
+                                    if (which == 0) {
+                                        refreshOne(fi);
+                                    } else if (which == 2) {
+                                        openSiteMenu(fi);
+                                    } else if (which == 3) {
+                                        StatsOpt.toggle(MainActivity.this, fi.platform);
+                                        /* 开关直接影响总额 —— 重算而不是只重绘，
+                                           否则数字要等下次刷新才变，看着像没生效。 */
+                                        recomputeTotals();
+                                        if (lastResult != null) render(lastResult);
+                                        buildStats();
+                                    } else if (which == 4) {
+                                        StatsOpt.toggleChart(MainActivity.this, fi.platform);
+                                        buildStats();
+                                    } else if (which == 5) {
+                                        askRate(fi.platform);
+                                    } else {
+                                        showKeys(fi);
+                                    }
+                                }
+                            });
+                        return;
+                    }
                     LockDialog.choose(MainActivity.this, fi.label,
                         new String[] { "刷新", "看密钥", "控制台", "充值" },
                         new LockDialog.OnPick() {
@@ -1655,30 +1847,7 @@ public class MainActivity extends Activity {
                                 } else if (which == 3) {
                                     openTopup(fi);
                                 } else {
-                                    final String plat = fi.platform;
-                                    final String platName = fi.label;
-                                    LockDialog.ask(MainActivity.this,
-                                        "查看「" + platName + "」的全部密钥",
-                                        new LockDialog.OnPass() {
-                                            public void ok() {
-                                                // 显示该平台下的所有 Key（而不只是卡片对应那一个）
-                                                java.util.List<KeyStore.ApiKey> mine =
-                                                        KeyStore.get(MainActivity.this, plat);
-                                                StringBuilder sb = new StringBuilder();
-                                                for (int i = 0; i < mine.size(); i++) {
-                                                    KeyStore.ApiKey kk = mine.get(i);
-                                                    String lb = (kk.label == null || kk.label.length() == 0)
-                                                            ? "默认" : kk.label;
-                                                    sb.append(lb)
-                                                      .append(kk.isConfigured() ? "：" + kk.key : "：（未填）")
-                                                      .append("\n\n");
-                                                }
-                                                if (sb.length() == 0) sb.append("该平台下还没有 Key");
-                                                LockDialog.showKey(MainActivity.this,
-                                                    platName + " 的密钥（共 " + mine.size() + " 条）",
-                                                    sb.toString().trim());
-                                            }
-                                        });
+                                    showKeys(fi);
                                 }
                             }
                         });
@@ -1696,6 +1865,7 @@ public class MainActivity extends Activity {
             TextView name = (TextView) v.findViewById(R.id.p_name);
             TextView tag = (TextView) v.findViewById(R.id.p_tag);
             TextView amount = (TextView) v.findViewById(R.id.p_amount);
+            TextView unit = (TextView) v.findViewById(R.id.p_unit);
             TextView conv = (TextView) v.findViewById(R.id.p_conv);
             TextView rows = (TextView) v.findViewById(R.id.p_rows);
             View dot = v.findViewById(R.id.p_dot);
@@ -1713,11 +1883,31 @@ public class MainActivity extends Activity {
                 amount.setText(it.amount);
                 // 低于预警阈值 → 标红
                 amount.setTextColor(getColor(it.low ? R.color.danger : R.color.tx));
+                /* 单位挂在数字右下角：网关是「积分」，其他平台是货币（¥/$ 已在 amount 里，
+                   这里留空即可，别重复显示） */
+                if (it.unitOverride != null && it.unitOverride.length() > 0) {
+                    unit.setVisibility(View.VISIBLE);
+                    unit.setText(it.unitOverride);
+                } else {
+                    unit.setVisibility(View.GONE);
+                }
+                /* 网关的折算值走 p_conv2（百分比下方），其它平台的汇率换算走 p_conv（顶部）——
+                   两者位置不同，不能共用一个控件，否则网关的折算值会跑到卡片最上面。 */
+                boolean isAssetRow = !"balance".equals(it.kind);
+                TextView conv2 = (TextView) v.findViewById(R.id.p_conv2);
                 if (it.conv != null && it.conv.length() > 0) {
-                    conv.setVisibility(View.VISIBLE);
-                    conv.setText(it.conv);
+                    if (isAssetRow) {
+                        conv.setVisibility(View.GONE);
+                        conv2.setVisibility(View.VISIBLE);
+                        conv2.setText(it.conv);
+                    } else {
+                        conv2.setVisibility(View.GONE);
+                        conv.setVisibility(View.VISIBLE);
+                        conv.setText(it.conv);
+                    }
                 } else {
                     conv.setVisibility(View.GONE);
+                    conv2.setVisibility(View.GONE);
                 }
                 if (it.rows != null && it.rows.length() > 0) {
                     rows.setVisibility(View.VISIBLE);
@@ -1726,17 +1916,100 @@ public class MainActivity extends Activity {
                 } else {
                     rows.setVisibility(View.GONE);
                 }
+                /* 剩余百分比：只有拿得到"总额度"的条目才有（积分平台）。
+                   进度条宽度靠 post 拿实测宽度算 —— 直接按屏幕宽百分比算会
+                   把 padding 也算进去，条子会溢出卡片。 */
+                final View pctBox = v.findViewById(R.id.p_pct_box);
+                final TextView pctTxt = (TextView) v.findViewById(R.id.p_pct_txt);
+                final View pctBar = v.findViewById(R.id.p_pct_bar);
+                if (it.pctLeft >= 0) {
+                    pctBox.setVisibility(View.VISIBLE);
+                    pctTxt.setText("剩余 " + it.pctLeft + "%");
+                    final int pct = it.pctLeft;
+                    pctBar.post(new Runnable() {
+                        public void run() {
+                            View parent = (View) pctBar.getParent();
+                            int full = parent.getWidth();
+                            if (full <= 0) return;
+                            android.view.ViewGroup.LayoutParams lp = pctBar.getLayoutParams();
+                            lp.width = Math.max(2, full * pct / 100);
+                            pctBar.setLayoutParams(lp);
+                        }
+                    });
+                } else {
+                    pctBox.setVisibility(View.GONE);
+                }
             } else {
                 amount.setText("—");
                 amount.setTextColor(getColor(R.color.tx3));
+                unit.setVisibility(View.GONE);
                 conv.setVisibility(View.GONE);
+                v.findViewById(R.id.p_conv2).setVisibility(View.GONE);
+                v.findViewById(R.id.p_pct_box).setVisibility(View.GONE);
                 rows.setVisibility(View.VISIBLE);
-                rows.setText(it.error);
-                rows.setTextColor(getColor(R.color.danger));
+                /* 网关没在跑：不是"查询失败"，而是"服务没起" ——
+                   提示要说清怎么解决，并让点一下就能拉起。 */
+                if (it.gatewayDown) {
+                    rows.setText("网关未运行\n点这里拉起网关");
+                    rows.setTextColor(getColor(R.color.danger));
+                    rows.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View x) { showGatewayHelp(it); }
+                    });
+                } else {
+                    rows.setText(it.error);
+                    rows.setTextColor(getColor(R.color.danger));
+                    rows.setOnClickListener(null);
+                }
             }
             cards.addView(v);
             if (firstFill) Anim.stagger(v, cards.getChildCount() - 1);
         }
+    }
+
+    /**
+     * 网关未运行时的引导。
+     *
+     * 方案 C：App 要有 shell 权限才能拉起别 uid 的进程（属主 shell、0700），
+     * 普通应用做不到。所以这里不假装能一键启动，而是把**可复制的命令**给出来 ——
+     * 拉起只需执行一条命令，复制粘贴的代价远低于让用户自己回忆路径和参数。
+     */
+    private void showGatewayHelp(final BalanceFetcher.Item it) {
+        String base = BalanceFetcher.normalizeBase(
+                it != null && it.gatewayUrl != null ? it.gatewayUrl : "");
+        if (base.length() == 0) base = "http://127.0.0.1:7863";
+
+        StringBuilder msg = new StringBuilder();
+        msg.append("查询需要网关在运行，但当前连不上：\n").append(base).append("\n\n");
+        msg.append("① 在能执行 shell 的环境（如 Minis 终端 / adb / Shizuku）里执行：\n");
+        msg.append("sh /var/minis/shared/workbuddy2api/wb2.sh start\n\n");
+        msg.append("② 若网关装在别处，改成对应路径启动，确保监听 ").append(base).append("\n\n");
+        msg.append("③ 启动后再下拉刷新即可。\n\n");
+        msg.append("地址填错了也会连不上 —— 可在「设置 → API 密钥与平台」里改。");
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("网关未运行")
+                .setMessage(msg.toString())
+                .setPositiveButton("复制启动命令", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String cmd = "sh /var/minis/shared/workbuddy2api/wb2.sh start";
+                        android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                                getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                        if (cm != null) {
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("gw", cmd));
+                            android.widget.Toast.makeText(MainActivity.this, "已复制，粘贴到终端执行",
+                                    android.widget.Toast.LENGTH_SHORT).show();
+                        }
+                        d.dismiss();
+                    }
+                })
+                .setNeutralButton("重试", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        d.dismiss();
+                        refresh();
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
     }
 
     /** 长按卡片：进入卡片排序 */

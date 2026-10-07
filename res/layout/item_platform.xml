@@ -41,21 +41,82 @@
             android:textSize="10sp" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/p_amount"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:textColor="@color/tx"
-        android:textSize="27sp"
-        android:textStyle="bold" />
+        android:orientation="horizontal"
+        android:gravity="bottom">
+
+        <TextView
+            android:id="@+id/p_amount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/tx"
+            android:textSize="27sp"
+            android:textStyle="bold" />
+
+        <!-- 单位挂在数字右下角：小字号 + 与底部对齐，读起来像 2458 积分 -->
+        <TextView
+            android:id="@+id/p_unit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="3dp"
+            android:paddingBottom="3dp"
+            android:textColor="@color/tx3"
+            android:textSize="12sp" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/p_conv"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
         android:textColor="@color/tx3"
         android:textSize="12sp" />
+
+    <!-- 剩余百分比：只在有"总额度"概念的平台上显示（积分），钱的平台没有分母 -->
+    <LinearLayout
+        android:id="@+id/p_pct_box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/p_pct_txt"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/tx3"
+            android:textSize="11sp" />
+
+        <!-- 进度条用纯 View 画：这是个轻量指示条，不值得为它引入 ProgressBar -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="4dp"
+            android:layout_weight="1"
+            android:layout_marginLeft="9dp"
+            android:background="@drawable/bar_track">
+
+            <View
+                android:id="@+id/p_pct_bar"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="@drawable/bar_fill" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- 折算人民币：紧跟百分比，用户看完"剩多少"紧接着就能看到"值多少" -->
+    <TextView
+        android:id="@+id/p_conv2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:textColor="@color/tx3"
+        android:textSize="12sp"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/p_rows"

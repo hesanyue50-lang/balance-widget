@@ -192,7 +192,13 @@ public final class WidgetRenderer {
                 v.setTextColor(VAL[s], WallpaperTint.danger(dark));
                 continue;
             }
-            v.setTextViewText(VAL[s], it.amount);
+            /* 小组件的格子窄，没有位置单放一个单位控件 ——
+               直接把单位拼在数字后面（2458积分）。主界面才是大小字分离的排版。 */
+            String shown = it.amount;
+            if (it.unitOverride != null && it.unitOverride.length() > 0) {
+                shown = shown + it.unitOverride;
+            }
+            v.setTextViewText(VAL[s], shown);
             v.setTextColor(VAL[s], it.low ? WallpaperTint.danger(dark) : cTx);
         }
 

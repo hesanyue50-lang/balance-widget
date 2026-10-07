@@ -109,6 +109,11 @@ public final class WidgetCache {
            丢了它，缓存里的 MiMo 就成了 bal=0 的正常条目 ——
            统计页会显示"当前 ¥0.00"，账本还会被写进一堆 0 值快照。 */
         x.put("noData", it.noData);
+        /* 网关条目重启后要靠这两个字段还原：unitOverride 是右下角单位，
+           gatewayUrl 是「控制台」要打开的地址 —— 缓存里丢了就点不动了。 */
+        x.put("unitOverride", it.unitOverride == null ? "" : it.unitOverride);
+        x.put("gatewayUrl", it.gatewayUrl == null ? "" : it.gatewayUrl);
+        x.put("gatewayDown", it.gatewayDown);
         return x;
     }
 
@@ -130,6 +135,9 @@ public final class WidgetCache {
         it.alertKey = x.optString("alertKey", it.id);
         it.threshold = x.optDouble("threshold", 0);
         it.noData = x.optBoolean("noData", false);
+        it.unitOverride = x.optString("unitOverride", "");
+        it.gatewayUrl = x.optString("gatewayUrl", "");
+        it.gatewayDown = x.optBoolean("gatewayDown", false);
         return it;
     }
 
@@ -138,6 +146,7 @@ public final class WidgetCache {
             JSONObject o = new JSONObject();
             o.put("rate", r.rate);
             o.put("total", r.totalCny);
+            o.put("totalEst", r.totalEstimated);
             o.put("configured", r.configured);
             o.put("failed", r.failed);
             o.put("at", System.currentTimeMillis());
@@ -165,6 +174,7 @@ public final class WidgetCache {
             BalanceFetcher.Result r = new BalanceFetcher.Result();
             r.rate = o.optDouble("rate", 7.1);
             r.totalCny = o.optDouble("total", 0);
+            r.totalEstimated = o.optBoolean("totalEst", false);
             r.configured = o.optInt("configured", 0);
             r.failed = o.optInt("failed", 0);
             JSONArray a = o.optJSONArray("items");

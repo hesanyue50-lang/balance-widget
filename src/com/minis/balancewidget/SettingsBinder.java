@@ -796,6 +796,37 @@ public class SettingsBinder {
             panel.addView(tip);
         }
 
+        /* WorkBuddy 网关：地址由用户自己填。
+           不预设默认值 —— 端口、是否在本机、是否局域网别机都不确定，
+           写死一个反而会让人以为"填过了"而忽略。 */
+        final EditText[] eBase = new EditText[1];
+        if ("workbuddy".equals(platform)) {
+            TextView lw = new TextView(act);
+            lw.setText("网关地址（必填）");
+            lw.setTextColor(color(R.color.tx2));
+            lw.setTextSize(12);
+            lw.setPadding(0, dp(12), 0, 0);
+            panel.addView(lw);
+            EditText eb = new EditText(act);
+            eb.setHint("http://127.0.0.1:7863");
+            eb.setText(src.baseUrl);
+            eb.setTextSize(14);
+            eb.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+            panel.addView(eb);
+            eBase[0] = eb;
+
+            TextView tipw = new TextView(act);
+            tipw.setText("上面的「密钥」填网关的 api_key。\n"
+                    + "查余额前会先探活：网关没在运行会提示「网关未运行」，"
+                    + "点提示可复制启动命令。\n"
+                    + "端口不是 7863 就改成实际端口；网关在别的机器上就填它的局域网地址。\n"
+                    + "卡片菜单里的「控制台」会打开这个地址下的 /panel/ 页面。");
+            tipw.setTextColor(color(R.color.tx3));
+            tipw.setTextSize(11);
+            tipw.setPadding(0, dp(6), 0, 0);
+            panel.addView(tipw);
+        }
+
         /* 弹窗自引用：MiMo 的「登录」按钮要在点完登录后把弹窗关掉，
            而 AlertDialog 本体是在下面才构建的，所以用一格数组带出来 */
         final AlertDialog[] dlgRef = new AlertDialog[1];
@@ -822,6 +853,9 @@ public class SettingsBinder {
                         ? "subscription"
                         : (eAkId[0] != null ? "balance" : src.planMode);
                 k.hideCard = src.hideCard;
+                k.baseUrl = (eBase[0] != null)
+                        ? BalanceFetcher.normalizeBase(eBase[0].getText().toString())
+                        : src.baseUrl;
                 if (isNew) KeyStore.add(act, platform, k);
                 else KeyStore.update(act, k);
             }

@@ -67,6 +67,11 @@ public final class KeyStore {
         public String planMode = "";        // 百炼计费模式：balance=余额制 / subscription=订阅制(Token Plan)，空视为 balance
         public boolean hideCard = false;    // 在 API 卡片/小组件中隐藏（统计由 draw 单独控制）
 
+        /* WorkBuddy 网关专用：服务地址。
+           网关跑在本机（如 http://127.0.0.1:7863），地址由用户自己填 ——
+           不同人可能换端口、或者把网关放在局域网另一台机器上，写死没有意义。 */
+        public String baseUrl = "";
+
         public boolean isConfigured() {
             return key != null && key.length() > 0;
         }
@@ -206,6 +211,7 @@ public final class KeyStore {
                 k.accessKeySecret = KeyVault.dec(o.optString("accessKeySecret", ""));
                 k.planMode = o.optString("planMode", "balance");
                 k.hideCard = o.optBoolean("hideCard", false);
+                k.baseUrl = o.optString("baseUrl", "");
                 if (k.planMode == null || k.planMode.length() == 0) k.planMode = "balance";
                 out.add(k);
             }
@@ -233,6 +239,7 @@ public final class KeyStore {
                 o.put("accessKeyId", KeyVault.enc(k.accessKeyId));
                 o.put("accessKeySecret", KeyVault.enc(k.accessKeySecret));
                 o.put("hideCard", k.hideCard);
+                o.put("baseUrl", k.baseUrl == null ? "" : k.baseUrl);
                 o.put("planMode", (k.planMode == null || k.planMode.length() == 0)
                         ? "balance" : k.planMode);
                 arr.put(o);

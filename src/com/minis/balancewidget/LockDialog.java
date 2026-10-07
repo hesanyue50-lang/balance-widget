@@ -228,6 +228,17 @@ public final class LockDialog {
     // ---------- 通用选择弹窗（风格与密码框一致） ----------
 
     public static void choose(Context ctx, String title, String[] items, final OnPick cb) {
+        boolean longItems = false;
+        for (int i = 0; i < items.length; i++) {
+            if (items[i] != null && items[i].length() > 6) { longItems = true; break; }
+        }
+        /* 选项文字长（比如"✗ 不计入余额统计（1积分≈0.02元）"）时不要横排：
+           横排 + setSingleLine 会让长项被挤到显示不全，所以超过一定长度就改成一列一项。
+           chooseWide 内部复用同一套样式，避免两处样式走样。 */
+        if (longItems) {
+            chooseWide(ctx, title, items, cb);
+            return;
+        }
         final View[] cardHolder = new View[1];
         final Dialog dlg = shell(ctx, title, cardHolder);
         LinearLayout card = (LinearLayout) cardHolder[0];
@@ -258,6 +269,55 @@ public final class LockDialog {
 
         dlg.setCanceledOnTouchOutside(true);   // 点外面即可关闭，省掉「取消」那一行
         showSized(dlg, ctx);
+    }
+
+    /**
+     * 竖排菜单：一项一行、占满整宽、允许换行。
+     *
+     * 给"文字较长"的菜单用（横排会把长项挤到看不全）。样式跟 choose 保持同一套
+     * 描边/主色按钮，只是把排列方式从横排换成竖排。
+     */
+    public static void chooseWide(Context ctx, String title, String[] items, final OnPick cb) {
+        final View[] cardHolder = new View[1];
+        final Dialog dlg = shell(ctx, title, cardHolder);
+        LinearLayout card = (LinearLayout) cardHolder[0];
+
+        for (int i = 0; i < items.length; i++) {
+            final int which = i;
+            TextView btn = wideButton(ctx, items[i], i == 0, new View.OnClickListener() {
+                public void onClick(View v) {
+                    dlg.dismiss();
+                    cb.pick(which);
+                }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (i > 0) lp.topMargin = dp(ctx, 6);
+            btn.setLayoutParams(lp);
+            card.addView(btn);
+        }
+
+        dlg.setCanceledOnTouchOutside(true);
+        showSized(dlg, ctx);
+    }
+
+    /** 跟 button 同款，但占满宽度且允许折行 —— 长文案必须能换行才不会被截掉。
+        尺寸刻意压小：竖排后每项都占一整行，再按横排那套 padding 会显得又厚又重，
+        跟应用里其它弹窗不是一路。 */
+    private static TextView wideButton(Context ctx, String s, boolean primary,
+                                       View.OnClickListener l) {
+        TextView b = new TextView(ctx);
+        b.setText(s);
+        b.setTextColor(ctx.getColor(primary ? R.color.accent_tx : R.color.tx));
+        b.setTextSize(12);
+        b.setGravity(Gravity.CENTER);
+        b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.mini_btn_border);
+        b.setMinHeight(dp(ctx, 34));
+        b.setPadding(dp(ctx, 10), dp(ctx, 7), dp(ctx, 10), dp(ctx, 7));
+        b.setSingleLine(false);      // 关键：允许换行，否则长文案一样会被截
+        b.setOnClickListener(l);
+        return b;
     }
 
     // ---------- 亮出密钥（风格和验证弹窗一致） ----------
