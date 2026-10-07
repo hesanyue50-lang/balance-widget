@@ -128,7 +128,6 @@ public class VpnBinder {
     private void renderMode() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.mode_box);
         if (box == null) return;
-        box.removeAllViews();
 
         /* 三选一。原先还有个「应用内模式」，语义和「应用内全局」完全一样，
            留着只会让人犹豫该选哪个，已删（旧存档里的 "app" 会被 mode() 归一化成 all）。 */
@@ -142,61 +141,77 @@ public class VpnBinder {
         };
         final String cur = Clash.mode(act);   // 已归一化（旧值 "app" → "all"）
 
+        /* 行结构是固定的三行，**只更新选中态，不重建**。
+           重建的话这一块（三行带描述）会在切进页面时整块高度闪一下。 */
         for (int i = 0; i < modes.length; i++) {
             final String m = modes[i];
-            LinearLayout row = new LinearLayout(act);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.TOP);
-            row.setPadding(0, dp(7), 0, dp(7));
+            final boolean sel = m.equals(cur);
 
-            TextView mark = new TextView(act);
-            mark.setText(m.equals(cur) ? "◉" : "○");
-            mark.setTextSize(14);
-            mark.setTextColor(act.getColor(m.equals(cur) ? R.color.accent : R.color.tx3));
-            mark.setWidth(dp(22));
-            row.addView(mark);
+            TextView mark;
+            TextView t;
+            TextView d;
+            if (box.getChildCount() > i) {
+                LinearLayout row = (LinearLayout) box.getChildAt(i);
+                mark = (TextView) row.getChildAt(0);
+                LinearLayout col = (LinearLayout) row.getChildAt(1);
+                t = (TextView) col.getChildAt(0);
+                d = (TextView) col.getChildAt(1);
+            } else {
+                LinearLayout row = new LinearLayout(act);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.TOP);
+                row.setPadding(0, dp(7), 0, dp(7));
 
-            LinearLayout col = new LinearLayout(act);
-            col.setOrientation(LinearLayout.VERTICAL);
-            col.setLayoutParams(new LinearLayout.LayoutParams(0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                mark = new TextView(act);
+                mark.setTextSize(14);
+                mark.setWidth(dp(22));
+                row.addView(mark);
 
-            TextView t = new TextView(act);
+                LinearLayout col = new LinearLayout(act);
+                col.setOrientation(LinearLayout.VERTICAL);
+                col.setLayoutParams(new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+                t = new TextView(act);
+                t.setTextSize(13.5f);
+                col.addView(t);
+
+                d = new TextView(act);
+                d.setTextSize(11.5f);
+                d.setTextColor(act.getColor(R.color.tx3));
+                d.setPadding(0, dp(2), 0, 0);
+                col.addView(d);
+                row.addView(col);
+
+                row.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (Clash.MODE_SYSTEM.equals(m)) { pickSystemMode(); return; }
+                        /* 从「系统全局」切回来：把系统 VPN 关掉，改走本地代理 */
+                        if (Clash.MODE_SYSTEM.equals(Clash.mode(act))) {
+                            ClashVpnService.stop(act);
+                        }
+                        Clash.setMode(act, m);
+                        BalanceFetcher.diag(act, "代理模式 → " + m);
+                        /* 切到"能自动开"的模式时，如果开关本来就是开的，就顺手接上 ——
+                           用户刚点了这一项，意图已经很明确了，不该还要他再点一次总开关。
+                           切到系统全局则不动：那个得用户自己确认（会弹授权框）。 */
+                        if (Clash.enabled(act) && Clash.autoStartAllowed(act)
+                                && !Clash.isRunning()) {
+                            restartCore();
+                        }
+                        renderMode();
+                        renderPlatforms();     // 部分模式下才需要看勾选列表
+                    }
+                });
+                box.addView(row);
+            }
+
+            mark.setText(sel ? "◉" : "○");
+            mark.setTextColor(act.getColor(sel ? R.color.accent : R.color.tx3));
             t.setText(titles[i]);
-            t.setTextSize(13.5f);
-            t.setTextColor(act.getColor(m.equals(cur) ? R.color.accent : R.color.tx));
-            if (m.equals(cur)) t.setTypeface(null, Typeface.BOLD);
-            col.addView(t);
-
-            TextView d = new TextView(act);
+            t.setTextColor(act.getColor(sel ? R.color.accent : R.color.tx));
+            t.setTypeface(null, sel ? Typeface.BOLD : Typeface.NORMAL);
             d.setText(descs[i]);
-            d.setTextSize(11.5f);
-            d.setTextColor(act.getColor(R.color.tx3));
-            d.setPadding(0, dp(2), 0, 0);
-            col.addView(d);
-            row.addView(col);
-
-            row.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    if (Clash.MODE_SYSTEM.equals(m)) { pickSystemMode(); return; }
-                    /* 从「系统全局」切回来：把系统 VPN 关掉，改走本地代理 */
-                    if (Clash.MODE_SYSTEM.equals(Clash.mode(act))) {
-                        ClashVpnService.stop(act);
-                    }
-                    Clash.setMode(act, m);
-                    BalanceFetcher.diag(act, "代理模式 → " + m);
-                    /* 切到"能自动开"的模式时，如果开关本来就是开的，就顺手接上 ——
-                       用户刚点了这一项，意图已经很明确了，不该还要他再点一次总开关。
-                       切到系统全局则不动：那个得用户自己确认（会弹授权框）。 */
-                    if (Clash.enabled(act) && Clash.autoStartAllowed(act)
-                            && !Clash.isRunning()) {
-                        restartCore();
-                    }
-                    renderMode();
-                    renderPlatforms();     // 部分模式下才需要看勾选列表
-                }
-            });
-            box.addView(row);
         }
 
         /* 部分模式下把「平台勾选」卡片显示出来，其它模式隐藏 ——
@@ -356,11 +371,14 @@ public class VpnBinder {
     private void renderRunInfo(final boolean running) {
         final LinearLayout box = (LinearLayout) root.findViewById(R.id.run_kv);
         if (box == null) return;
-        box.removeAllViews();
         if (!running) {
+            /* 没在跑就把整块收掉（这次是真要清，不是刷新） */
+            box.removeAllViews();
             stopRunLoop();
             return;
         }
+        /* 在跑：**不清空**，直接就地刷新。
+           清空重填会让这块在切进页面的一瞬间先变矮再长回来，就是那下抽搐。 */
         refreshRunInfo(box);      // 先立刻刷一次，别让用户等一个周期
         startRunLoop();
     }
@@ -386,12 +404,17 @@ public class VpnBinder {
                 act.runOnUiThread(new Runnable() {
                     public void run() {
                         if (!Clash.isRunning()) return;
-                        box.removeAllViews();
-                        addKv(box, "当前节点", node.length() == 0 ? "--" : node);
-                        addKv(box, "本次运行", fmtDuration(up));
+                        /* 就地更新，不重建 —— 这块每秒刷一次，
+                           拆了重建会让整块高度在帧内突变，看起来就是抽搐。 */
+                        kvAt(box, 0, "当前节点", node.length() == 0 ? "--" : node);
+                        kvAt(box, 1, "本次运行", fmtDuration(up));
                         if (tr != null) {
-                            addKv(box, "代理流量",
+                            kvAt(box, 2, "代理流量",
                                     "↑ " + fmtBytes(tr[0]) + "    ↓ " + fmtBytes(tr[1]));
+                        }
+                        /* 流量行没数据时要收掉，否则会留着上一轮的数字 */
+                        while (box.getChildCount() > (tr != null ? 3 : 2)) {
+                            box.removeViewAt(box.getChildCount() - 1);
                         }
                     }
                 });
@@ -413,6 +436,15 @@ public class VpnBinder {
     private static final long NODE_CACHE_MS = 5000L;
     private String cachedNode = null;
     private long cachedNodeAt = 0L;
+
+    /** renderPlatforms 的「上次渲染了什么」，用来避免无谓重建 */
+    private String platsSig = null;
+
+    /** renderSubs 的同款指纹 */
+    private String subsSig = null;
+
+    /** renderNodes 的同款指纹 */
+    private String nodesSig = null;
 
     private final android.os.Handler runHandler = new android.os.Handler();
     private boolean runLoopOn = false;
@@ -449,6 +481,41 @@ public class VpnBinder {
     private void stopRunLoop() {
         runLoopOn = false;
         runHandler.removeCallbacks(runTick);
+    }
+
+    /**
+     * 按索引更新一行「标签 + 值」：行不存在就建，存在就只改文字。
+     *
+     * 为什么不用 removeAllViews 重建：这个区块每秒刷一次，
+     * 拆了重建会让整块高度和子 View 在一帧里全变 —— 页面上看就是"抽搐一下"。
+     * 只 setText 的话，View 树不动，自然稳。
+     */
+    private TextView kvAt(LinearLayout box, int idx, String k, String v) {
+        while (box.getChildCount() <= idx) box.addView(makeKvRow());
+        LinearLayout row = (LinearLayout) box.getChildAt(idx);
+        ((TextView) row.getChildAt(0)).setText(k);
+        TextView vt = (TextView) row.getChildAt(1);
+        if (!v.equals(vt.getText().toString())) vt.setText(v);
+        return vt;
+    }
+
+    private LinearLayout makeKvRow() {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(7), 0, 0);
+
+        TextView kt = new TextView(act);
+        kt.setTextSize(12.5f);
+        kt.setTextColor(act.getColor(R.color.tx2));
+        kt.setWidth(dp(72));
+        row.addView(kt);
+
+        TextView vt = new TextView(act);
+        vt.setTextSize(12.5f);
+        vt.setTextColor(act.getColor(R.color.tx));
+        row.addView(vt);
+
+        return row;
     }
 
     /** 一行「标签 + 值」 */
@@ -504,10 +571,24 @@ public class VpnBinder {
     private void renderSubs() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.sub_list);
         if (box == null) return;
-        box.removeAllViews();
 
         final List<SubStore.Sub> subs = SubStore.all(act);
         final String active = SubStore.activeId(act);
+
+        /* 内容没变就别重建（切回本页时会重复渲染，重建会让这块闪） */
+        StringBuilder sig = new StringBuilder();
+        for (int i = 0; i < subs.size(); i++) {
+            SubStore.Sub s = subs.get(i);
+            sig.append(s.id).append('\u0001').append(s.name)
+               .append('\u0001').append(s.summary())
+               .append('\u0001').append(s.hasTraffic())
+               .append('\u0001').append(s.id.equals(active)).append('\u0002');
+        }
+        if (subs.isEmpty()) sig.append("<empty>");
+        if (sig.toString().equals(subsSig)) return;
+        subsSig = sig.toString();
+
+        box.removeAllViews();
 
         if (subs.isEmpty()) {
             TextView t = new TextView(act);
@@ -637,9 +718,10 @@ public class VpnBinder {
         /* 只在列表本来是空的时候播入场动画 —— 切节点、测速都会重建这个列表，
            每次都播的话界面会一直闪 */
         final boolean firstFill = box.getChildCount() == 0;
-        box.removeAllViews();
 
         if (!Clash.isRunning()) {
+            box.removeAllViews();
+            nodesSig = null;
             if (hint != null) hint.setText("加速启动后这里会列出订阅里的节点。");
             if (gp != null) Anim.fadeOut(gp);
             return;
@@ -679,6 +761,8 @@ public class VpnBinder {
                     }
                 }
             }).start();
+            box.removeAllViews();
+            nodesSig = null;
             if (hint != null) hint.setText("正在读取节点…");
             if (gp != null) Anim.fadeOut(gp);
             return;
@@ -686,11 +770,26 @@ public class VpnBinder {
 
         if (groupIdx >= groups.size()) groupIdx = 0;
         final Clash.Group g = groups.get(groupIdx);
+
+        /* 列表已经填过且内容没变 → 只更新几个文字控件，不重建几十行。
+           节点多的订阅一次重建就是几十个 View，切进页面时肉眼看得出闪。 */
+        StringBuilder nsig = new StringBuilder(g.name).append('\u0001').append(g.now);
+        for (int i = 0; i < g.nodes.size(); i++) {
+            Clash.Node n = g.nodes.get(i);
+            nsig.append('\u0001').append(n.name).append('\u0002').append(n.delay);
+        }
+        if (!firstFill && nsig.toString().equals(nodesSig)) {
+            if (gp != null) gp.setText("策略组：" + g.name + "   (" + g.nodes.size() + " 个)  ▾");
+            if (hint != null) hint.setText("点节点即切换；点右侧延迟可单独重测。");
+            return;
+        }
+        nodesSig = nsig.toString();
+        box.removeAllViews();
+
         if (gp != null) {
             Anim.fade(gp);
             gp.setText("策略组：" + g.name + "   (" + g.nodes.size() + " 个)  ▾");
         }
-        if (hint != null) hint.setText("点节点即切换；点右侧延迟可单独重测。");
 
         for (int i = 0; i < g.nodes.size(); i++) {
             final Clash.Node n = g.nodes.get(i);
@@ -776,7 +875,6 @@ public class VpnBinder {
     private void renderPlatforms() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.proxy_plats);
         if (box == null) return;
-        box.removeAllViews();
 
         java.util.LinkedHashMap<String, String> plats =
                 new java.util.LinkedHashMap<String, String>();
@@ -796,6 +894,22 @@ public class VpnBinder {
             String nm = cs.get(i).name;
             plats.put(plat, (nm == null || nm.length() == 0) ? "自定义平台 " + (i + 1) : nm);
         }
+
+        /* 内容没变就直接返回 —— 这页每次切进来都会走一遍全量渲染，
+           平台清单通常没动，白白拆掉重建会让下半屏闪一下。 */
+        StringBuilder sig = new StringBuilder();
+        for (java.util.Map.Entry<String, String> en : plats.entrySet()) {
+            sig.append(en.getKey()).append('\u0001').append(en.getValue())
+               .append('\u0001')
+               .append(Clash.platformViaProxy(act, en.getKey(),
+                       BalanceFetcher.presetOf(en.getKey()) != null
+                               && BalanceFetcher.presetOf(en.getKey()).foreign))
+               .append('\u0002');
+        }
+        if (sig.toString().equals(platsSig)) return;
+        platsSig = sig.toString();
+
+        box.removeAllViews();
 
         if (plats.isEmpty()) {
             TextView t = new TextView(act);
