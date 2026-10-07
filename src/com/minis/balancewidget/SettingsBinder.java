@@ -722,6 +722,80 @@ public class SettingsBinder {
         eKey.setTextSize(14);
         panel.addView(eKey);
 
+        /* ⚠️ 阿里云百炼专用：DashScope 的 sk- 令牌查不到余额（余额挂在阿里云主账户上），
+           必须用 AccessKey 走 BSS OpenAPI 签名查询。
+           旧实现只把这两栏画在 SettingsActivity 里，而设置页实际由本类渲染 ——
+           所以百炼的 AccessKey 永远填不上，卡片永远显示「见控制台」。
+           本次把入口补到真正生效的这一套。 */
+        final EditText[] eAkId = new EditText[1];
+        final EditText[] eAkSec = new EditText[1];
+        final android.widget.RadioGroup[] rgMode = new android.widget.RadioGroup[1];
+        final android.widget.RadioButton[] rbSub = new android.widget.RadioButton[1];
+        if ("dashscope".equals(platform)) {
+            TextView l3 = new TextView(act);
+            l3.setText("阿里云 AccessKeyId（查余额用，LTAI 开头，可留空）");
+            l3.setTextColor(color(R.color.tx2));
+            l3.setTextSize(12);
+            l3.setPadding(0, dp(12), 0, 0);
+            panel.addView(l3);
+            EditText akId = new EditText(act);
+            akId.setHint("LTAI...");
+            akId.setText(src.accessKeyId);
+            akId.setTextSize(14);
+            panel.addView(akId);
+            eAkId[0] = akId;
+
+            TextView l4 = new TextView(act);
+            l4.setText("阿里云 AccessKeySecret（可留空）");
+            l4.setTextColor(color(R.color.tx2));
+            l4.setTextSize(12);
+            l4.setPadding(0, dp(12), 0, 0);
+            panel.addView(l4);
+            EditText akSec = new EditText(act);
+            akSec.setInputType(InputType.TYPE_CLASS_TEXT
+                    | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            akSec.setText(src.accessKeySecret);
+            akSec.setTextSize(14);
+            panel.addView(akSec);
+            eAkSec[0] = akSec;
+
+            LinearLayout modeRow = new LinearLayout(act);
+            modeRow.setOrientation(LinearLayout.HORIZONTAL);
+            modeRow.setGravity(Gravity.CENTER_VERTICAL);
+            modeRow.setPadding(0, dp(12), 0, 0);
+            TextView l5 = new TextView(act);
+            l5.setText("计费模式");
+            l5.setTextColor(color(R.color.tx2));
+            l5.setTextSize(12);
+            modeRow.addView(l5);
+            android.widget.RadioGroup rg = new android.widget.RadioGroup(act);
+            rg.setOrientation(android.widget.RadioGroup.HORIZONTAL);
+            android.widget.RadioButton rbBal = new android.widget.RadioButton(act);
+            rbBal.setText("余额制");
+            rbBal.setTextSize(13);
+            android.widget.RadioButton rbSubscription = new android.widget.RadioButton(act);
+            rbSubscription.setText("订阅制");
+            rbSubscription.setTextSize(13);
+            rg.addView(rbBal);
+            rg.addView(rbSubscription);
+            rg.check("subscription".equals(src.planMode)
+                    ? rbSubscription.getId() : rbBal.getId());
+            modeRow.addView(rg);
+            panel.addView(modeRow);
+            rgMode[0] = rg;
+            rbSub[0] = rbSubscription;
+
+            TextView tip = new TextView(act);
+            tip.setText("余额制＝查阿里云账户余额（QueryAccountBalance）；"
+                    + "订阅制＝查 Token Plan 实例与到期时间。"
+                    + "AccessKey 在阿里云控制台创建，RAM 用户给只读权限即可。"
+                    + "两项都填才会发起查询，否则卡片显示「见控制台」。");
+            tip.setTextColor(color(R.color.tx3));
+            tip.setTextSize(11);
+            tip.setPadding(0, dp(6), 0, 0);
+            panel.addView(tip);
+        }
+
         /* 弹窗自引用：MiMo 的「登录」按钮要在点完登录后把弹窗关掉，
            而 AlertDialog 本体是在下面才构建的，所以用一格数组带出来 */
         final AlertDialog[] dlgRef = new AlertDialog[1];
@@ -738,9 +812,15 @@ public class SettingsBinder {
                 k.threshold = src.threshold;
                 k.budget = src.budget;
                 k.draw = true;
-                k.planMode = src.planMode;
-                k.accessKeyId = src.accessKeyId;
-                k.accessKeySecret = src.accessKeySecret;
+                /* 百炼：有输入框就读框里的值；其他平台没有这两个框，沿用原值 */
+                k.accessKeyId = (eAkId[0] != null)
+                        ? eAkId[0].getText().toString().trim() : src.accessKeyId;
+                k.accessKeySecret = (eAkSec[0] != null)
+                        ? eAkSec[0].getText().toString().trim() : src.accessKeySecret;
+                k.planMode = (rgMode[0] != null && rbSub[0] != null
+                        && rgMode[0].getCheckedRadioButtonId() == rbSub[0].getId())
+                        ? "subscription"
+                        : (eAkId[0] != null ? "balance" : src.planMode);
                 k.hideCard = src.hideCard;
                 if (isNew) KeyStore.add(act, platform, k);
                 else KeyStore.update(act, k);

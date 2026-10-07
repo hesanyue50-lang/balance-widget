@@ -796,6 +796,9 @@ public class SettingsActivity extends Activity {
                 try { k.budget = Double.parseDouble(eBudget.getText().toString().trim()); }
                 catch (Exception ig) { k.budget = 0; }
                 k.draw = src.draw;
+                /* ⚠️ 漏了这行会导致「隐藏 API」里设的隐藏状态在编辑一次后被重置回显示。
+                   这里原先只跟了 draw，没跟 hideCard —— SettingsBinder:744 的同类保存是补齐的 */
+                k.hideCard = src.hideCard;
                 
                 // 保存阿里云 AccessKey（如果是百炼平台）
                 if ("dashscope".equals(platform) && accessKeyInputs[0] != null) {
