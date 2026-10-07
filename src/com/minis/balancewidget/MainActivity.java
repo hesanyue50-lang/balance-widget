@@ -831,9 +831,9 @@ public class MainActivity extends Activity {
                （2458 积分和 ¥30 不是同一量纲，直接画会把别的线压成一条平线）。 */
             if (isAsset) {
                 mul = StatsOpt.rate(this, plat);   // 覆盖 usd 判断：积分按用户设的折算率走
-                detail.append(name).append("   积分折算（1 积分 ≈ ")
-                      .append(String.format("%.4f", mul).replaceAll("0+$", "")
-                              .replaceAll("\\.$", "")).append(" 元）\n");
+                /* 折算率本身不再往明细里写一行 —— 那是常量说明，不是充消数据，
+                   每个积分平台都重复一遍很啰嗦（折算率在卡片菜单里能看能改）。
+                   注意 mul 必须照算：下面画曲线要靠它换量纲。 */
             }
 
             // 聚合该平台所有 Key（同一账户多密钥余额相同 → 取最大值，避免重复计算）
