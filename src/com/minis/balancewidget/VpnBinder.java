@@ -1186,7 +1186,11 @@ public class VpnBinder {
                 final String fErr = err;
                 act.runOnUiThread(new Runnable() {
                     public void run() {
-                        Clash.setEnabled(act, fErr == null);
+                        /* 启动失败不动用户的开关 —— 失败通常是暂时的
+                           （网络没就绪 / 订阅临时拉不到 / 刚开机系统还没放行），
+                           自动关掉会让用户手动再开一次，还得自己猜为什么关了。
+                           开关表达的是"用户想用加速"这个意图，只有用户能改它。 */
+                        if (fErr == null) Clash.setEnabled(act, true);
                         toast(fErr == null ? "加速已启动" : fErr);
                         groups.clear();
                         render();

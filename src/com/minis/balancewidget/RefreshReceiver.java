@@ -22,6 +22,7 @@ public class RefreshReceiver extends BroadcastReceiver {
         // 开机后重新排期（闹钟在重启后会被清除）
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
             if (hasKeys(context)) RefreshScheduler.schedule(context);
+            resumeVpnIfWanted(context);
             return;
         }
 
@@ -34,6 +35,9 @@ public class RefreshReceiver extends BroadcastReceiver {
             redraw.setAction(BalanceWidgetProvider.ACTION_FORCE_REDRAW);
             ac.sendBroadcast(redraw);
             if (hasKeys(ac)) RefreshScheduler.schedule(ac);
+            /* 更新后 VpnService 一定已经断了（进程被杀），而用户的开关还开着 ——
+               恢复了才不会让更新变成"莫名其妙断网"。 */
+            resumeVpnIfWanted(ac);
             return;
         }
 
@@ -66,5 +70,38 @@ public class RefreshReceiver extends BroadcastReceiver {
             if (BalanceFetcher.loadCustom(ctx).size() > 0) return true;
         } catch (Throwable ignored) { }
         return false;
+    }
+
+    /**
+     * 开机 / App 更新后，把用户开着的加速拉起来。
+     *
+     * 开关是用户意图的持久记录：用户点开过一次，就表示"我要用加速"，
+     * 那么重启或更新后应该自动接上，而不是让用户发现网断了、再手动开一次。
+     * 只有用户主动关掉才会停。
+     *
+     * 延迟几秒再启：刚开机时系统网络栈、VPN 授权都还没就绪，
+     * 立刻 startCore 多半失败。失败也没关系 —— 开关保持不动，
+     * 用户下次打开 App 时那套"开关开着但内核没跑"的逻辑会再拉一次。
+     */
+    private void resumeVpnIfWanted(final Context ctx) {
+        try {
+            if (!Clash.enabled(ctx)) return;
+            final Context ac = ctx.getApplicationContext();
+            new Thread(new Runnable() {
+                public void run() {
+                    try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
+                    try {
+                        if (!Clash.enabled(ac)) return;   // 等待期间用户关了就别启
+                        if (Clash.isRunning()) return;
+                        SubStore.Sub a = SubStore.active(ac);
+                        if (a == null || !a.ready()) return;
+                        Clash.start(ac, Clash.buildConfig(a.yaml));
+                        BalanceFetcher.diag(ac, "开机/更新后已自动恢复加速");
+                    } catch (Throwable t) {
+                        BalanceFetcher.diag(ac, "自动恢复加速失败：" + t.getClass().getSimpleName());
+                    }
+                }
+            }).start();
+        } catch (Throwable ignored) { }
     }
 }
