@@ -95,6 +95,23 @@ public final class Clash {
     }
 
     /**
+     * 这种模式下，加速该不该**自动**开启（打开 App / 开机时不用问）。
+     *
+     * - 部分 API 分流：用户已逐个勾选哪些平台走代理，意图明确、影响不外溢
+     *   → 自动开，省得每次进来手动点一下。
+     * - 应用内全局：只影响本应用自己的请求，不碰别的 App
+     *   → 同样自动开。
+     * - 系统全局：建一条系统 VPN 接管**整机**流量，影响面大、还要弹授权框
+     *   → 必须用户手动开，不替他做这个决定。
+     *
+     * 注意 mode() 已把历史值 "app" 归一化成 MODE_ALL，这里只需判两个值。
+     */
+    public static boolean autoStartAllowed(Context c) {
+        String m = mode(c);
+        return MODE_ALL.equals(m) || MODE_PARTIAL.equals(m);
+    }
+
+    /**
      * 判断某个平台这次要不要走代理。
      *
      * 注意：这里的「全局 / 应用内」指的是**本应用内**的流量，

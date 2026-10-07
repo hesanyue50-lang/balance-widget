@@ -185,6 +185,13 @@ public class VpnBinder {
                     }
                     Clash.setMode(act, m);
                     BalanceFetcher.diag(act, "代理模式 → " + m);
+                    /* 切到"能自动开"的模式时，如果开关本来就是开的，就顺手接上 ——
+                       用户刚点了这一项，意图已经很明确了，不该还要他再点一次总开关。
+                       切到系统全局则不动：那个得用户自己确认（会弹授权框）。 */
+                    if (Clash.enabled(act) && Clash.autoStartAllowed(act)
+                            && !Clash.isRunning()) {
+                        restartCore();
+                    }
                     renderMode();
                     renderPlatforms();     // 部分模式下才需要看勾选列表
                 }

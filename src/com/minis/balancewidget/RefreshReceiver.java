@@ -86,6 +86,9 @@ public class RefreshReceiver extends BroadcastReceiver {
     private void resumeVpnIfWanted(final Context ctx) {
         try {
             if (!Clash.enabled(ctx)) return;
+            /* 系统全局代理不自动起 —— 它接管整机流量还要弹授权框，
+               这个决定留给用户自己做。部分/应用内模式才自动接上。 */
+            if (!Clash.autoStartAllowed(ctx)) return;
             final Context ac = ctx.getApplicationContext();
             new Thread(new Runnable() {
                 public void run() {

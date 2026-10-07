@@ -65,8 +65,17 @@ public class MainActivity extends Activity {
         } catch (Throwable ignored) { }
 
         /* 上次开着加速就自动拉起内核（约 1~2 秒）。放后台线程，别拖慢启动；
-           内核是本应用的子进程，应用进程一死它就跟着走 —— 不会后台偷跑。 */
+           内核是本应用的子进程，应用进程一死它就跟着走 —— 不会后台偷跑。
+
+           模式决定要不要自动拉：
+           - 部分 API 分流 / 应用内全局：用户早就勾好了要走代理的范围，意图明确、
+             影响不外溢 → 打开 App 直接接上，不必每次手动点一下。
+           - 系统全局：建的是接管整机的系统 VPN，还要弹授权框 ——
+             替用户做这个决定不合适，留给他手动开。 */
         if (Clash.enabled(this) && !Clash.isRunning()) {
+            if (!Clash.autoStartAllowed(this)) {
+                BalanceFetcher.diag(this, "全局代理模式，等待用户手动开启");
+            } else {
             final Context c0 = this;
             new Thread(new Runnable() {
                 public void run() {
@@ -81,6 +90,7 @@ public class MainActivity extends Activity {
                     }
                 }
             }).start();
+            }
         }
 
         /* 进 App 就先保活一次：会话多半在后台已经过期了，
