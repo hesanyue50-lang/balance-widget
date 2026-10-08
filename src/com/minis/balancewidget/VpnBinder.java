@@ -894,6 +894,14 @@ public class VpnBinder {
             String nm = cs.get(i).name;
             plats.put(plat, (nm == null || nm.length() == 0) ? "自定义平台 " + (i + 1) : nm);
         }
+        /* 高级自定义平台也能勾走不走代理 */
+        List<WebCustom> webs = WebCustom.loadAll(act);
+        for (int i = 0; i < webs.size(); i++) {
+            String plat = "web:" + i;
+            if (plats.containsKey(plat)) continue;
+            String nm = webs.get(i).name;
+            plats.put(plat, (nm == null || nm.length() == 0) ? "高级平台 " + (i + 1) : nm);
+        }
 
         /* 内容没变就直接返回 —— 这页每次切进来都会走一遍全量渲染，
            平台清单通常没动，白白拆掉重建会让下半屏闪一下。 */
@@ -980,6 +988,17 @@ public class VpnBinder {
                 if (idx >= 0 && idx < cs.size() && cs.get(idx).name != null
                         && cs.get(idx).name.length() > 0) return cs.get(idx).name;
             } catch (Throwable ignored) { }
+        }
+        if (plat.startsWith("web")) {
+            try {
+                String n = plat.startsWith("web:") ? plat.substring(4) : plat.substring(3);
+                int idx = Integer.parseInt(n);
+                List<WebCustom> ws = WebCustom.loadAll(act);
+                if (idx >= 0 && idx < ws.size() && ws.get(idx).name.length() > 0) {
+                    return ws.get(idx).name;
+                }
+            } catch (Throwable ignored) { }
+            return "高级平台";
         }
         return plat;
     }

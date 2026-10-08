@@ -1257,6 +1257,11 @@ public class BalanceFetcher {
         return Double.NaN;
     }
 
+    /** WebCustom 自动识别复用：同一套「常见余额字段名 → 深度找数」逻辑 */
+    public static double pickForWeb(JSONObject o) {
+        return pick(o);
+    }
+
     private static double pick(JSONObject o) {
         double v = findNum(o, BAL_KEYS);
         if (!Double.isNaN(v)) return v;
@@ -1483,6 +1488,35 @@ public class BalanceFetcher {
             /* 静态项不该占用联网预算：直接把结果填好，并发阶段会跳过它 */
         }
 
+        /* 高级自定义平台（web:N）：任意网页/接口抓值，与 custom:N 互不干扰 */
+        List<WebCustom> webs = WebCustom.loadAll(ctx);
+        final List<WebCustom> webs2 = new ArrayList<WebCustom>();
+        for (int i = 0; i < webs.size(); i++) {
+            WebCustom w = webs.get(i);
+            res.configured++;
+            Item it = new Item();
+            it.id = "web" + i;
+            it.platform = "web:" + i;
+            it.threshold = w.threshold;
+            it.alertKey = "web:" + (w.name.length() > 0 ? w.name : String.valueOf(i));
+            it.label = w.name.length() > 0 ? w.name : "网页平台";
+            it.kind = w.kind;
+            it.foreign = w.foreign;
+            if ("NONE".equals(w.unit)) {
+                /* 纯数值（次数/积分/百分号），不参与金额折算 */
+                it.tag = "";
+                it.unitOverride = w.suffix == null ? "" : w.suffix;
+            } else {
+                it.tag = "USD".equals(w.unit) ? "USD" : "CNY";
+            }
+            items.add(it);
+            webs2.add(w);
+        }
+        /* 并行列表对齐：custs/keys/apiKeys 与 items 一一对应，web 项补 null 占位 */
+        while (custs.size() < items.size()) custs.add(null);
+        while (keys.size() < items.size()) keys.add(null);
+        while (apiKeys.size() < items.size()) apiKeys.add(null);
+
         /* 🔥 并发抓取。原来是 for 串行，N 个平台最坏要 N × timeoutMs ——
            后台广播/小组件根本等不到那么久，排在后面的平台会被直接砍掉（数据残缺）。
            并发之后总耗时 ≈ 最慢的那一个，7 个平台也能在几秒内拿全。 */
@@ -1495,6 +1529,9 @@ public class BalanceFetcher {
             final Custom c = custs.get(i);
             final String k = keys.get(i);
             final KeyStore.ApiKey ak = apiKeys.get(i);  // 新增：获取 ApiKey 对象
+            /* web 项按 platform 前缀精确识别（"web:" 开头，不会误伤 workbuddy） */
+            final WebCustom w = it.platform != null && it.platform.startsWith("web:")
+                    && i < webs2.size() ? webs2.get(i) : null;
             ts[i] = new Thread(new Runnable() {
                 public void run() {
                     long ts0 = System.currentTimeMillis();
@@ -1507,8 +1544,9 @@ public class BalanceFetcher {
                         /* 国外平台给双倍预算：境内访问境外站点常卡在 TLS 握手，
                            12 秒总预算切成 9 秒单地址往往不够，网络明明是通的。 */
                         int budget = it.foreign ? per * 2 : per;
-                        if (c == null) fill(ctx, it, ak, rate, budget);  // 修改：传递 ApiKey 对象
-                        else           fillCustom(it, c, rate, per);
+                        if (w != null)            fillWeb(it, w, rate, budget, viaProxy);
+                        else if (c == null)       fill(ctx, it, ak, rate, budget);
+                        else                      fillCustom(it, c, rate, per);
                         it.ok = true;
                         Log.i(TAG, "平台 " + it.id + " 成功: " + it.amount);
                         diag(ctx, "  OK  " + it.id + " = " + it.amount
@@ -1532,7 +1570,9 @@ public class BalanceFetcher {
         }
         for (int i = 0; i < n; i++) {
             try {
-                ts[i].join(per + 1500L);
+                /* foreign 项的预算是 per*2（并发段给的），join 也得跟着给足，
+                   否则那边还没跑完这边就中断了 —— 白抓 */
+                ts[i].join((items.get(i).foreign ? per * 2 : per) + 1500L);
                 if (ts[i].isAlive()) {
                     /* ★ 预算内没收尾就直接中断：不掐的话它会继续占着 socket 和线程，
                        多轮刷新叠加起来就是线程/内存堆积（闪退的来源之一）。 */
@@ -1655,6 +1695,51 @@ public class BalanceFetcher {
             }
         }
         if (ak == null) {
+            /* 高级自定义平台（web:N）没有 KeyStore 记录，按 platform 前缀分流 */
+            if (it.id.startsWith("web")) {
+                int widx = -1;
+                try {
+                    String n = it.id.startsWith("web:")
+                            ? it.id.substring(4) : it.id.substring(3);
+                    widx = Integer.parseInt(n);
+                } catch (Exception ig) { }
+                List<WebCustom> webs = WebCustom.loadAll(ctx);
+                if (widx < 0 || widx >= webs.size()) {
+                    it.label = "高级平台";
+                    it.error = "这条高级平台已经被删掉了";
+                    it.amount = "\u2014";
+                    return it;
+                }
+                WebCustom w = webs.get(widx);
+                it.id = "web" + widx;
+                it.platform = "web:" + widx;
+                it.threshold = w.threshold;
+                it.label = w.name.length() > 0 ? w.name : "网页平台";
+                it.kind = w.kind;
+                it.foreign = w.foreign;
+                if ("NONE".equals(w.unit)) {
+                    it.tag = "";
+                    it.unitOverride = w.suffix == null ? "" : w.suffix;
+                } else {
+                    it.tag = "USD".equals(w.unit) ? "USD" : "CNY";
+                }
+                double rate2 = 7.1;
+                try {
+                    rate2 = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                            .getFloat("last_rate", 7.1f);
+                } catch (Throwable ig) { }
+                boolean vpx = Clash.enabled(ctx) && Clash.isRunning()
+                        && Clash.shouldProxy(ctx, it.platform, w.foreign);
+                try {
+                    fillWeb(it, w, rate2, w.foreign ? timeoutMs * 2 : timeoutMs, vpx);
+                    it.ok = true;
+                } catch (Exception e) {
+                    it.ok = false;
+                    it.error = (e.getMessage() == null) ? "查询失败" : e.getMessage();
+                    it.amount = "\u2014";
+                }
+                return it;
+            }
             /* 展示型平台（百炼 / 魔搭）可以没有 Key 记录 */
             Preset p0 = presetOf(it.id);
             if (p0 != null && ("dashscope".equals(p0.id) || "modelscope".equals(p0.id))) {
@@ -1765,6 +1850,41 @@ public class BalanceFetcher {
     }
 
     /** 自定义平台（任意 OpenAI 兼容接口：余额 / 订阅余量 / 后付费账单…） */
+    /**
+     * 高级自定义平台：交给 WebCustom 引擎抓取与提取。
+     *
+     * @param viaProxy 由调用方（并发段）按「平台勾选 + foreign」统一判定后传入，
+     *                 不要在这里再算一遍 —— 两处规则迟早跑偏（部分模式下用户勾了
+     *                 web:0 走代理，这里自己算就会把勾选吞掉）。
+     */
+    private static void fillWeb(Item it, WebCustom w, double rate, int t, boolean viaProxy) throws Exception {
+        WebCustom.Result r = w.fetch(viaProxy, t);
+        if (!r.numeric) {
+            /* 纯文本模式：直接展示，没有数值语义。
+               阈值一并归零 —— 不然 Alert 会拿 bal=0 去比阈值，永远"低于预警"。 */
+            it.amount = r.display;
+            it.cny = 0;
+            it.bal = 0;
+            it.threshold = 0;
+            it.rows = "文本  " + clip(r.display, 40);
+            return;
+        }
+        it.bal = r.value;
+        boolean isBalanceKind = "balance".equals(it.kind);
+        boolean usd = "USD".equals(it.tag);
+        it.amount = r.display;
+        if (usd) {
+            it.conv = "≈¥" + String.format("%.2f", r.value * rate);
+        } else if ("CNY".equals(it.tag)) {
+            it.conv = "";
+        } else {
+            it.conv = "";                       // NONE 单位不折算
+        }
+        it.cny = isBalanceKind ? (usd ? r.value * rate : ("CNY".equals(it.tag) ? r.value : 0)) : 0;
+        it.rows = "来源  " + r.how;
+        it.debug = r.display;
+    }
+
     private static void fillCustom(Item it, Custom c, double rate, int t) throws Exception {
         /* 没填 URL：这个服务没有可查的额度（免费的魔搭），只作展示，一个请求都不发 */
         if (c.url == null || c.url.length() == 0) {

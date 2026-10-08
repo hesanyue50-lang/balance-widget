@@ -818,6 +818,16 @@ public class MainActivity extends Activity {
                             && cs0.get(ci).name.length() > 0) name = cs0.get(ci).name;
                 } catch (Throwable ignored) { }
             }
+            if (p == null && plat.startsWith("web")) {
+                try {
+                    String n = plat.startsWith("web:") ? plat.substring(4) : plat.substring(3);
+                    int ci = Integer.parseInt(n);
+                    java.util.List<WebCustom> ws0 = WebCustom.loadAll(this);
+                    if (ci >= 0 && ci < ws0.size() && ws0.get(ci).name.length() > 0) {
+                        name = ws0.get(ci).name;
+                    }
+                } catch (Throwable ignored) { }
+            }
 
             boolean anyDraw = false;
             for (int i = 0; i < ks.size(); i++) if (ks.get(i).draw) anyDraw = true;
@@ -829,7 +839,8 @@ public class MainActivity extends Activity {
             boolean isAsset = !"balance".equals(kind);
             if (isAsset && !StatsOpt.inChart(this, plat)) {
                 if (anyDraw) {
-                    int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                    int zc = StatsOpt.effectiveColor(this, plat,
+                            CHART_PALETTE[balIdx % CHART_PALETTE.length]);
                     platformColor.put(plat, Integer.valueOf(zc));
                     series.add(new UsageChartView.Series(zc, new double[DAYS], name, false));
                     detail.append(name).append("   无数据 · 查看控制台\n");
@@ -939,7 +950,8 @@ public class MainActivity extends Activity {
                                         ? "   未登录 · 点卡片登录后开始积累\n"
                                         : "   数据积累中 · 暂无快照\n"));
                     }
-                    int zc = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                    int zc0 = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                    int zc = StatsOpt.effectiveColor(this, plat, zc0);
                     platformColor.put(plat, Integer.valueOf(zc));
                     series.add(new UsageChartView.Series(zc, empty, name, false));
                     if (!Double.isNaN(empty[DAYS - 1])) {
@@ -967,7 +979,8 @@ public class MainActivity extends Activity {
                     if (!Double.isNaN(dayCons[d])) consDay[d] += dayCons[d];
                 detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
                       .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
-                int lineColor = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                int lineColor0 = CHART_PALETTE[balIdx % CHART_PALETTE.length];
+                int lineColor = StatsOpt.effectiveColor(this, plat, lineColor0);
                 platformColor.put(plat, Integer.valueOf(lineColor));
                 series.add(new UsageChartView.Series(lineColor, own, name, false));
                 for (int d = 0; d < DAYS; d++)
@@ -1089,6 +1102,16 @@ public class MainActivity extends Activity {
                             && cs1.get(ci0).name.length() > 0) name = cs1.get(ci0).name;
                 } catch (Throwable ignored) { }
             }
+            if (p == null && plat.startsWith("web")) {
+                try {
+                    String n0 = plat.startsWith("web:") ? plat.substring(4) : plat.substring(3);
+                    int ci0 = Integer.parseInt(n0);
+                    java.util.List<WebCustom> ws1 = WebCustom.loadAll(this);
+                    if (ci0 >= 0 && ci0 < ws1.size() && ws1.get(ci0).name.length() > 0) {
+                        name = ws1.get(ci0).name;
+                    }
+                } catch (Throwable ignored) { }
+            }
             final String finalName = name;
             Boolean dr = platformDraw.get(plat);
             final boolean on0 = dr != null && dr.booleanValue();
@@ -1105,9 +1128,37 @@ public class MainActivity extends Activity {
             Integer lc = platformColor.get(plat);
             gd.setColor(lc != null ? lc.intValue() : 0xFF9AA3B0);
             dot.setBackground(gd);
-            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(14), dp(14));
-            dlp.rightMargin = dp(12);
+            /* 触摸区 22dp、视觉圆 14dp：宽高给 22dp，再靠 4dp padding 把背景
+               （就是那个圆）压回 14dp。反过来的话（宽高 14 + padding 4）
+               圆会缩成 6dp —— padding 是画在 View 内部的。 */
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(22), dp(22));
+            dlp.rightMargin = dp(4);
             dot.setLayoutParams(dlp);
+            dot.setPadding(dp(4), dp(4), dp(4), dp(4));
+            dot.setClickable(true);
+            final String platF = plat;
+            final String nameF = name;
+            dot.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    int cur = StatsOpt.chartColor(MainActivity.this, platF);
+                    ColorPicker.show(MainActivity.this,
+                            "曲线颜色：" + nameF, cur, new ColorPicker.OnPick() {
+                                public void onPick(int argb) {
+                                    StatsOpt.setChartColor(MainActivity.this, platF, argb);
+                                    /* 图表曲线立即按新色重算 */
+                                    buildStats(false);
+                                    /* 图例圆点就地换色（buildStats(false) 不重建开关行，
+                                       圆点自己动手，别等下一轮） */
+                                    Integer nc = platformColor.get(platF);
+                                    android.graphics.drawable.GradientDrawable g =
+                                            (android.graphics.drawable.GradientDrawable) v.getBackground();
+                                    g.setColor(argb != 0 ? argb
+                                            : (nc != null ? nc.intValue() : 0xFF9AA3B0));
+                                    v.invalidate();
+                                }
+                            });
+                }
+            });
             row.addView(dot);
 
             android.widget.Switch sw = new android.widget.Switch(this);
@@ -1132,7 +1183,10 @@ public class MainActivity extends Activity {
                     }
                     platformDraw.put(plat, Boolean.valueOf(on));
                     Integer nc = platformColor.get(plat);
-                    gd.setColor(on && nc != null ? nc.intValue() : 0xFF9AA3B0);
+                    /* 注意改的是 dot 当前实际背景（可能是改色后的新 drawable） */
+                    android.graphics.drawable.GradientDrawable curGd =
+                            (android.graphics.drawable.GradientDrawable) dot.getBackground();
+                    curGd.setColor(on && nc != null ? nc.intValue() : 0xFF9AA3B0);
                     dot.invalidate();
                     /* 图表先按新状态重算（不重建开关列表，免得把正在拨的这个 Switch 拆了）；
                        再把开关列表的重建推到下一帧 —— 因为这一行可能要换组：
@@ -1244,6 +1298,17 @@ public class MainActivity extends Activity {
                 if (ci >= 0 && ci < cs.size() && cs.get(ci).name != null
                         && cs.get(ci).name.length() > 0) return cs.get(ci).name;
             } catch (Throwable ignored) { }
+        }
+        if (plat != null && plat.startsWith("web")) {
+            try {
+                String n = plat.startsWith("web:") ? plat.substring(4) : plat.substring(3);
+                int ci = Integer.parseInt(n);
+                java.util.List<WebCustom> ws = WebCustom.loadAll(this);
+                if (ci >= 0 && ci < ws.size() && ws.get(ci).name.length() > 0) {
+                    return ws.get(ci).name;
+                }
+            } catch (Throwable ignored) { }
+            return "高级平台";
         }
         return plat == null ? "" : plat;
     }
@@ -1463,6 +1528,7 @@ public class MainActivity extends Activity {
             if (BalanceFetcher.PRESETS[i].id.equals(id)) return BalanceFetcher.PRESETS[i].name;
         }
         if (id.startsWith("custom")) return "自定义平台";
+        if (id.startsWith("web")) return "高级自定义平台";
         return "密钥";
     }
 

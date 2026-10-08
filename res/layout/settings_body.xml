@@ -229,6 +229,32 @@
                     android:text="@string/custom_add"
                     android:textColor="@color/accent"
                     android:textSize="13sp" />
+
+                <!-- 高级自定义平台：抓任意网页里的数字 / 文本 -->
+                <TextView
+                    style="@style/FieldHint"
+                    android:layout_marginTop="20dp"
+                    android:text="高级自定义平台 —— 从任意网页或接口抓一串数字显示到卡片。支持 JSON / 正则 / 区间截取，给会折腾的人用；只填名称和网址也能用（自动识别）。" />
+
+                <LinearLayout
+                    android:id="@+id/web_fields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/btn_add_web"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:text="＋ 添加高级自定义平台"
+                    android:textColor="@color/accent"
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <!-- ========== 图表显示（统计页图表元素开关）========== -->

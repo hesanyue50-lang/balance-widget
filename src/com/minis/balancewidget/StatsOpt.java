@@ -105,6 +105,34 @@ public class StatsOpt {
         sp(c).edit().putString("console_" + platform, url == null ? "" : url.trim()).apply();
     }
 
+    /* ==================== 图表配色 ==================== */
+
+    /**
+     * 用户给该平台指定的曲线颜色（0 = 没指定，用自动分配的调色板色）。
+     *
+     * 为什么存 int 不存 #RRGGBB 字符串： SharedPreferences 存 int 是原生类型，
+     * 读写零转换；字符串还得解析，错了就是一坨灰。
+     */
+    public static int chartColor(Context c, String platform) {
+        return sp(c).getInt("cc_" + platform, 0);
+    }
+
+    /** 0 = 清除自定义，回到自动分配。 */
+    public static void setChartColor(Context c, String platform, int argb) {
+        if (argb == 0) sp(c).edit().remove("cc_" + platform).apply();
+        else sp(c).edit().putInt("cc_" + platform, argb).apply();
+    }
+
+    /**
+     * 统计图曲线最终用色：用户指定优先，其次自动分配色。
+     *
+     * @param autoColor 平台没指定时使用的自动色（调用方按 CHART_PALETTE 轮转算出）
+     */
+    public static int effectiveColor(Context c, String platform, int autoColor) {
+        int custom = chartColor(c, platform);
+        return custom != 0 ? custom : autoColor;
+    }
+
     /**
      * 把一个以「积分」为单位的数值折算成人民币。
      * 平台没开统计时返回 NaN —— 调用方据此跳过累加。

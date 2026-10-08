@@ -261,6 +261,13 @@ public class SettingsBinder {
         });
         renderCustoms();
 
+        // ---- 高级自定义平台（网页抓取）----
+        View addWeb = root.findViewById(R.id.btn_add_web);
+        if (addWeb != null) addWeb.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { webDialog(-1); }
+        });
+        renderWebs();
+
         // ---- 安全与密码（内联，与密钥区同级）----
         buildSecuritySection();
 
@@ -1034,6 +1041,544 @@ public class SettingsBinder {
             row.addView(swStat);
             box.addView(row);
         }
+    }
+
+    // ---------------- 高级自定义平台（网页抓取） ----------------
+
+    /** 列出所有 WebCustom，每条带「编辑 / 测试 / 删除」 */
+    private void renderWebs() {
+        LinearLayout box = (LinearLayout) root.findViewById(R.id.web_fields);
+        if (box == null) return;
+        box.removeAllViews();
+
+        List<WebCustom> ws = WebCustom.loadAll(act);
+        for (int i = 0; i < ws.size(); i++) {
+            final int idx = i;
+            WebCustom w = ws.get(i);
+            LinearLayout row = new LinearLayout(act);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(6), 0, 0);
+
+            TextView t = new TextView(act);
+            String modeDesc;
+            if ("auto".equals(w.mode)) modeDesc = "自动";
+            else if ("json".equals(w.mode)) modeDesc = "JSON";
+            else if ("regex".equals(w.mode)) modeDesc = "正则";
+            else if ("between".equals(w.mode)) modeDesc = "区间";
+            else modeDesc = "文本";
+            t.setText(w.name + "  ·  " + modeDesc);
+            t.setTextColor(color(R.color.tx));
+            t.setTextSize(13);
+            t.setLayoutParams(new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(t);
+
+            TextView test = mkBtn("测试", color(R.color.tx2));
+            test.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { testWeb(idx); }
+            });
+            row.addView(test);
+
+            TextView edit = mkBtn("编辑", color(R.color.accent));
+            edit.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { webDialog(idx); }
+            });
+            row.addView(edit);
+
+            TextView del = mkBtn("删除", color(R.color.danger));
+            del.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    List<WebCustom> list = WebCustom.loadAll(act);
+                    if (idx < list.size()) {
+                        list.remove(idx);
+                        WebCustom.saveAll(act, list);
+                    }
+                    Busy.run(act, "正在更新…", new Runnable() {
+                        public void run() { renderWebs(); kick(); }
+                    });
+                }
+            });
+            row.addView(del);
+            box.addView(row);
+        }
+        if (ws.isEmpty()) {
+            TextView t = new TextView(act);
+            t.setText("还没有添加。适合监控任意网页上的一串数字 —— 比如自己搭的服务、公司内部面板、论坛积分。");
+            t.setTextColor(color(R.color.tx3));
+            t.setTextSize(12);
+            box.addView(t);
+        }
+    }
+
+    /** 抓一次并在对话框里显示识别结果（成功：值 + 识别方式；失败：原文片段） */
+    private void testWeb(final int idx) {
+        final List<WebCustom> ws = WebCustom.loadAll(act);
+        if (idx < 0 || idx >= ws.size()) return;
+        final WebCustom w = ws.get(idx);
+        Busy.run(act, "正在抓取…", new Runnable() {
+            public void run() {
+                String msg;
+                try {
+                    WebCustom.Result r = w.fetch(w.foreign, 12000);
+                    msg = "✅ " + r.display
+                            + "\n识别方式：" + r.how
+                            + "\n数值：" + r.value;
+                } catch (Throwable t) {
+                    msg = "❌ " + t.getMessage();
+                }
+                final String m = msg;
+                act.runOnUiThread(new Runnable() {
+                    public void run() {
+                        new AlertDialog.Builder(act)
+                                .setTitle("测试结果")
+                                .setMessage(m)
+                                .setPositiveButton("好", null)
+                                .show();
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * 添加 / 编辑高级自定义平台。
+     *
+     * 双模式设计：
+     * - 默认只露「名字 / 网址」两项（简单模式）—— 大多数人只填这两个就能用；
+     * - 「高级选项」是一个折叠区，点开才露出全部字段（模式/路径/正则/方法/头/倍率/模板…）。
+     *   有基础的人展开折腾，没基础的人看不见，不会被吓跑。
+     */
+    private void webDialog(final int editIdx) {
+        final boolean isEdit = editIdx >= 0;
+        final List<WebCustom> ws = WebCustom.loadAll(act);
+        final WebCustom w0 = isEdit && editIdx < ws.size() ? ws.get(editIdx) : new WebCustom();
+
+        LinearLayout panel = new LinearLayout(act);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(10), dp(20), 0);
+
+        /* 高级选项展开后有十来个控件，AlertDialog 本身不滚动 ——
+           不包 ScrollView 的话小屏幕上「保存」按钮够不着。
+           包一层 + 限制高度，展开时对话框内部自己滚。 */
+        final android.widget.ScrollView scroll = new android.widget.ScrollView(act);
+        scroll.addView(panel);
+        scroll.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        /* ================= 基础两栏（必填） ================= */
+
+        final EditText eName = new EditText(act);
+        eName.setHint("比如：我的图床额度");
+        eName.setText(w0.name);
+        eName.setMaxLines(1);
+        addField(panel, "① 名称",
+                "这张卡片显示的名字，会出现在余额列表、统计图表和小组件里。",
+                eName);
+
+        final EditText eUrl = new EditText(act);
+        eUrl.setHint("https://example.com/api/balance");
+        eUrl.setText(w0.url);
+        eUrl.setMaxLines(1);
+        addField(panel, "② 网址",
+                "要抓取的页面或接口地址，以 http:// 或 https:// 开头。\n"
+                        + "只填上面两项、直接点「测试」，十有八九能自动识别出数字 ——\n"
+                        + "识别不出来再往下展开「高级选项」。",
+                eUrl);
+
+        /* ================= 高级选项（折叠） ================= */
+        final LinearLayout advBox = new LinearLayout(act);
+        advBox.setOrientation(LinearLayout.VERTICAL);
+        advBox.setVisibility(View.GONE);
+
+        final TextView advToggle = mkBtn("▸ 高级选项（识别不准时再展开）", color(R.color.tx2));
+        advToggle.setOnClickListener(new View.OnClickListener() {
+            boolean open = false;
+            public void onClick(View v) {
+                open = !open;
+                advToggle.setText(open ? "▾ 高级选项（识别不准时再展开）" : "▸ 高级选项（识别不准时再展开）");
+                advBox.setVisibility(open ? View.VISIBLE : View.GONE);
+            }
+        });
+        /* 折叠开关自己也要上下留白，跟字段区分开 */
+        LinearLayout.LayoutParams lpAdv = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpAdv.topMargin = dp(20);
+        advToggle.setLayoutParams(lpAdv);
+        panel.addView(advToggle);
+        panel.addView(advBox);
+
+        TextView advIntro = new TextView(act);
+        advIntro.setText("下面这些全部有默认值，按需修改；");
+        advIntro.setTextColor(color(R.color.tx3));
+        advIntro.setTextSize(11.5f);
+        LinearLayout.LayoutParams lpI = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpI.topMargin = dp(4);
+        advIntro.setLayoutParams(lpI);
+        advBox.addView(advIntro);
+
+        /* ---------- 提取模式 ---------- */
+        final String[] modeVals = { "auto", "json", "regex", "between", "text" };
+        final String[] modeNames = { "自动识别", "JSON 路径", "正则表达式", "区间截取", "整页文本" };
+        final int[] modeIdx = { idxOf(w0.mode, modeVals) };
+        final TextView modePick = mkLabel(modeNames[modeIdx[0]]);
+        modePick.setTextColor(color(R.color.accent));
+        modePick.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                modeIdx[0] = (modeIdx[0] + 1) % modeVals.length;
+                modePick.setText(modeNames[modeIdx[0]]);
+            }
+        });
+        addField(advBox, "③ 提取模式",
+                "从网页内容里「拿出那个数字」的方法，点下面的蓝色字循环切换：\n"
+                        + "自动识别 —— 先当 JSON 试、再按正则试，都不行就抓页面里\n"
+                        + "　　　　　　第一串像金额的数字。多数情况用这个就够。\n"
+                        + "JSON 路径 —— 接口返回 JSON 时用，配合下面的「路径」。\n"
+                        + "正则表达式 —— 页面是 HTML 时用，配合下面的「正则」。\n"
+                        + "区间截取 —— 数字夹在两段固定文字中间时用，最直观。\n"
+                        + "整页文本 —— 不抓数字，直接显示一段文字（如会员状态）。",
+                modePick);
+
+        /* ---------- JSON 路径 ---------- */
+        final EditText ePath = new EditText(act);
+        ePath.setHint("data.balance");
+        ePath.setText(w0.path);
+        addField(advBox, "④ JSON 路径",
+                "提取模式为「JSON 路径 / 自动识别」时生效。\n"
+                        + "按层级写，点号分隔；多个候选用竖线隔开，从左到右取第一个命中的：\n"
+                        + "　例：data.balance\n"
+                        + "　例：data.money | data.amount | balance",
+                ePath);
+
+        /* ---------- 正则 ---------- */
+        final EditText ePattern = new EditText(act);
+        ePattern.setHint("余额[:：]\\s*([0-9.,]+)");
+        ePattern.setText(w0.pattern);
+        addField(advBox, "⑤ 正则表达式",
+                "提取模式为「正则表达式」时生效。\n"
+                        + "表达式里有括号时取第 1 个括号里的内容，没括号取整个匹配。\n"
+                        + "　例：余额[:：]\\s*([0-9.,]+)　← 匹配「余额：12.5」抓出 12.5\n"
+                        + "　例：credits\">([0-9,]+)　　　← 匹配网页里的积分数字",
+                ePattern);
+
+        /* ---------- 区间截取 ---------- */
+        LinearLayout betweenRow = new LinearLayout(act);
+        betweenRow.setOrientation(LinearLayout.HORIZONTAL);
+        final EditText eStart = new EditText(act);
+        eStart.setHint("左标记，如：余额：");
+        eStart.setText(w0.start);
+        LinearLayout.LayoutParams lpS = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpS.rightMargin = dp(6);
+        eStart.setLayoutParams(lpS);
+        final EditText eEnd = new EditText(act);
+        eEnd.setHint("右标记，如：元");
+        eEnd.setText(w0.end);
+        eEnd.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        betweenRow.addView(eStart);
+        betweenRow.addView(eEnd);
+        addField(advBox, "⑥ 区间左 / 右标记",
+                "提取模式为「区间截取」时生效。\n"
+                        + "抓「左标记」和「右标记」**之间**的内容再取数字。\n"
+                        + "　例：页面写着「您的余额：1,234.56 元」\n"
+                        + "　　　左填「余额：」右填「元」→ 抓出 1234.56\n"
+                        + "左标记必须唯一，填多个相同文字时只认第一处。",
+                betweenRow);
+
+        /* ---------- 请求方法 / 字符集 ---------- */
+        LinearLayout mrow = new LinearLayout(act);
+        mrow.setOrientation(LinearLayout.HORIZONTAL);
+        final EditText eMethod = new EditText(act);
+        eMethod.setHint("GET");
+        eMethod.setText(w0.method);
+        eMethod.setMaxLines(1);
+        LinearLayout.LayoutParams lpM = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpM.rightMargin = dp(6);
+        eMethod.setLayoutParams(lpM);
+        final EditText eCharset = new EditText(act);
+        eCharset.setHint("UTF-8");
+        eCharset.setText(w0.charset);
+        eCharset.setMaxLines(1);
+        eCharset.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        mrow.addView(eMethod);
+        mrow.addView(eCharset);
+        addField(advBox, "⑦ 请求方法 / 字符集",
+                "方法：GET（默认，普通网页）或 POST（部分接口要求 POST 才返回数据）。\n"
+                        + "字符集：网页不是 UTF-8 编码且中文乱码时才填，比如 GBK。",
+                mrow);
+
+        /* ---------- 附加请求头 ---------- */
+        final EditText eHeaders = new EditText(act);
+        eHeaders.setHint("Authorization: Bearer sk-xxx\nX-Token: abc");
+        eHeaders.setText(w0.headers);
+        eHeaders.setMinLines(2);
+        eHeaders.setTextSize(12);
+        addField(advBox, "⑧ 附加请求头",
+                "需要登录才能访问的页面，把浏览器开发者工具里的请求头抄过来，\n"
+                        + "一行一个，格式「名字: 值」。\n"
+                        + "　例：Authorization: Bearer sk-xxxx\n"
+                        + "　例：Cookie: session=abcdefg\n"
+                        + "这是唯一能过鉴权的地方，别把 Cookie 泄露给别人。",
+                eHeaders);
+
+        /* ---------- POST 请求体 ---------- */
+        final EditText eBody = new EditText(act);
+        eBody.setHint("{\"page\": 1}");
+        eBody.setText(w0.body);
+        eBody.setMinLines(2);
+        eBody.setTextSize(12);
+        addField(advBox, "⑨ POST 请求体",
+                "方法选了 POST 时才需要。发给接口的 JSON 内容，按接口要求填：\n"
+                        + "　例：{\"page\": 1, \"size\": 20}",
+                eBody);
+
+        /* ---------- 倍率 + 后缀 ---------- */
+        LinearLayout nrow = new LinearLayout(act);
+        nrow.setOrientation(LinearLayout.HORIZONTAL);
+        final EditText eScale = new EditText(act);
+        eScale.setHint("1（不缩放）");
+        eScale.setText(w0.scale == 1.0 ? "" : String.valueOf(w0.scale));
+        eScale.setMaxLines(1);
+        LinearLayout.LayoutParams lpN = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpN.rightMargin = dp(6);
+        eScale.setLayoutParams(lpN);
+        final EditText eSuffix = new EditText(act);
+        eSuffix.setHint("%（留空表示无）");
+        eSuffix.setText(w0.suffix);
+        eSuffix.setMaxLines(1);
+        eSuffix.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        nrow.addView(eScale);
+        nrow.addView(eSuffix);
+        addField(advBox, "⑩ 倍率 / 显示后缀",
+                "倍率：抓到的数字统一乘这个数。单位是「分」的接口填 0.01 变成「元」。\n"
+                        + "后缀：单位选「纯数值」时，数字后面显示的字。\n"
+                        + "　例：抓到 87，后缀填 %　→　卡片显示「87%」",
+                nrow);
+
+        /* ---------- 显示模板 ---------- */
+        final EditText eTemplate = new EditText(act);
+        eTemplate.setHint("还剩 {v} 天");
+        eTemplate.setText(w0.template);
+        addField(advBox, "⑪ 显示模板",
+                "想自定义卡片上显示的样子时填。{v} 会被替换成抓到的数值：\n"
+                        + "　例：还剩 {v} 天\n"
+                        + "　例：已用 {v}%，请及时充值\n"
+                        + "留空则按「单位」的规则正常显示金额。",
+                eTemplate);
+
+        /* ---------- 单位 ---------- */
+        final String[] unitVals = { "CNY", "USD", "NONE" };
+        final String[] unitNames = { "人民币 ¥", "美元 $", "纯数值" };
+        final int[] unitIdx = { idxOf(w0.unit, unitVals) };
+        final TextView unitPick = mkLabel(unitNames[unitIdx[0]]);
+        unitPick.setTextColor(color(R.color.accent));
+        unitPick.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                unitIdx[0] = (unitIdx[0] + 1) % unitVals.length;
+                unitPick.setText(unitNames[unitIdx[0]]);
+            }
+        });
+        addField(advBox, "⑫ 单位",
+                "决定数字怎么显示、要不要折算成人民币：\n"
+                        + "人民币 ¥ —— 显示 ¥12.34，计入总资产。\n"
+                        + "美元 $ —— 显示 $12.34，按汇率折算后计入总资产。\n"
+                        + "纯数值 —— 不是钱的量（积分、次数、百分比）。\n"
+                        + "　　　　　配合「显示后缀」用，不进总资产。",
+                unitPick);
+
+        /* ---------- 制式 ---------- */
+        final String[] kindVals = { "balance", "asset" };
+        final String[] kindNames = { "余额制（计入总资产）", "额度制（只展示）" };
+        final int[] kindIdx = { idxOf(w0.kind, kindVals) };
+        final TextView kindPick = mkLabel(kindNames[kindIdx[0]]);
+        kindPick.setTextColor(color(R.color.accent));
+        kindPick.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                kindIdx[0] = (kindIdx[0] + 1) % kindVals.length;
+                kindPick.setText(kindNames[kindIdx[0]]);
+            }
+        });
+        addField(advBox, "⑬ 制式",
+                "余额制 —— 这是真实的钱（钱包、账户余额），算进「总资产」。\n"
+                        + "额度制 —— 积分、点数这类不是钱的量，只展示、不进总资产。",
+                kindPick);
+
+        /* ---------- 境外开关 ---------- */
+        final TextView foreignPick = mkLabel(
+                w0.foreign ? "🌐 境外网站（走代理）" : "中国网站（直连）");
+        foreignPick.setTextColor(color(R.color.accent));
+        foreignPick.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                w0.foreign = !w0.foreign;
+                foreignPick.setText(w0.foreign ? "🌐 境外网站（走代理）" : "中国网站（直连）");
+            }
+        });
+        addField(advBox, "⑭ 网站位置",
+                "中国网站直连更快；境外网站走代理（开了「网络加速」时才生效），\n"
+                        + "不确定就先选中国网站，抓不到再切换。",
+                foreignPick);
+
+        /* ---------- 预警阈值 ---------- */
+        final EditText eThreshold = new EditText(act);
+        eThreshold.setHint("0（不预警）");
+        eThreshold.setText(w0.threshold == 0 ? "" : String.valueOf(w0.threshold));
+        eThreshold.setMaxLines(1);
+        addField(advBox, "⑮ 低值预警阈值",
+                "抓到的数字低于这个值时发通知提醒（只在后台刷新时判断）。\n"
+                        + "　例：填 5　→　余额低于 5 元时提醒\n"
+                        + "填 0 或留空 = 不预警。",
+                eThreshold);
+
+        new AlertDialog.Builder(act)
+                .setTitle(isEdit ? "编辑高级平台" : "添加高级平台")
+                .setView(scroll)
+                .setPositiveButton("保存", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int wi) {
+                        WebCustom w = new WebCustom();
+                        w.name = eName.getText().toString().trim();
+                        w.url = eUrl.getText().toString().trim();
+                        w.mode = modeVals[modeIdx[0]];
+                        w.path = ePath.getText().toString().trim();
+                        w.pattern = ePattern.getText().toString().trim();
+                        w.start = eStart.getText().toString().trim();
+                        w.end = eEnd.getText().toString().trim();
+                        String m = eMethod.getText().toString().trim().toUpperCase();
+                        w.method = m.length() == 0 ? "GET" : m;
+                        w.charset = eCharset.getText().toString().trim();
+                        w.headers = eHeaders.getText().toString().trim();
+                        w.body = eBody.getText().toString().trim();
+                        w.suffix = eSuffix.getText().toString().trim();
+                        w.template = eTemplate.getText().toString().trim();
+                        w.unit = unitVals[unitIdx[0]];
+                        w.kind = kindVals[kindIdx[0]];
+                        w.foreign = w0.foreign;
+                        try {
+                            String sv = eScale.getText().toString().trim();
+                            w.scale = sv.length() == 0 ? 1.0 : Double.parseDouble(sv);
+                        } catch (Exception e) { w.scale = 1.0; }
+                        try {
+                            String tv = eThreshold.getText().toString().trim();
+                            w.threshold = tv.length() == 0 ? 0 : Double.parseDouble(tv);
+                        } catch (Exception e) { w.threshold = 0; }
+
+                        if (w.name.length() == 0 || w.url.length() == 0) {
+                            Toast.makeText(act, "名称和网址不能为空", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        List<WebCustom> list = WebCustom.loadAll(act);
+                        if (isEdit && editIdx < list.size()) list.set(editIdx, w);
+                        else list.add(w);
+                        WebCustom.saveAll(act, list);
+                        Busy.run(act, "正在更新…", new Runnable() {
+                            public void run() { renderWebs(); kick(); }
+                        });
+                    }
+                })
+                .setNeutralButton("测试", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int wi) {
+                        /* 用当前表单里的值试抓（不落库）—— 边填边试 */
+                        WebCustom w = new WebCustom();
+                        w.name = "test";
+                        w.url = eUrl.getText().toString().trim();
+                        w.mode = modeVals[modeIdx[0]];
+                        w.path = ePath.getText().toString().trim();
+                        w.pattern = ePattern.getText().toString().trim();
+                        w.start = eStart.getText().toString().trim();
+                        w.end = eEnd.getText().toString().trim();
+                        String m = eMethod.getText().toString().trim().toUpperCase();
+                        w.method = m.length() == 0 ? "GET" : m;
+                        w.charset = eCharset.getText().toString().trim();
+                        w.headers = eHeaders.getText().toString().trim();
+                        w.body = eBody.getText().toString().trim();
+                        w.foreign = w0.foreign;
+                        if (w.url.length() == 0) {
+                            Toast.makeText(act, "先填网址再测试", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        try {
+                            WebCustom.Result r = w.fetch(w.foreign, 12000);
+                            new AlertDialog.Builder(act)
+                                    .setTitle("测试成功")
+                                    .setMessage("显示：" + r.display
+                                            + "\n识别方式：" + r.how
+                                            + "\n数值：" + r.value)
+                                    .setPositiveButton("好", null)
+                                    .show();
+                        } catch (Throwable t) {
+                            new AlertDialog.Builder(act)
+                                    .setTitle("测试失败")
+                                    .setMessage(t.getMessage())
+                                    .setPositiveButton("好", null)
+                                    .show();
+                        }
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private static int idxOf(String v, String[] arr) {
+        for (int i = 0; i < arr.length; i++) {
+            if (arr[i].equals(v)) return i;
+        }
+        return 0;
+    }
+
+    /**
+     * 一个表单字段 = 标题 + 说明 + 控件。
+     *
+     * 高级自定义平台的表单项多，光靠输入框里的 hint 根本说不清每个空是干嘛的；
+     * 所以每个字段都带一段灰字说明（支持换行），用户照着读就能填，
+     * 不用猜、也不用去翻文档。
+     */
+    private void addField(LinearLayout box, String title, String desc, View control) {
+        TextView t = new TextView(act);
+        t.setText(title);
+        t.setTextColor(color(R.color.tx));
+        t.setTextSize(13.5f);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams lp0 = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp0.topMargin = dp(18);
+        t.setLayoutParams(lp0);
+        box.addView(t);
+
+        if (desc != null && desc.length() > 0) {
+            TextView d = new TextView(act);
+            d.setText(desc);
+            d.setTextColor(color(R.color.tx3));
+            d.setTextSize(11.5f);
+            d.setLineSpacing(dp(3), 1f);
+            LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp1.topMargin = dp(5);
+            d.setLayoutParams(lp1);
+            box.addView(d);
+        }
+
+        if (control != null) {
+            LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp2.topMargin = dp(8);
+            control.setLayoutParams(lp2);
+            box.addView(control);
+        }
+    }
+
+    /** 字段说明里的「例子」行：等宽灰字，和说明区分开 */
+    private TextView mkLabel(String s) {
+        TextView t = new TextView(act);
+        t.setText(s);
+        t.setTextColor(color(R.color.tx2));
+        t.setTextSize(12);
+        t.setPadding(0, dp(8), 0, dp(2));
+        return t;
     }
 
     // ---------------- 自定义平台 ----------------
