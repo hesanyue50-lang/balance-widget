@@ -69,7 +69,12 @@ public class ColorPicker {
         /* 当前选中的颜色（int 值 + 来源标记） */
         final int[] sel = { current == 0 ? PRESETS[0] : current };
         final boolean[] fromPreset = { true };
-        buildGrid(act, grid, sel, fromPreset, preview, eHex);
+        /* 单独记着 HSV 三元组：拖到纯黑/纯白时，从颜色反推不出色相和饱和度
+           （黑白的色相是 0），若每次都反推，用户调好的颜色会莫名跳回红色。
+           记住这三个量，拖动与重绘都以它为准。 */
+        final float[] hsvRef = new float[3];
+        Color.colorToHSV(sel[0], hsvRef);
+        buildGrid(act, grid, sel, hsvRef, fromPreset, preview, eHex);
 
         /* ---------------- 分隔 ---------------- */
         TextView sep = new TextView(act);
@@ -94,10 +99,8 @@ public class ColorPicker {
                 Paint p = new Paint();
                 p.setShader(lg);
                 c.drawRect(0, 0, getWidth(), getHeight(), p);
-                /* 当前色相位置画个小游标 */
-                float[] hv = new float[3];
-                Color.colorToHSV(sel[0], hv);
-                float x = hv[0] / 360f * getWidth();
+                /* 当前色相位置画个小游标（用保存的色相，纯黑/纯白时也准） */
+                float x = hsvRef[0] / 360f * getWidth();
                 p = new Paint();
                 p.setColor(0xFFFFFFFF);
                 p.setStyle(Paint.Style.STROKE);
@@ -109,41 +112,46 @@ public class ColorPicker {
 
         /* 饱和度/明度面板（2D）：
            标准画法 = 先画「白→纯色」横向渐变，再叠「透明→黑」纵向渐变。
-           两个 Shader 不能合成一个（Android 没有 ComposeShader 以外的好办法），
-           用 PorterDuff.Mode.DARKEN 分两遍画即可 —— 视觉上就是经典取色板。 */
+           两个 Shader 合成不了，分两遍画即可 —— 视觉上就是经典取色板。
+
+           ⚠️ 填充和游标必须用**两个** Paint：早先把游标画在同一个 Paint 上，
+           setStyle(STROKE) 会留到下一次 onDraw，两个 drawRect 就变成只描边 ——
+           表现是"一拖动面板就整块变空白"（它其实是只剩个框）。 */
         final View svPad = new View(act) {
-            private final Paint p = new Paint();
+            private final Paint fill = new Paint();
+            private final Paint cursor = new Paint();
             @Override
             protected void onDraw(Canvas c) {
-                float[] hv = new float[3];
-                Color.colorToHSV(sel[0], hv);
-                int pure = Color.HSVToColor(new float[]{hv[0], 1f, 1f});
+                /* 明度=0（纯黑）时 colorToHSV 给的饱和/色相不可靠，
+                   底色和游标都以 hsvRef 为准 */
+                int pure = Color.HSVToColor(new float[]{hsvRef[0], 1f, 1f});
+                fill.setStyle(Paint.Style.FILL);
                 /* 第一遍：左白右纯色 */
-                p.setShader(new LinearGradient(0, 0, getWidth(), 0,
+                fill.setShader(new LinearGradient(0, 0, getWidth(), 0,
                         Color.WHITE, pure, Shader.TileMode.CLAMP));
-                c.drawRect(0, 0, getWidth(), getHeight(), p);
+                c.drawRect(0, 0, getWidth(), getHeight(), fill);
                 /* 第二遍：上透明下黑 */
-                p.setShader(new LinearGradient(0, 0, 0, getHeight(),
+                fill.setShader(new LinearGradient(0, 0, 0, getHeight(),
                         0x00FFFFFF, 0xFF000000, Shader.TileMode.CLAMP));
-                c.drawRect(0, 0, getWidth(), getHeight(), p);
-                /* 游标：白圈标当前位置 */
-                float cx = hv[1] * getWidth();
-                float cy = (1f - hv[2]) * getHeight();
-                p.setShader(null);
-                p.setColor(0xFFFFFFFF);
-                p.setStyle(Paint.Style.STROKE);
-                p.setStrokeWidth(dp(getContext(), 2));
-                c.drawCircle(cx, cy, dp(getContext(), 6), p);
+                c.drawRect(0, 0, getWidth(), getHeight(), fill);
+                /* 游标：白圈标当前位置（独立 Paint，不污染填充） */
+                float cx = hsvRef[1] * getWidth();
+                float cy = (1f - hsvRef[2]) * getHeight();
+                cursor.setShader(null);
+                cursor.setColor(0xFFFFFFFF);
+                cursor.setStyle(Paint.Style.STROKE);
+                cursor.setStrokeWidth(dp(getContext(), 2));
+                c.drawCircle(cx, cy, dp(getContext(), 6), cursor);
             }
         };
 
         /* ---------------- Hex 输入 ---------------- */
         /* ---------------- 交互：拖动改颜色 ---------------- */
-        bindHueTouch(hueBar, sel, fromPreset, preview, svPad, eHex, grid, act);
-        bindSvTouch(svPad, hueBar, sel, fromPreset, preview, eHex, grid, act);
+        bindHueTouch(hueBar, sel, hsvRef, fromPreset, preview, svPad, eHex, act);
+        bindSvTouch(svPad, hueBar, sel, hsvRef, fromPreset, preview, eHex, act);
         eHex.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             public void onFocusChange(View v, boolean hasFocus) {
-                if (!hasFocus) applyHex(act, eHex, sel, fromPreset, preview, hueBar, svPad);
+                if (!hasFocus) applyHex(act, eHex, sel, hsvRef, fromPreset, preview, hueBar, svPad);
             }
         });
 
@@ -173,7 +181,7 @@ public class ColorPicker {
                 .setPositiveButton("确定", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         /* Hex 输入框还有焦点时先应用它 */
-                        if (eHex.hasFocus()) applyHex(act, eHex, sel, fromPreset, preview, hueBar, svPad);
+                        if (eHex.hasFocus()) applyHex(act, eHex, sel, hsvRef, fromPreset, preview, hueBar, svPad);
                         cb.onPick(sel[0]);
                     }
                 })
@@ -190,7 +198,8 @@ public class ColorPicker {
     /* ==================== 实现 ==================== */
 
     private static void buildGrid(final Activity act, final LinearLayout grid,
-                                  final int[] sel, final boolean[] fromPreset,
+                                  final int[] sel, final float[] hsvRef,
+                                  final boolean[] fromPreset,
                                   final TextView preview, final EditText eHex) {
         grid.removeAllViews();
         final int COLS = 5;
@@ -224,8 +233,9 @@ public class ColorPicker {
             dot.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     sel[0] = color;
+                    Color.colorToHSV(color, hsvRef);   // 选了预设，HSV 基准跟着走
                     fromPreset[0] = true;
-                    buildGrid(act, grid, sel, fromPreset, preview, eHex);
+                    buildGrid(act, grid, sel, hsvRef, fromPreset, preview, eHex);
                     /* 连 Hex 一起同步 —— 不然点预设后 Hex 还留着刚才输入的自定义值，
                        用户会以为选色没生效 */
                     syncSelToUi(color, preview, eHex);
@@ -235,19 +245,17 @@ public class ColorPicker {
         }
     }
 
-    private static void bindHueTouch(final View bar, final int[] sel, final boolean[] fromPreset,
+    private static void bindHueTouch(final View bar, final int[] sel, final float[] hsvRef,
+                                     final boolean[] fromPreset,
                                      final TextView preview, final View svPad,
-                                     final EditText eHex, final LinearLayout grid,
-                                     final Activity act) {
+                                     final EditText eHex, final Activity act) {
         bar.setOnTouchListener(new View.OnTouchListener() {
             public boolean onTouch(View v, MotionEvent e) {
                 if (e.getAction() == MotionEvent.ACTION_DOWN
                         || e.getAction() == MotionEvent.ACTION_MOVE) {
                     float fx = clamp(e.getX() / Math.max(1f, v.getWidth()), 0f, 1f);
-                    float[] hsv = new float[3];
-                    Color.colorToHSV(sel[0], hsv);
-                    hsv[0] = fx * 360f;
-                    sel[0] = Color.HSVToColor(hsv);
+                    hsvRef[0] = fx * 360f;      // 只改色相，饱和/明度保留
+                    sel[0] = Color.HSVToColor(hsvRef);
                     fromPreset[0] = false;
                     v.invalidate();
                     svPad.invalidate();
@@ -260,20 +268,18 @@ public class ColorPicker {
     }
 
     private static void bindSvTouch(final View pad, final View hueBar, final int[] sel,
-                                    final boolean[] fromPreset, final TextView preview,
-                                    final EditText eHex, final LinearLayout grid,
-                                    final Activity act) {
+                                    final float[] hsvRef, final boolean[] fromPreset,
+                                    final TextView preview,
+                                    final EditText eHex, final Activity act) {
         pad.setOnTouchListener(new View.OnTouchListener() {
             public boolean onTouch(View v, MotionEvent e) {
                 if (e.getAction() == MotionEvent.ACTION_DOWN
                         || e.getAction() == MotionEvent.ACTION_MOVE) {
                     float fx = clamp(e.getX() / Math.max(1f, v.getWidth()), 0f, 1f);
                     float fy = clamp(e.getY() / Math.max(1f, v.getHeight()), 0f, 1f);
-                    float[] hsv = new float[3];
-                    Color.colorToHSV(sel[0], hsv);
-                    hsv[1] = fx;            // 横轴 = 饱和度
-                    hsv[2] = 1f - fy;       // 纵轴 = 明度（上亮下暗）
-                    sel[0] = Color.HSVToColor(hsv);
+                    hsvRef[1] = fx;             // 横轴 = 饱和度
+                    hsvRef[2] = 1f - fy;        // 纵轴 = 明度（上亮下暗）
+                    sel[0] = Color.HSVToColor(hsvRef);
                     fromPreset[0] = false;
                     v.invalidate();
                     hueBar.invalidate();
@@ -285,7 +291,8 @@ public class ColorPicker {
         });
     }
 
-    private static void applyHex(Activity act, EditText eHex, int[] sel, boolean[] fromPreset,
+    private static void applyHex(Activity act, EditText eHex, int[] sel, float[] hsvRef,
+                                 boolean[] fromPreset,
                                  TextView preview, View hueBar, View svPad) {
         String s = eHex.getText().toString().trim();
         if (s.startsWith("#")) s = s.substring(1);
@@ -297,6 +304,7 @@ public class ColorPicker {
             int rgb = Integer.parseInt(s, 16);
             int argb = 0xFF000000 | rgb;
             sel[0] = argb;
+            Color.colorToHSV(argb, hsvRef);    // 手填色值，HSV 基准同步
             fromPreset[0] = false;
             preview.setBackgroundColor(argb);
             hueBar.invalidate();

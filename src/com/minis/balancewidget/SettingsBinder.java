@@ -266,6 +266,18 @@ public class SettingsBinder {
         if (addWeb != null) addWeb.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { webDialog(-1); }
         });
+        View packShare = root.findViewById(R.id.btn_pack_share);
+        if (packShare != null) packShare.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { packPickScope(true); }
+        });
+        View packExport = root.findViewById(R.id.btn_pack_export);
+        if (packExport != null) packExport.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { packPickScope(false); }
+        });
+        View packImport = root.findViewById(R.id.btn_pack_import);
+        if (packImport != null) packImport.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { packImportMenu(); }
+        });
         renderWebs();
 
         // ---- 安全与密码（内联，与密钥区同级）----
@@ -707,6 +719,11 @@ public class SettingsBinder {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(20), dp(10), dp(20), 0);
 
+        /* 字段越来越多（标签/密钥/百炼 AK/计费模式/网关地址/预警阈值…），
+           不包 ScrollView 的话小屏上「保存」按钮会被顶出屏幕够不着。 */
+        final android.widget.ScrollView scroll = new android.widget.ScrollView(act);
+        scroll.addView(panel);
+
         TextView l1 = new TextView(act);
         l1.setText("标签（区分同平台多个 Key）");
         l1.setTextColor(color(R.color.tx2));
@@ -728,6 +745,37 @@ public class SettingsBinder {
         eKey.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         eKey.setTextSize(14);
         panel.addView(eKey);
+
+        /* ---------- 低余额预警阈值 ----------
+           ⚠️ 这一栏原来只在旧 SettingsActivity 里有，而设置页早就改由本类渲染 ——
+           阈值设置界面等于被覆盖掉了：老用户找不到入口，新用户压根不知道有这功能。
+           现在补到真正生效的这套界面里。 */
+        TextView lThr = new TextView(act);
+        lThr.setText("低余额预警阈值（0 = 不预警）");
+        lThr.setTextColor(color(R.color.tx2));
+        lThr.setTextSize(12);
+        lThr.setPadding(0, dp(12), 0, 0);
+        panel.addView(lThr);
+
+        TextView tipThr = new TextView(act);
+        tipThr.setText("余额低于这个数时发通知提醒，用卡片上显示的原币种。\n"
+                + "　例：填 5　→　余额低于 5 元时提醒\n"
+                + "订阅制平台填的是「提前几天提醒」，填 3 就是到期前 3 天提醒。\n"
+                + "留空或填 0 = 不预警。阈值只有后台刷新时才判断，前台刷新不打扰你。");
+        tipThr.setTextColor(color(R.color.tx3));
+        tipThr.setTextSize(11);
+        tipThr.setLineSpacing(dp(2), 1f);
+        tipThr.setPadding(0, dp(4), 0, 0);
+        panel.addView(tipThr);
+
+        final EditText eThr = new EditText(act);
+        eThr.setHint("0");
+        eThr.setText(src.threshold == 0 ? "" : String.valueOf(src.threshold));
+        eThr.setInputType(InputType.TYPE_CLASS_NUMBER
+                | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        eThr.setTextSize(14);
+        eThr.setMaxLines(1);
+        panel.addView(eThr);
 
         /* ⚠️ 阿里云百炼专用：DashScope 的 sk- 令牌查不到余额（余额挂在阿里云主账户上），
            必须用 AccessKey 走 BSS OpenAPI 签名查询。
@@ -871,7 +919,12 @@ public class SettingsBinder {
                 k.label = eLabel.getText().toString().trim();
                 k.key = eKey.getText().toString().trim();
                 k.note = src.note;
-                k.threshold = src.threshold;
+                /* 阈值：以输入框为准（空/非法 = 0 = 不预警） */
+                try {
+                    String tv0 = eThr.getText().toString().trim();
+                    k.threshold = tv0.length() == 0 ? 0 : Double.parseDouble(tv0);
+                } catch (Exception ig) { k.threshold = 0; }
+                if (k.threshold < 0) k.threshold = 0;
                 k.budget = src.budget;
                 k.draw = true;
                 /* 百炼：有输入框就读框里的值；其他平台没有这两个框，沿用原值 */
@@ -930,7 +983,7 @@ public class SettingsBinder {
 
         final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle(isNew ? "添加 Key" : "编辑 Key")
-                .setView(panel)
+                .setView(scroll)
                 .setPositiveButton("保存", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         /* 保存这一下要过 Keystore 加密 + 重建密钥列表，
@@ -1045,6 +1098,105 @@ public class SettingsBinder {
 
     // ---------------- 高级自定义平台（网页抓取） ----------------
 
+    /** 选择导出范围（高级平台 / 自定义平台 / 全部），再决定分享还是存文件 */
+    private void packPickScope(final boolean share) {
+        new AlertDialog.Builder(act)
+                .setTitle(share ? "分享哪些平台？" : "导出哪些平台？")
+                .setItems(new String[] { "高级自定义平台", "自定义平台", "全部" },
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface d, int w) {
+                                String which = w == 0 ? "web" : (w == 1 ? "custom" : "all");
+                                String json = PlatformPack.exportText(act, which);
+                                if (json.length() == 0) {
+                                    Toast.makeText(act, "没有可导出的平台",
+                                            Toast.LENGTH_SHORT).show();
+                                    return;
+                                }
+                                if (share) packShareMenu(json);
+                                else PlatformPack.exportToFile(act, json, "balance-platform");
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void packShareMenu(final String json) {
+        new AlertDialog.Builder(act)
+                .setTitle("怎么分享？")
+                .setItems(new String[] { "发到聊天（微信/QQ 等）", "复制文本到剪贴板" },
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface d, int w) {
+                                if (w == 0) PlatformPack.share(act, "平台配置", json);
+                                else PlatformPack.copyToClipboard(act, json);
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void packImportMenu() {
+        new AlertDialog.Builder(act)
+                .setTitle("从哪里导入？")
+                .setItems(new String[] { "选文件（.bwp）", "粘贴文本" },
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface d, int w) {
+                                if (w == 0) {
+                                    PlatformPack.pickImportFile(act);
+                                } else {
+                                    String text = PlatformPack.clipboardText(act);
+                                    if (text == null || text.trim().length() == 0) {
+                                        Toast.makeText(act, "剪贴板是空的",
+                                                Toast.LENGTH_SHORT).show();
+                                        return;
+                                    }
+                                    /* 先解析给用户看一眼再落库 —— 万一是别的内容，
+                                       直接"导入成功 0 个"会让人摸不着头脑 */
+                                    try {
+                                        PlatformPack.Info info = PlatformPack.parse(text);
+                                        final String t = text;
+                                        StringBuilder sb = new StringBuilder();
+                                        for (int i = 0; i < info.names.size() && i < 8; i++) {
+                                            sb.append("· ").append(info.names.get(i)).append('\n');
+                                        }
+                                        if (info.names.size() > 8) {
+                                            sb.append("… 共 ").append(info.getTotal()).append(" 个\n");
+                                        }
+                                        new AlertDialog.Builder(act)
+                                                .setTitle("确认导入 " + info.getTotal() + " 个平台？")
+                                                .setMessage(sb.toString()
+                                                        + "\n同名的会自动跳过，不会重复添加。")
+                                                .setPositiveButton("导入",
+                                                        new DialogInterface.OnClickListener() {
+                                                            public void onClick(DialogInterface dd, int ww) {
+                                                                try {
+                                                                    PlatformPack.Result r =
+                                                                            PlatformPack.importText(act, t);
+                                                                    Toast.makeText(act, r.describe(),
+                                                                            Toast.LENGTH_LONG).show();
+                                                                    renderWebs();
+                                                                    renderCustoms();
+                                                                    BalanceFetcher.onDataRestored(act);
+                                                                    kick();
+                                                                } catch (Throwable ex) {
+                                                                    Toast.makeText(act,
+                                                                            "导入失败：" + ex.getMessage(),
+                                                                            Toast.LENGTH_LONG).show();
+                                                                }
+                                                            }
+                                                        })
+                                                .setNegativeButton("取消", null)
+                                                .show();
+                                    } catch (Throwable ex) {
+                                        Toast.makeText(act, "剪贴板内容不是平台配置："
+                                                + ex.getMessage(), Toast.LENGTH_LONG).show();
+                                    }
+                                }
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     /** 列出所有 WebCustom，每条带「编辑 / 测试 / 删除」 */
     private void renderWebs() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.web_fields);
@@ -1079,6 +1231,30 @@ public class SettingsBinder {
                 public void onClick(View v) { testWeb(idx); }
             });
             row.addView(test);
+
+            TextView share = mkBtn("分享", color(R.color.tx2));
+            share.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    String json = PlatformPack.exportOneWeb(act, idx);
+                    if (json.length() == 0) {
+                        Toast.makeText(act, "导出失败", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    final String j = json;
+                    new AlertDialog.Builder(act)
+                            .setTitle("分享这个平台")
+                            .setItems(new String[] { "发到聊天（微信/QQ 等）", "复制文本到剪贴板" },
+                                    new DialogInterface.OnClickListener() {
+                                        public void onClick(DialogInterface d, int w) {
+                                            if (w == 0) PlatformPack.share(act, "平台配置", j);
+                                            else PlatformPack.copyToClipboard(act, j);
+                                        }
+                                    })
+                            .setNegativeButton("取消", null)
+                            .show();
+                }
+            });
+            row.addView(share);
 
             TextView edit = mkBtn("编辑", color(R.color.accent));
             edit.setOnClickListener(new View.OnClickListener() {

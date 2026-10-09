@@ -1,0 +1,69 @@
+{
+  "app": "balance-widget-platform",
+  "version": 1,
+  "exportedAt": 1760000000000,
+  "platforms": [
+    {
+      "type": "web",
+      "data": {
+        "name": "GitHub Star",
+        "url": "https://api.github.com/repos/hesanyue50-lang/balance-widget",
+        "mode": "json",
+        "path": "stargazers_count",
+        "pattern": "",
+        "start": "",
+        "end": "",
+        "method": "GET",
+        "body": "",
+        "headers": "",
+        "charset": "",
+        "numMode": "auto",
+        "scale": 1,
+        "template": "",
+        "kind": "asset",
+        "unit": "NONE",
+        "suffix": " ⭐",
+        "foreign": true,
+        "threshold": 0
+      }
+    },
+    {
+      "type": "web",
+      "data": {
+        "name": "示例-区间截取",
+        "url": "https://example.com/account",
+        "mode": "between",
+        "path": "",
+        "pattern": "",
+        "start": "可用余额：",
+        "end": "元",
+        "method": "GET",
+        "body": "",
+        "headers": "Cookie: session=在这里填你的",
+        "charset": "UTF-8",
+        "numMode": "auto",
+        "scale": 1,
+        "template": "",
+        "kind": "balance",
+        "unit": "CNY",
+        "suffix": "",
+        "foreign": false,
+        "threshold": 10
+      }
+    },
+    {
+      "type": "custom",
+      "data": {
+        "name": "示例-普通自定义平台",
+        "url": "https://example.com/api/balance",
+        "key": "在这里填密钥",
+        "path": "data.balance",
+        "unit": "CNY",
+        "kind": "balance",
+        "suffix": "",
+        "text": "",
+        "threshold": 5
+      }
+    }
+  ]
+}

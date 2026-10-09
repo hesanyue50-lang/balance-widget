@@ -255,6 +255,60 @@
                     android:text="＋ 添加高级自定义平台"
                     android:textColor="@color/accent"
                     android:textSize="13sp" />
+
+                <!-- 平台配置的导出 / 分享 / 导入（.bwp 文件或文本） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btn_pack_share"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/mini_btn_border"
+                        android:gravity="center"
+                        android:paddingTop="11dp"
+                        android:paddingBottom="11dp"
+                        android:text="分享"
+                        android:textColor="@color/tx2"
+                        android:textSize="12.5sp" />
+
+                    <TextView
+                        android:id="@+id/btn_pack_export"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginLeft="8dp"
+                        android:background="@drawable/mini_btn_border"
+                        android:gravity="center"
+                        android:paddingTop="11dp"
+                        android:paddingBottom="11dp"
+                        android:text="导出文件"
+                        android:textColor="@color/tx2"
+                        android:textSize="12.5sp" />
+
+                    <TextView
+                        android:id="@+id/btn_pack_import"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginLeft="8dp"
+                        android:background="@drawable/mini_btn_border"
+                        android:gravity="center"
+                        android:paddingTop="11dp"
+                        android:paddingBottom="11dp"
+                        android:text="导入"
+                        android:textColor="@color/accent"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/FieldHint"
+                    android:layout_marginTop="10dp"
+                    android:text="导出会生成 .bwp 文件（就是个 JSON），也可以直接当文本发给别人 —— 对方在「导入」里粘贴或选文件即可。⚠️ 文件里含明文的密钥与请求头（Cookie/Token），分享前想清楚发给谁。" />
             </LinearLayout>
 
             <!-- ========== 图表显示（统计页图表元素开关）========== -->

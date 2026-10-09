@@ -1403,6 +1403,13 @@ public class MainActivity extends Activity {
             }
             return;
         }
+        /* 平台配置的 .bwp 导出 / 导入 */
+        if (PlatformPack.onResult(this, req, res, data)) {
+            if (req == PlatformPack.REQ_IMPORT) {
+                try { refresh(true); } catch (Throwable ignored) { }
+            }
+            return;
+        }
         super.onActivityResult(req, res, data);
     }
 

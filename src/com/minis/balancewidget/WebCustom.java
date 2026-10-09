@@ -104,26 +104,7 @@ public class WebCustom {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
-                WebCustom w = new WebCustom();
-                w.name = o.optString("name", "");
-                w.url = o.optString("url", "");
-                w.mode = o.optString("mode", "auto");
-                w.path = o.optString("path", "");
-                w.pattern = o.optString("pattern", "");
-                w.start = o.optString("start", "");
-                w.end = o.optString("end", "");
-                w.method = o.optString("method", "GET");
-                w.body = o.optString("body", "");
-                w.headers = o.optString("headers", "");
-                w.charset = o.optString("charset", "");
-                w.numMode = o.optString("numMode", "auto");
-                w.scale = o.optDouble("scale", 1.0);
-                w.template = o.optString("template", "");
-                w.kind = o.optString("kind", "balance");
-                w.unit = o.optString("unit", "CNY");
-                w.suffix = o.optString("suffix", "");
-                w.foreign = o.optBoolean("foreign", false);
-                w.threshold = o.optDouble("threshold", 0);
+                WebCustom w = fromJson(o);
                 if (w.ready()) list.add(w);
             }
         } catch (Exception ignored) { }
@@ -134,31 +115,64 @@ public class WebCustom {
         try {
             JSONArray arr = new JSONArray();
             for (int i = 0; i < list.size(); i++) {
-                WebCustom w = list.get(i);
-                JSONObject o = new JSONObject();
-                o.put("name", w.name);
-                o.put("url", w.url);
-                o.put("mode", w.mode);
-                o.put("path", w.path);
-                o.put("pattern", w.pattern);
-                o.put("start", w.start);
-                o.put("end", w.end);
-                o.put("method", w.method);
-                o.put("body", w.body);
-                o.put("headers", w.headers);
-                o.put("charset", w.charset);
-                o.put("numMode", w.numMode);
-                o.put("scale", w.scale);
-                o.put("template", w.template);
-                o.put("kind", w.kind);
-                o.put("unit", w.unit);
-                o.put("suffix", w.suffix);
-                o.put("foreign", w.foreign);
-                o.put("threshold", w.threshold);
-                arr.put(o);
+                arr.put(list.get(i).toJson());
             }
             sp(ctx).edit().putString(KEY, arr.toString()).apply();
         } catch (Exception ignored) { }
+    }
+
+    /**
+     * 序列化。**存储与导出共用这一份** —— 早先字段清单散在两处，
+     * 加一个字段就得记得改两个地方，漏了就是"导出到别的设备少一截配置"。
+     */
+    public JSONObject toJson() {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("name", name);
+            o.put("url", url);
+            o.put("mode", mode);
+            o.put("path", path);
+            o.put("pattern", pattern);
+            o.put("start", start);
+            o.put("end", end);
+            o.put("method", method);
+            o.put("body", body);
+            o.put("headers", headers);
+            o.put("charset", charset);
+            o.put("numMode", numMode);
+            o.put("scale", scale);
+            o.put("template", template);
+            o.put("kind", kind);
+            o.put("unit", unit);
+            o.put("suffix", suffix);
+            o.put("foreign", foreign);
+            o.put("threshold", threshold);
+        } catch (Exception ignored) { }
+        return o;
+    }
+
+    public static WebCustom fromJson(JSONObject o) {
+        WebCustom w = new WebCustom();
+        w.name = o.optString("name", "");
+        w.url = o.optString("url", "");
+        w.mode = o.optString("mode", "auto");
+        w.path = o.optString("path", "");
+        w.pattern = o.optString("pattern", "");
+        w.start = o.optString("start", "");
+        w.end = o.optString("end", "");
+        w.method = o.optString("method", "GET");
+        w.body = o.optString("body", "");
+        w.headers = o.optString("headers", "");
+        w.charset = o.optString("charset", "");
+        w.numMode = o.optString("numMode", "auto");
+        w.scale = o.optDouble("scale", 1.0);
+        w.template = o.optString("template", "");
+        w.kind = o.optString("kind", "balance");
+        w.unit = o.optString("unit", "CNY");
+        w.suffix = o.optString("suffix", "");
+        w.foreign = o.optBoolean("foreign", false);
+        w.threshold = o.optDouble("threshold", 0);
+        return w;
     }
 
     // ---------------- 抓取引擎 ----------------

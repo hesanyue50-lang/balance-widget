@@ -480,16 +480,7 @@ public class BalanceFetcher {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
-                Custom c = new Custom();
-                c.name = o.optString("name", "");
-                c.url = o.optString("url", "");
-                c.key = KeyVault.dec(o.optString("key", ""));
-                c.path = o.optString("path", "");
-                c.unit = o.optString("unit", "CNY");
-                c.kind = o.optString("kind", "balance");
-                c.suffix = o.optString("suffix", "");
-                c.text = o.optString("text", "");
-                c.threshold = o.optDouble("threshold", 0);
+                Custom c = customFromJson(o, false);   // false = 存储态，key 是密文，要解
                 /* 有 Key 就算配置好了。URL 留空表示「查不到额度的免费服务」
                    （魔搭就是这种：服务本身免费，没有余额可查，只作展示）。 */
                 if (c.key.length() > 0) list.add(c);
@@ -501,23 +492,51 @@ public class BalanceFetcher {
     public static void saveCustom(Context ctx, List<Custom> list) {
         JSONArray arr = new JSONArray();
         for (int i = 0; i < list.size(); i++) {
-            Custom c = list.get(i);
             try {
-                JSONObject o = new JSONObject();
-                o.put("name", c.name);
-                o.put("url", c.url);
-                o.put("key", KeyVault.enc(c.key));
-                o.put("path", c.path);
-                o.put("unit", c.unit);
-                o.put("kind", c.kind);
-                o.put("suffix", c.suffix);
-                o.put("text", c.text);
-                o.put("threshold", c.threshold);
-                arr.put(o);
+                arr.put(customToJson(list.get(i), false));   // 存储态：key 加密
             } catch (Exception ignored) { }
         }
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
            .edit().putString("custom_json", arr.toString()).apply();
+    }
+
+    /**
+     * 自定义平台 → JSON。
+     *
+     * @param plain true = 导出用（key 明文，换台设备才用得上）；
+     *              false = 落盘用（key 走 KeyVault 加密）
+     * 存储与导出共用这一份，免得加字段时漏改一处。
+     */
+    public static JSONObject customToJson(Custom c, boolean plain) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("name", c.name);
+            o.put("url", c.url);
+            o.put("key", plain ? c.key : KeyVault.enc(c.key));
+            o.put("path", c.path);
+            o.put("unit", c.unit);
+            o.put("kind", c.kind);
+            o.put("suffix", c.suffix);
+            o.put("text", c.text);
+            o.put("threshold", c.threshold);
+        } catch (Exception ignored) { }
+        return o;
+    }
+
+    /** @param stored true = 来自落盘（key 是密文，需要解密） */
+    public static Custom customFromJson(JSONObject o, boolean stored) {
+        Custom c = new Custom();
+        c.name = o.optString("name", "");
+        c.url = o.optString("url", "");
+        String k = o.optString("key", "");
+        c.key = stored ? KeyVault.dec(k) : k;
+        c.path = o.optString("path", "");
+        c.unit = o.optString("unit", "CNY");
+        c.kind = o.optString("kind", "balance");
+        c.suffix = o.optString("suffix", "");
+        c.text = o.optString("text", "");
+        c.threshold = o.optDouble("threshold", 0);
+        return c;
     }
 
     public static class Item {
