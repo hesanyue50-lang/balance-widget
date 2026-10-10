@@ -1663,7 +1663,7 @@ public class BalanceFetcher {
                         int budget = it.foreign ? per * 2 : per;
                         if (w != null)            fillWeb(it, w, rate, budget, viaProxy);
                         else if (c == null)       fill(ctx, it, ak, rate, budget);
-                        else                      fillCustom(it, c, rate, per);
+                        else                      fillCustom(ctx, it, c, rate, per);
                         it.ok = true;
                         Log.i(TAG, "平台 " + it.id + " 成功: " + it.amount);
                         diag(ctx, "  OK  " + it.id + " = " + it.amount
@@ -1914,7 +1914,7 @@ public class BalanceFetcher {
                 it.label = c.name.length() > 0 ? c.name : "自定义";
                 it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
                 it.kind = c.kind;
-                fillCustom(it, c, rate, timeoutMs);
+                fillCustom(ctx, it, c, rate, timeoutMs);
                 it.ok = true;
             } else {
                 Preset p = presetOf(ak.platform);
@@ -2002,7 +2002,7 @@ public class BalanceFetcher {
         it.debug = r.display;
     }
 
-    private static void fillCustom(Item it, Custom c, double rate, int t) throws Exception {
+    private static void fillCustom(Context ctx0, Item it, Custom c, double rate, int t) throws Exception {
         /* 没填 URL：这个服务没有可查的额度（免费的魔搭），只作展示，一个请求都不发 */
         if (c.url == null || c.url.length() == 0) {
             String shown = (c.text != null && c.text.length() > 0) ? c.text : "免费";
@@ -2013,7 +2013,17 @@ public class BalanceFetcher {
             return;
         }
         boolean usd = "USD".equals(it.tag);
-        String body = get(c.url, c.key, t);
+        /* Key 以「平台下面添加的密钥」为准 —— 那是统一的入口（和内置平台一致），
+           一个平台还能挂多把 Key。Custom.key 只是旧数据留下的兼容字段。 */
+        String key = c.key;
+        try {
+            List<KeyStore.ApiKey> ks = KeyStore.get(ctx0, it.platform);
+            if (ks != null && !ks.isEmpty() && ks.get(0).key != null
+                    && ks.get(0).key.length() > 0) {
+                key = ks.get(0).key;
+            }
+        } catch (Throwable ignored) { }
+        String body = get(c.url, key, t);
         JSONObject o = new JSONObject(body);
         double bal = pickPath(o, c.path);
         if (Double.isNaN(bal)) bal = pick(o);

@@ -2239,17 +2239,11 @@ public class SettingsBinder {
                         + "找不到再用下面「取值路径」指定。",
                 eUrl);
 
-        final EditText eKey = new EditText(act);
-        eKey.setHint("sk-xxxx（可留空）");
-        eKey.setText(c0.key);
-        eKey.setInputType(InputType.TYPE_CLASS_TEXT
-                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        eKey.setMaxLines(1);
-        addField(panel, "③ API Key（可留空）",
-                "大部分接口需要它才能查到余额。\n"
-                        + "填了会自动带上 Authorization: Bearer 请求头。\n"
-                        + "自建网关如果不需要鉴权，留空也能用 —— 不影响添加。",
-                eKey);
+        addField(panel, "③ API Key —— 在下面单独添加",
+                "**这里不填 Key。** 保存之后，这个平台会出现在上面的\n"
+                        + "「API 密钥与平台」列表里，点它下面的「添加 Key」来填。\n"
+                        + "这样和内置平台是同一个入口，一个平台也能挂多把 Key。",
+                null);
 
         final EditText ePath = new EditText(act);
         ePath.setHint("data.balance（可留空自动识别）");
@@ -2284,7 +2278,7 @@ public class SettingsBinder {
                         BalanceFetcher.Custom c = new BalanceFetcher.Custom();
                         c.name = eName.getText().toString().trim();
                         c.url = eUrl.getText().toString().trim();
-                        c.key = eKey.getText().toString().trim();
+                        c.key = c0.key;      // Key 不在这里填，沿用旧值（一般为 ""）
                         c.path = ePath.getText().toString().trim();
                         try {
                             String tv = eThr.getText().toString().trim();
