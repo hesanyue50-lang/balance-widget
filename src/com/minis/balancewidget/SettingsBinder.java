@@ -2254,18 +2254,6 @@ public class SettingsBinder {
                         + "留空时程序自动识别常见字段名（balance / amount / money 等）。",
                 ePath);
 
-        final EditText eThr = new EditText(act);
-        eThr.setHint("0（不预警）");
-        eThr.setText(c0.threshold == 0 ? "" : String.valueOf(c0.threshold));
-        eThr.setInputType(InputType.TYPE_CLASS_NUMBER
-                | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        eThr.setMaxLines(1);
-        addField(panel, "⑤ 低余额预警阈值",
-                "余额低于这个数时发通知提醒（只按卡片显示的币种判断）。\n"
-                        + "　例：填 5　→　余额低于 5 元时提醒\n"
-                        + "填 0 或留空 = 不预警。",
-                eThr);
-
         /* 字段多了要能滚，否则小屏上「保存」够不着 */
         final android.widget.ScrollView scroll = new android.widget.ScrollView(act);
         scroll.addView(panel);
@@ -2280,11 +2268,8 @@ public class SettingsBinder {
                         c.url = eUrl.getText().toString().trim();
                         c.key = c0.key;      // Key 不在这里填，沿用旧值（一般为 ""）
                         c.path = ePath.getText().toString().trim();
-                        try {
-                            String tv = eThr.getText().toString().trim();
-                            c.threshold = tv.length() == 0 ? 0 : Double.parseDouble(tv);
-                        } catch (Exception e) { c.threshold = 0; }
-                        if (c.threshold < 0) c.threshold = 0;
+                        /* 阈值不在这里设 —— 和 Key 一样，到「平台下面添加的密钥」里填 */
+                        c.threshold = c0.threshold;
                         /* 保留旧值里没在这一屏露出的字段（单位/制式/后缀/静态文本），
                            编辑时别被悄悄清空 */
                         if (isEdit) {

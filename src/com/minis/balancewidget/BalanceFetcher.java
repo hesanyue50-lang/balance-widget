@@ -2013,14 +2013,16 @@ public class BalanceFetcher {
             return;
         }
         boolean usd = "USD".equals(it.tag);
-        /* Key 以「平台下面添加的密钥」为准 —— 那是统一的入口（和内置平台一致），
-           一个平台还能挂多把 Key。Custom.key 只是旧数据留下的兼容字段。 */
+        /* Key 与预警阈值都以「平台下面添加的密钥」为准 —— 那是统一的入口
+           （和内置平台一致），一个平台还能挂多把 Key。
+           Custom.key / Custom.threshold 只是旧数据留下的兼容字段。 */
         String key = c.key;
         try {
             List<KeyStore.ApiKey> ks = KeyStore.get(ctx0, it.platform);
-            if (ks != null && !ks.isEmpty() && ks.get(0).key != null
-                    && ks.get(0).key.length() > 0) {
-                key = ks.get(0).key;
+            if (ks != null && !ks.isEmpty()) {
+                KeyStore.ApiKey ak0 = ks.get(0);
+                if (ak0.key != null && ak0.key.length() > 0) key = ak0.key;
+                if (ak0.threshold > 0) it.threshold = ak0.threshold;
             }
         } catch (Throwable ignored) { }
         String body = get(c.url, key, t);
