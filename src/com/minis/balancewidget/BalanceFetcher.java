@@ -192,8 +192,57 @@ public class BalanceFetcher {
      * 这个平台「有办法取数」但 KeyStore 里一条 Key 都没有 —— 目前只有小米 MiMo
      * （凭据是账号级会话音，不是 Key）。统计页靠它决定要不要给平台补一条线。
      */
+    /**
+     * 这个平台"能用"吗？—— 判断的是**有没有凭据来源**，不看 KeyStore 里有没有条目。
+     *
+     * ⚠️ 这个方法是给「遍历 PRESETS 补位」用的：登录型平台（MiMo）、自定义平台、
+     *    高级自定义平台都没有 KeyStore 记录，只遍历 KeyStore 会把它们整组漏掉 ——
+     *    表现就是「卡片上有余额、统计页却没这条线」。
+     *
+     * 凭据来源有三类，都要认：
+     * - 会话型（登录 cookie）：mimo
+     * - 普通自定义平台：custom:<i>
+     * - 高级自定义平台：web:<i>
+     */
     public static boolean platformUsable(Context c, String platform) {
         if ("mimo".equals(platform)) return mimoSession(c).length() > 0;
+        if (platform == null) return false;
+
+        /* 普通自定义平台：配置完备就算可用 */
+        if (platform.startsWith("custom")) {
+            try {
+                String n = platform.startsWith("custom:")
+                        ? platform.substring(7) : platform.substring(6);
+                int idx = Integer.parseInt(n);
+                List<Custom> cs = loadCustom(c);
+                if (idx >= 0 && idx < cs.size()) return cs.get(idx).ready();
+            } catch (Throwable ignored) { }
+            return false;
+        }
+
+        /* 高级自定义平台：填了网址就算可用 */
+        if (platform.startsWith("web")) {
+            try {
+                String n = platform.startsWith("web:")
+                        ? platform.substring(4) : platform.substring(3);
+                int idx = Integer.parseInt(n);
+                List<WebCustom> ws = WebCustom.loadAll(c);
+                if (idx >= 0 && idx < ws.size()) return ws.get(idx).ready();
+            } catch (Throwable ignored) { }
+            return false;
+        }
+
+        return false;
+    }
+
+    private static boolean hasConfiguredKey(Context c, String platform) {
+        try {
+            List<KeyStore.ApiKey> all = KeyStore.all(c);
+            for (int i = 0; i < all.size(); i++) {
+                KeyStore.ApiKey k = all.get(i);
+                if (platform.equals(k.platform) && k.isConfigured()) return true;
+            }
+        } catch (Throwable ignored) { }
         return false;
     }
 
@@ -470,6 +519,12 @@ public class BalanceFetcher {
         public String text = "";
         /** 低余额预警阈值（原币种，0 = 不预警） */
         public double threshold = 0;
+
+        /** 配置完备吗？—— 静态文本模式不用填 URL，其余要有 URL */
+        public boolean ready() {
+            return name.length() > 0
+                    && (text.length() > 0 || url.length() > 0);
+        }
     }
 
     public static List<Custom> loadCustom(Context ctx) {
@@ -1277,6 +1332,44 @@ public class BalanceFetcher {
     }
 
     /** WebCustom 自动识别复用：同一套「常见余额字段名 → 深度找数」逻辑 */
+    /** 点卡片时的跳转目标（WebCustom.clickAction 可取值） */
+    public static final String CLICK_CONSOLE = "console";
+    public static final String CLICK_RECHARGE = "recharge";
+    public static final String CLICK_HOME = "home";
+    public static final String CLICK_SETTINGS = "settings";
+    public static final String CLICK_STATS = "stats";
+    public static final String CLICK_NONE = "none";
+
+    /** 该平台在设置页里有没有可编辑的凭据（决定点击卡片跳哪） */
+    public static boolean hasCredentials(Context c, String platform) {
+        if (platform == null) return false;
+        if (platform.startsWith("custom")) {
+            try {
+                String n = platform.startsWith("custom:")
+                        ? platform.substring(7) : platform.substring(6);
+                int idx = Integer.parseInt(n);
+                List<Custom> cs = loadCustom(c);
+                if (idx >= 0 && idx < cs.size()) {
+                    Custom cu = cs.get(idx);
+                    return cu.key.length() > 0 || cu.url.length() > 0;
+                }
+            } catch (Throwable ignored) { }
+            return false;
+        }
+        if (platform.startsWith("web")) {
+            try {
+                String n = platform.startsWith("web:")
+                        ? platform.substring(4) : platform.substring(3);
+                int idx = Integer.parseInt(n);
+                List<WebCustom> ws = WebCustom.loadAll(c);
+                if (idx >= 0 && idx < ws.size()) return ws.get(idx).url.length() > 0;
+            } catch (Throwable ignored) { }
+            return false;
+        }
+        /* 内置平台：看有没有配过 Key */
+        return hasConfiguredKey(c, platform);
+    }
+
     public static double pickForWeb(JSONObject o) {
         return pick(o);
     }

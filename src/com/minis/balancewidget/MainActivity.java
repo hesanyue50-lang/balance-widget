@@ -1552,7 +1552,34 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 控制台直达：点击直接打开控制台，不再弹「控制台/充值」子菜单。
+     * 卡片点击后的跳转：按 clickAction 把界面切过去。
+     * 返回 false 表示这个动作我们处理不了 → 调用方退回弹菜单。
+     */
+    private boolean runClickAction(BalanceFetcher.Item it, String act) {
+        if (BalanceFetcher.CLICK_HOME.equals(act)) {
+            showPanel(PageStore.homeIndex(this));
+            return true;
+        }
+        if (BalanceFetcher.CLICK_SETTINGS.equals(act)) {
+            showPanel(indexOfPage(PageStore.K_SETTINGS));
+            return true;
+        }
+        if (BalanceFetcher.CLICK_STATS.equals(act)) {
+            showPanel(indexOfPage(PageStore.K_STATS));
+            return true;
+        }
+        if (BalanceFetcher.CLICK_CONSOLE.equals(act)) {
+            openSiteMenu(it);
+            return true;
+        }
+        if (BalanceFetcher.CLICK_RECHARGE.equals(act)) {
+            openTopup(it);
+            return true;
+        }
+        return false;   // 空串 / none / 未知值 → 退回弹菜单
+    }
+
+    /** 控制台直达：点击直接打开控制台，不再弹「控制台/充值」子菜单。
      */
     /**
      * 让用户改积分折算率（元/积分）。
@@ -1913,6 +1940,23 @@ public class MainActivity extends Activity {
                                 }
                             });
                         return;
+                    }
+                    /* 高级自定义平台：如果设了「点卡片后去哪」，就按设置跳 ——
+                       不再弹「刷新/看密钥/控制台/充值」那个菜单。
+                       没设（默认）才走下面弹菜单的老路子。 */
+                    if (fi.platform != null && fi.platform.startsWith("web:")) {
+                        int wi = -1;
+                        try {
+                            wi = Integer.parseInt(fi.platform.substring(4));
+                        } catch (Throwable ig) { }
+                        List<WebCustom> wlist = WebCustom.loadAll(MainActivity.this);
+                        if (wi >= 0 && wi < wlist.size()) {
+                            String act = wlist.get(wi).clickAction;
+                            if (act != null && act.length() > 0) {
+                                if (BalanceFetcher.CLICK_NONE.equals(act)) return;
+                                if (runClickAction(fi, act)) return;
+                            }
+                        }
                     }
                     LockDialog.choose(MainActivity.this, fi.label,
                         new String[] { "刷新", "看密钥", "控制台", "充值" },

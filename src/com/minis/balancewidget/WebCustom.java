@@ -85,6 +85,25 @@ public class WebCustom {
     /** 低值预警阈值（0 = 不预警） */
     public double threshold = 0;
 
+    /**
+     * API Key：可选。
+     *
+     * 高级平台本来是靠「自定义请求头 + 网页登录」过鉴权的，key 字段对抓取流程
+     * 没有任何作用 —— 但用户可能想把它当一个**登记处**：
+     * 记下这平台用的是哪个 Key、方便以后换设备或核对。
+     * 所以这里只存不参与请求，界面上明说「仅记录，不发送」。
+     */
+    public String key = "";
+
+    /**
+     * 点卡片后跳转到哪个界面。
+     *
+     * 留空 = 保持默认（有 key 进密钥页，没有就原地不动）。
+     * 可填：console（控制台）、recharge（充值）、home（主界面）、
+     *       settings（设置）、stats（统计）、none（点了没反应）。
+     */
+    public String clickAction = "";
+
     public boolean ready() {
         return name.length() > 0 && url.length() > 0;
     }
@@ -139,6 +158,7 @@ public class WebCustom {
             o.put("body", body);
             o.put("headers", headers);
             o.put("charset", charset);
+            o.put("key", key);
             o.put("numMode", numMode);
             o.put("scale", scale);
             o.put("template", template);
@@ -147,6 +167,7 @@ public class WebCustom {
             o.put("suffix", suffix);
             o.put("foreign", foreign);
             o.put("threshold", threshold);
+            o.put("clickAction", clickAction);
         } catch (Exception ignored) { }
         return o;
     }
@@ -164,6 +185,7 @@ public class WebCustom {
         w.body = o.optString("body", "");
         w.headers = o.optString("headers", "");
         w.charset = o.optString("charset", "");
+        w.key = o.optString("key", "");
         w.numMode = o.optString("numMode", "auto");
         w.scale = o.optDouble("scale", 1.0);
         w.template = o.optString("template", "");
@@ -172,7 +194,36 @@ public class WebCustom {
         w.suffix = o.optString("suffix", "");
         w.foreign = o.optBoolean("foreign", false);
         w.threshold = o.optDouble("threshold", 0);
+        w.clickAction = o.optString("clickAction", "");
         return w;
+    }
+
+    /**
+     * 把「名字: 值」合进多行请求头里 —— 已存在同名就替换，没有就追加。
+     *
+     * 登录抓到新 Cookie 时用它落回 headers：不这样做的话每登一次就多一行
+     * Cookie，头会越攒越长，而且旧的那条还可能是过期值。
+     */
+    public static String mergeHeader(String existing, String name, String value) {
+        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
+        if (existing != null && existing.length() > 0) {
+            String[] ps = existing.split("\n");
+            for (int i = 0; i < ps.length; i++) {
+                String ln = ps[i].trim();
+                if (ln.length() == 0) continue;
+                int c = ln.indexOf(':');
+                /* 同名跳过：下面统一把新值加进去 */
+                if (c > 0 && ln.substring(0, c).trim().equalsIgnoreCase(name)) continue;
+                lines.add(ln);
+            }
+        }
+        lines.add(name + ": " + value);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) sb.append('\n');
+            sb.append(lines.get(i));
+        }
+        return sb.toString();
     }
 
     // ---------------- 抓取引擎 ----------------

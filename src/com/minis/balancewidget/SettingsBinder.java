@@ -1197,6 +1197,21 @@ public class SettingsBinder {
                 .show();
     }
 
+
+    /** 当前 headers 里有没有 Cookie */
+    private static boolean hasCookie(String headers) {
+        if (headers == null) return false;
+        String[] ps = headers.split("\n");
+        for (int i = 0; i < ps.length; i++) {
+            String ln = ps[i].trim();
+            int c = ln.indexOf(':');
+            if (c > 0 && "cookie".equalsIgnoreCase(ln.substring(0, c).trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** 列出所有 WebCustom，每条带「编辑 / 测试 / 删除」 */
     private void renderWebs() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.web_fields);
@@ -1361,6 +1376,86 @@ public class SettingsBinder {
                         + "只填上面两项、直接点「测试」，十有八九能自动识别出数字 ——\n"
                         + "识别不出来再往下展开「高级选项」。",
                 eUrl);
+
+        /* ---------- API Key（可选，只记录） ---------- */
+        final EditText eKey = new EditText(act);
+        eKey.setHint("可不填");
+        eKey.setText(w0.key);
+        eKey.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        eKey.setMaxLines(1);
+        addField(panel, "③ API Key（可选）",
+                "想记一下这平台用的是哪个 Key 就填在这里。\n"
+                        + "⚠️ 它**不参与请求**、不会被发送 —— 只是给你自己看的登记。\n"
+                        + "真正要让请求带上登录信息，用下面「网页登录」抓到的 Cookie，\n"
+                        + "或者在高级选项里手写请求头。",
+                eKey);
+
+        /* ---------- 网页登录 ---------- */
+        final TextView loginBtn = mkBtn("🌐 打开网页登录", color(R.color.accent));
+        addField(panel, "④ 网页登录（需要登录才能看到数据时用）",
+                "很多平台的余额页面要先登录才显示。点下面的按钮，\n"
+                        + "App 会内置打开这个网址 —— 你在里面正常登录（输账号、\n"
+                        + "收验证码都行），登录完成后按提示返回，\n"
+                        + "App 会把登录态的 Cookie 抄下来，之后的抓取就能看到数据了。\n"
+                        + "抓到的 Cookie 只存在本机，可以在下面查看或清除。",
+                loginBtn);
+        final String[] cookieRef = { w0.headers };
+        final TextView cookieInfo = mkLabel("");
+        panel.addView(cookieInfo);
+
+        loginBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                String u = eUrl.getText().toString().trim();
+                if (u.length() == 0) {
+                    Toast.makeText(act, "先填网址", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                WebLoginActivity.open(act, u, new WebLoginActivity.OnCookie() {
+                    public void onCookie(String host, String cookie) {
+                        if (cookie == null || cookie.length() == 0) return;
+                        /* 把 Cookie 收进「附加请求头」，这样抓取时就会带上 */
+                        String merged = WebCustom.mergeHeader(cookieRef[0], "Cookie", cookie);
+                        cookieRef[0] = merged;
+                        w0.headers = merged;
+                        String has = "";
+                        try {
+                            String[] ps0 = merged.split("\n");
+                            for (int k = 0; k < ps0.length; k++) {
+                                if (ps0[k].trim().toLowerCase().startsWith("cookie:")) {
+                                    has = "已记录登录态（含 Cookie）";
+                                }
+                            }
+                        } catch (Throwable ig) { }
+                        if (cookieInfo != null) {
+                            cookieInfo.setText(has.length() > 0 ? has : "还没有登录态");
+                        }
+                        Toast.makeText(act, "已记录登录态", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
+
+        /* ---------- 点击卡片后跳转到哪个界面 ---------- */
+        final String[] actVals = { "", "console", "recharge", "home", "settings", "stats", "none" };
+        final String[] actNames = {
+            "默认（有 Key 就进密钥页）", "控制台", "充值页", "主界面",
+            "设置页", "统计页", "点了不跳转"
+        };
+        final int[] actIdx = { idxOf(w0.clickAction, actVals) };
+        final TextView actPick = mkLabel(actNames[actIdx[0]]);
+        actPick.setTextColor(color(R.color.accent));
+        actPick.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                actIdx[0] = (actIdx[0] + 1) % actVals.length;
+                actPick.setText(actNames[actIdx[0]]);
+            }
+        });
+        addField(panel, "⑤ 点卡片后去哪",
+                "在首页点这张卡片时跳到哪个界面。\n"
+                        + "默认行为：填了 Key 就打开密钥页，没填就原地不动。\n"
+                        + "想让它直达控制台或充值页，点下面的蓝色字切换。",
+                actPick);
 
         /* ================= 高级选项（折叠） ================= */
         final LinearLayout advBox = new LinearLayout(act);
@@ -1627,13 +1722,22 @@ public class SettingsBinder {
                         String m = eMethod.getText().toString().trim().toUpperCase();
                         w.method = m.length() == 0 ? "GET" : m;
                         w.charset = eCharset.getText().toString().trim();
-                        w.headers = eHeaders.getText().toString().trim();
+                        /* API Key 与登录 Cookie 合并进「附加请求头」——
+                           这里也带上：用户在基础区填的 Key，抓取时若平台要鉴权就自动走 Bearer。 */
+                        String hdrs = eHeaders.getText().toString().trim();
+                        String kv = eKey.getText().toString().trim();
+                        if (kv.length() > 0) {
+                            hdrs = WebCustom.mergeHeader(hdrs, "Authorization", "Bearer " + kv);
+                        }
+                        w.headers = hdrs;
+                        w.key = kv;
                         w.body = eBody.getText().toString().trim();
                         w.suffix = eSuffix.getText().toString().trim();
                         w.template = eTemplate.getText().toString().trim();
                         w.unit = unitVals[unitIdx[0]];
                         w.kind = kindVals[kindIdx[0]];
                         w.foreign = w0.foreign;
+                        w.clickAction = actVals[actIdx[0]];
                         try {
                             String sv = eScale.getText().toString().trim();
                             w.scale = sv.length() == 0 ? 1.0 : Double.parseDouble(sv);
