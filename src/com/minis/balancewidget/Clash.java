@@ -90,8 +90,9 @@ public final class Clash {
         return m;
     }
 
+    /** 模式同样同步落盘：它是"要不要自动开启加速"的判定依据，丢了会导致行为不符预期 */
     public static void setMode(Context c, String m) {
-        sp(c).edit().putString("clash_mode", m == null ? MODE_PARTIAL : m).apply();
+        sp(c).edit().putString("clash_mode", m == null ? MODE_PARTIAL : m).commit();
     }
 
     /**
@@ -152,8 +153,18 @@ public final class Clash {
         return sp(c).getBoolean(K_ENABLED, false);
     }
 
+    /**
+     * 开关状态：**必须同步落盘**。
+     *
+     * 早先这里用 apply()（异步写盘），结果用户开完开关后如果立刻关屏、
+     * 被系统回收进程或重启手机，写盘任务还没跑完，下次进来开关就是关的 ——
+     * 表现是"上次明明是开着的，今天打开又变关了"。
+     *
+     * 开关是用户明确表达过一次、不希望被改变的状态，用 commit() 换可靠性；
+     * 这个值写入频率极低（用户点一下才写一次），同步写的开销可以忽略。
+     */
     public static void setEnabled(Context c, boolean on) {
-        sp(c).edit().putBoolean(K_ENABLED, on).apply();
+        sp(c).edit().putBoolean(K_ENABLED, on).commit();
     }
 
     /**

@@ -257,7 +257,7 @@ public class SettingsBinder {
         // ---- 自定义平台 ----
         View addCustom = root.findViewById(R.id.btn_add_custom);
         if (addCustom != null) addCustom.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { addCustomDialog(); }
+            public void onClick(View v) { customDialog(-1); }
         });
         renderCustoms();
 
@@ -1436,26 +1436,97 @@ public class SettingsBinder {
             }
         });
 
-        /* ---------- 点击卡片后跳转到哪个界面 ---------- */
-        final String[] actVals = { "", "console", "recharge", "home", "settings", "stats", "none" };
-        final String[] actNames = {
-            "默认（有 Key 就进密钥页）", "控制台", "充值页", "主界面",
-            "设置页", "统计页", "点了不跳转"
+        /* ---------- 点击卡片后弹出哪些按钮（最多 4 个） ---------- */
+        final int NBTN = 4;
+        final EditText[] eBtnName = new EditText[NBTN];
+        final EditText[] eBtnUrl = new EditText[NBTN];
+        LinearLayout btnBox = new LinearLayout(act);
+        btnBox.setOrientation(LinearLayout.VERTICAL);
+
+        /* 「无」按钮的提示：空地址 = 这个按钮不显示 */
+        final String[] presetHints = {
+            "app:refresh（刷新这一项）",
+            "app:home / app:settings / app:stats",
+            "https://… 控制台地址",
+            "https://… 充值页地址"
         };
-        final int[] actIdx = { idxOf(w0.clickAction, actVals) };
-        final TextView actPick = mkLabel(actNames[actIdx[0]]);
-        actPick.setTextColor(color(R.color.accent));
-        actPick.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                actIdx[0] = (actIdx[0] + 1) % actVals.length;
-                actPick.setText(actNames[actIdx[0]]);
-            }
-        });
-        addField(panel, "⑤ 点卡片后去哪",
-                "在首页点这张卡片时跳到哪个界面。\n"
-                        + "默认行为：填了 Key 就打开密钥页，没填就原地不动。\n"
-                        + "想让它直达控制台或充值页，点下面的蓝色字切换。",
-                actPick);
+
+        for (int i = 0; i < NBTN; i++) {
+            final int bi = i;
+            TextView cap = new TextView(act);
+            cap.setText("按钮 " + (i + 1));
+            cap.setTextColor(color(R.color.tx));
+            cap.setTextSize(12.5f);
+            cap.setTypeface(Typeface.DEFAULT_BOLD);
+            cap.setPadding(0, i == 0 ? 0 : dp(14), 0, 0);
+            btnBox.addView(cap);
+
+            LinearLayout rr = new LinearLayout(act);
+            rr.setOrientation(LinearLayout.HORIZONTAL);
+
+            eBtnName[i] = new EditText(act);
+            eBtnName[i].setHint("按钮名字（如：控制台）");
+            String lb0 = (w0.btnLabels != null && i < w0.btnLabels.length)
+                    ? w0.btnLabels[i] : "";
+            eBtnName[i].setText(lb0 == null ? "" : lb0);
+            eBtnName[i].setMaxLines(1);
+            LinearLayout.LayoutParams ln = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            ln.rightMargin = dp(6);
+            eBtnName[i].setLayoutParams(ln);
+            rr.addView(eBtnName[i]);
+
+            eBtnUrl[i] = new EditText(act);
+            eBtnUrl[i].setHint(presetHints[i]);
+            String u0 = (w0.btnUrls != null && i < w0.btnUrls.length)
+                    ? w0.btnUrls[i] : "";
+            eBtnUrl[i].setText(u0 == null ? "" : u0);
+            eBtnUrl[i].setMaxLines(1);
+            eBtnUrl[i].setLayoutParams(new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f));
+            rr.addView(eBtnUrl[i]);
+            btnBox.addView(rr);
+        }
+
+        /* 常用指令一键填：省得用户手打 app:xxx */
+        LinearLayout quick = new LinearLayout(act);
+        quick.setOrientation(LinearLayout.HORIZONTAL);
+        String[] quickNames = { "填刷新", "填主界面", "填设置", "填统计" };
+        String[] quickVals = { "app:refresh", "app:home", "app:settings", "app:stats" };
+        for (int qi = 0; qi < quickNames.length; qi++) {
+            final String qv = quickVals[qi];
+            TextView q = mkBtn(quickNames[qi], color(R.color.tx2));
+            q.setPadding(dp(6), dp(4), dp(6), dp(4));
+            /* 填到第一个还空着的地址框里 */
+            q.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    for (int k = 0; k < NBTN; k++) {
+                        if (eBtnUrl[k].getText().toString().trim().length() == 0) {
+                            eBtnUrl[k].setText(qv);
+                            if (eBtnName[k].getText().toString().trim().length() == 0) {
+                                eBtnName[k].setText(qv.startsWith("app:")
+                                        ? qv.substring(4) : qv);
+                            }
+                            return;
+                        }
+                    }
+                    Toast.makeText(act, "四个按钮都填满了", Toast.LENGTH_SHORT).show();
+                }
+            });
+            quick.addView(q);
+        }
+        btnBox.addView(quick);
+
+        addField(panel, "⑤ 点卡片后弹出哪些按钮",
+                "首页点这张卡片时会弹出下面的按钮，**最多 4 个**，地址由你自己填：\n"
+                        + "· 填 https:// 开头的网址 → 用浏览器打开（控制台、充值页、工单页都行）\n"
+                        + "· 填 app: 指令 → 切到 App 内的界面\n"
+                        + "　　可用指令：app:refresh（刷新）、app:home（主界面）、\n"
+                        + "　　app:settings（设置）、app:stats（统计）\n"
+                        + "· 地址留空 = 这个按钮不显示\n"
+                        + "· **四个全空也没关系** —— 会兜底给一个「刷新」按钮，\n"
+                        + "　不会出现点了卡片没反应的情况。",
+                btnBox);
 
         /* ================= 高级选项（折叠） ================= */
         final LinearLayout advBox = new LinearLayout(act);
@@ -1737,7 +1808,11 @@ public class SettingsBinder {
                         w.unit = unitVals[unitIdx[0]];
                         w.kind = kindVals[kindIdx[0]];
                         w.foreign = w0.foreign;
-                        w.clickAction = actVals[actIdx[0]];
+                        /* 四个自定义按钮：名字 + 地址，一一对应存进数组 */
+                        for (int bi = 0; bi < 4; bi++) {
+                            w.btnLabels[bi] = eBtnName[bi].getText().toString().trim();
+                            w.btnUrls[bi] = eBtnUrl[bi].getText().toString().trim();
+                        }
                         try {
                             String sv = eScale.getText().toString().trim();
                             w.scale = sv.length() == 0 ? 1.0 : Double.parseDouble(sv);
@@ -2093,6 +2168,11 @@ public class SettingsBinder {
             t.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             row.addView(t);
+            TextView edit = mkBtn("编辑", color(R.color.accent));
+            edit.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { customDialog(idx); }
+            });
+            row.addView(edit);
             TextView del = mkBtn("删除", color(R.color.danger));
             del.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
@@ -2111,34 +2191,125 @@ public class SettingsBinder {
         }
     }
 
-    private void addCustomDialog() {
+    /**
+     * 添加自定义平台（OpenAI 兼容接口）。
+     *
+     * ⚠️ 早先这里只有「名称 / 接口地址 / 取值路径」三个框，**没有 Key 输入框** ——
+     * 而保存时也不写 key，于是新建出来的平台 key 恒为空。
+     * 配合 loadCustom 里"有 Key 才算配置好"的旧过滤，结果就是
+     * 「添加成功，但设置页和主界面都看不到它」。两个现象一个根因。
+     */
+    /**
+     * 添加 / 编辑自定义平台（OpenAI 兼容接口）。
+     *
+     * ⚠️ 两处历史欠账，一次补齐：
+     * ① 早先这里只有「名称 / 接口地址 / 取值路径」，**没有 Key 输入框** ——
+     *    而保存时也不写 key，于是新建出来的平台 key 恒为空；
+     *    配合 loadCustom 里"有 Key 才算配置好"的旧过滤，结果就是
+     *    「添加成功，但设置页和主界面都看不到它」。
+     * ② 没有阈值输入框、列表里也只有「删除」没有「编辑」——
+     *    填错了只能删掉重加，预警阈值更是无处可设。
+     */
+    private void customDialog(final int editIdx) {
+        final boolean isEdit = editIdx >= 0;
+        List<BalanceFetcher.Custom> all0 = BalanceFetcher.loadCustom(act);
+        final BalanceFetcher.Custom c0 =
+                isEdit && editIdx < all0.size() ? all0.get(editIdx)
+                        : new BalanceFetcher.Custom();
+
         LinearLayout panel = new LinearLayout(act);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(20), dp(10), dp(20), 0);
+
         final EditText eName = new EditText(act);
-        eName.setHint("平台名称");
-        panel.addView(eName);
+        eName.setHint("比如：我的自建网关");
+        eName.setText(c0.name);
+        eName.setMaxLines(1);
+        addField(panel, "① 名称",
+                "显示在余额卡片和设置页列表里的名字。",
+                eName);
+
         final EditText eUrl = new EditText(act);
-        eUrl.setHint("余额接口 URL（https://…）");
-        panel.addView(eUrl);
+        eUrl.setHint("https://api.example.com/v1");
+        eUrl.setText(c0.url);
+        eUrl.setMaxLines(1);
+        addField(panel, "② 接口地址",
+                "查询余额用的接口，以 https:// 开头。\n"
+                        + "接口返回 JSON 时，程序会自动找里面的余额数字；\n"
+                        + "找不到再用下面「取值路径」指定。",
+                eUrl);
+
+        final EditText eKey = new EditText(act);
+        eKey.setHint("sk-xxxx（可留空）");
+        eKey.setText(c0.key);
+        eKey.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        eKey.setMaxLines(1);
+        addField(panel, "③ API Key（可留空）",
+                "大部分接口需要它才能查到余额。\n"
+                        + "填了会自动带上 Authorization: Bearer 请求头。\n"
+                        + "自建网关如果不需要鉴权，留空也能用 —— 不影响添加。",
+                eKey);
+
         final EditText ePath = new EditText(act);
-        ePath.setHint("取值路径（可留空自动识别）");
-        panel.addView(ePath);
+        ePath.setHint("data.balance（可留空自动识别）");
+        ePath.setText(c0.path);
+        ePath.setMaxLines(1);
+        addField(panel, "④ 取值路径",
+                "从接口返回的 JSON 里按层级取值，点号分隔。\n"
+                        + "留空时程序自动识别常见字段名（balance / amount / money 等）。",
+                ePath);
+
+        final EditText eThr = new EditText(act);
+        eThr.setHint("0（不预警）");
+        eThr.setText(c0.threshold == 0 ? "" : String.valueOf(c0.threshold));
+        eThr.setInputType(InputType.TYPE_CLASS_NUMBER
+                | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        eThr.setMaxLines(1);
+        addField(panel, "⑤ 低余额预警阈值",
+                "余额低于这个数时发通知提醒（只按卡片显示的币种判断）。\n"
+                        + "　例：填 5　→　余额低于 5 元时提醒\n"
+                        + "填 0 或留空 = 不预警。",
+                eThr);
+
+        /* 字段多了要能滚，否则小屏上「保存」够不着 */
+        final android.widget.ScrollView scroll = new android.widget.ScrollView(act);
+        scroll.addView(panel);
+
         new AlertDialog.Builder(act)
-                .setTitle("添加自定义平台")
-                .setView(panel)
+                .setTitle(isEdit ? "编辑自定义平台" : "添加自定义平台")
+                .setView(scroll)
                 .setPositiveButton("保存", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         BalanceFetcher.Custom c = new BalanceFetcher.Custom();
                         c.name = eName.getText().toString().trim();
                         c.url = eUrl.getText().toString().trim();
+                        c.key = eKey.getText().toString().trim();
                         c.path = ePath.getText().toString().trim();
-                        if (c.name.length() == 0 || c.url.length() == 0) {
-                            Toast.makeText(act, "名称和 URL 不能为空", Toast.LENGTH_SHORT).show();
+                        try {
+                            String tv = eThr.getText().toString().trim();
+                            c.threshold = tv.length() == 0 ? 0 : Double.parseDouble(tv);
+                        } catch (Exception e) { c.threshold = 0; }
+                        if (c.threshold < 0) c.threshold = 0;
+                        /* 保留旧值里没在这一屏露出的字段（单位/制式/后缀/静态文本），
+                           编辑时别被悄悄清空 */
+                        if (isEdit) {
+                            c.unit = c0.unit;
+                            c.kind = c0.kind;
+                            c.suffix = c0.suffix;
+                            c.text = c0.text;
+                        }
+                        if (c.name.length() == 0) {
+                            Toast.makeText(act, "名称不能为空", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if (c.url.length() == 0) {
+                            Toast.makeText(act, "接口地址不能为空", Toast.LENGTH_SHORT).show();
                             return;
                         }
                         List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
-                        list.add(c);
+                        if (isEdit && editIdx < list.size()) list.set(editIdx, c);
+                        else list.add(c);
                         BalanceFetcher.saveCustom(act, list);
                         Busy.run(act, "正在保存…", new Runnable() {
                             public void run() { renderCustoms(); renderKeys(); kick(); }

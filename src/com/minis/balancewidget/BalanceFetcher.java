@@ -536,9 +536,12 @@ public class BalanceFetcher {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
                 Custom c = customFromJson(o, false);   // false = 存储态，key 是密文，要解
-                /* 有 Key 就算配置好了。URL 留空表示「查不到额度的免费服务」
-                   （魔搭就是这种：服务本身免费，没有余额可查，只作展示）。 */
-                if (c.key.length() > 0) list.add(c);
+                /* ⚠️ 早先这里是「有 Key 才算配置好」，结果只填了接口地址、
+                   不带 Key 的 OpenAI 兼容平台会被静默丢掉 ——
+                   表现是"添加成功，但设置页和主界面都没有它"。
+                   Key 本来就是可选的（很多自建网关不需要 Key），
+                   所以改成看 ready()：有地址或有静态文本就算数。 */
+                if (c.ready()) list.add(c);
             }
         } catch (Exception ignored) { }
         return list;
@@ -551,8 +554,10 @@ public class BalanceFetcher {
                 arr.put(customToJson(list.get(i), false));   // 存储态：key 加密
             } catch (Exception ignored) { }
         }
+        /* 同步落盘：这是用户刚填好的配置，apply() 异步写盘时若进程被回收
+           就可能丢 —— 表现同样是"添加了但下次进来没有" */
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-           .edit().putString("custom_json", arr.toString()).apply();
+           .edit().putString("custom_json", arr.toString()).commit();
     }
 
     /**

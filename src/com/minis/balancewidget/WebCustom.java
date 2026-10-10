@@ -102,7 +102,19 @@ public class WebCustom {
      * 可填：console（控制台）、recharge（充值）、home（主界面）、
      *       settings（设置）、stats（统计）、none（点了没反应）。
      */
-    public String clickAction = "";
+    /**
+     * 点卡片后弹出的按钮（最多 4 个）。
+     *
+     * 每个 = 一个自定义按钮：label 是按钮文字，url 点开后去的地址。
+     * url 支持两类：
+     * - 以 http/https 开头 → 直接用浏览器打开（控制台、充值页、工单页都行）
+     * - 内置指令 app:home / app:settings / app:stats / app:refresh → 切到对应界面
+     *
+     * 全空时也要给用户一个「刷新」按钮 —— 点卡片至少能做点事，
+     * 不能点了没反应（用户会以为 App 坏了）。
+     */
+    public String[] btnLabels = { "", "", "", "" };
+    public String[] btnUrls = { "", "", "", "" };
 
     public boolean ready() {
         return name.length() > 0 && url.length() > 0;
@@ -136,7 +148,8 @@ public class WebCustom {
             for (int i = 0; i < list.size(); i++) {
                 arr.put(list.get(i).toJson());
             }
-            sp(ctx).edit().putString(KEY, arr.toString()).apply();
+            /* 同步落盘：用户刚填完配置，apply() 异步写盘时若进程被回收会丢 */
+            sp(ctx).edit().putString(KEY, arr.toString()).commit();
         } catch (Exception ignored) { }
     }
 
@@ -167,7 +180,14 @@ public class WebCustom {
             o.put("suffix", suffix);
             o.put("foreign", foreign);
             o.put("threshold", threshold);
-            o.put("clickAction", clickAction);
+            org.json.JSONArray bl = new org.json.JSONArray();
+            org.json.JSONArray bu = new org.json.JSONArray();
+            for (int i = 0; i < 4; i++) {
+                bl.put(btnLabels[i]);
+                bu.put(btnUrls[i]);
+            }
+            o.put("btnLabels", bl);
+            o.put("btnUrls", bu);
         } catch (Exception ignored) { }
         return o;
     }
@@ -194,8 +214,28 @@ public class WebCustom {
         w.suffix = o.optString("suffix", "");
         w.foreign = o.optBoolean("foreign", false);
         w.threshold = o.optDouble("threshold", 0);
-        w.clickAction = o.optString("clickAction", "");
+        org.json.JSONArray bl = o.optJSONArray("btnLabels");
+        org.json.JSONArray bu = o.optJSONArray("btnUrls");
+        for (int i = 0; i < 4; i++) {
+            if (bl != null) w.btnLabels[i] = bl.optString(i, "");
+            if (bu != null) w.btnUrls[i] = bu.optString(i, "");
+        }
+        String legacy = o.optString("clickAction", "");
+        if (legacy.length() > 0 && w.btnUrls[0].length() == 0) {
+            w.btnUrls[0] = "app:" + legacy;
+            w.btnLabels[0] = legacyLabel(legacy);
+        }
         return w;
+    }
+
+    /** 旧版 clickAction 值 → 按钮文字（用于老数据迁移） */
+    private static String legacyLabel(String act) {
+        if ("console".equals(act)) return "控制台";
+        if ("recharge".equals(act)) return "充值";
+        if ("home".equals(act)) return "主界面";
+        if ("settings".equals(act)) return "设置";
+        if ("stats".equals(act)) return "统计";
+        return "打开";
     }
 
     /**

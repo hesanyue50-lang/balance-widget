@@ -72,6 +72,8 @@ public class MainActivity extends Activity {
              影响不外溢 → 打开 App 直接接上，不必每次手动点一下。
            - 系统全局：建的是接管整机的系统 VPN，还要弹授权框 ——
              替用户做这个决定不合适，留给他手动开。 */
+        BalanceFetcher.diag(this, "[自动启动] enabled=" + Clash.enabled(this)
+                + " running=" + Clash.isRunning() + " mode=" + Clash.mode(this));
         if (Clash.enabled(this) && !Clash.isRunning()) {
             if (!Clash.autoStartAllowed(this)) {
                 BalanceFetcher.diag(this, "全局代理模式，等待用户手动开启");
@@ -1555,28 +1557,67 @@ public class MainActivity extends Activity {
      * 卡片点击后的跳转：按 clickAction 把界面切过去。
      * 返回 false 表示这个动作我们处理不了 → 调用方退回弹菜单。
      */
-    private boolean runClickAction(BalanceFetcher.Item it, String act) {
-        if (BalanceFetcher.CLICK_HOME.equals(act)) {
-            showPanel(PageStore.homeIndex(this));
-            return true;
+    /**
+     * 高级自定义平台点卡片后弹出的按钮菜单。
+     *
+     * 最多 4 个用户自定义按钮（标签 + 地址），地址支持两类：
+     * - http/https → 浏览器打开（控制台 / 充值页 / 工单页，随便填什么地址）
+     * - app:home / app:settings / app:stats / app:refresh → 切到 App 内对应界面
+     *
+     * 一个按钮都没配时（或四个全设成"无"），**必须仍给一个「刷新」** ——
+     * 点卡片完全没反应会让用户以为 App 坏了。
+     */
+    private void showCustomButtons(final BalanceFetcher.Item it, WebCustom w) {
+        java.util.ArrayList<String> labels = new java.util.ArrayList<String>();
+        java.util.ArrayList<String> urls = new java.util.ArrayList<String>();
+        for (int i = 0; i < 4; i++) {
+            String lb = w.btnLabels[i] == null ? "" : w.btnLabels[i].trim();
+            String u = w.btnUrls[i] == null ? "" : w.btnUrls[i].trim();
+            if (u.length() == 0) continue;         // 设成"无"的按钮跳过
+            labels.add(lb.length() > 0 ? lb : "打开");
+            urls.add(u);
         }
-        if (BalanceFetcher.CLICK_SETTINGS.equals(act)) {
-            showPanel(indexOfPage(PageStore.K_SETTINGS));
-            return true;
+        /* 一个都没有 → 兜底给个刷新，点卡片总得能干点事 */
+        if (labels.isEmpty()) {
+            labels.add("刷新");
+            urls.add("app:refresh");
         }
-        if (BalanceFetcher.CLICK_STATS.equals(act)) {
-            showPanel(indexOfPage(PageStore.K_STATS));
-            return true;
+        final java.util.List<String> fUrls = urls;
+        LockDialog.choose(this, it.label,
+                labels.toArray(new String[0]),
+                new LockDialog.OnPick() {
+                    public void pick(int which) {
+                        runCustomAction(it, fUrls.get(which));
+                    }
+                });
+    }
+
+    /** 执行一个自定义按钮：app: 指令切界面，其余当网址打开 */
+    private void runCustomAction(BalanceFetcher.Item it, String target) {
+        if (target == null) return;
+        String t = target.trim();
+        if (t.startsWith("app:")) {
+            String cmd = t.substring(4).toLowerCase();
+            if ("home".equals(cmd)) {
+                showPanel(PageStore.homeIndex(this));
+            } else if ("settings".equals(cmd)) {
+                showPanel(indexOfPage(PageStore.K_SETTINGS));
+            } else if ("stats".equals(cmd)) {
+                showPanel(indexOfPage(PageStore.K_STATS));
+            } else if ("refresh".equals(cmd)) {
+                refreshOne(it);
+            } else {
+                android.widget.Toast.makeText(this, "不认识的指令：" + cmd,
+                        android.widget.Toast.LENGTH_SHORT).show();
+            }
+            return;
         }
-        if (BalanceFetcher.CLICK_CONSOLE.equals(act)) {
-            openSiteMenu(it);
-            return true;
+        if (t.startsWith("http://") || t.startsWith("https://")) {
+            openUrl(t);
+            return;
         }
-        if (BalanceFetcher.CLICK_RECHARGE.equals(act)) {
-            openTopup(it);
-            return true;
-        }
-        return false;   // 空串 / none / 未知值 → 退回弹菜单
+        android.widget.Toast.makeText(this, "地址要以 https:// 开头，或用 app:xxx 指令",
+                android.widget.Toast.LENGTH_SHORT).show();
     }
 
     /** 控制台直达：点击直接打开控制台，不再弹「控制台/充值」子菜单。
@@ -1951,11 +1992,8 @@ public class MainActivity extends Activity {
                         } catch (Throwable ig) { }
                         List<WebCustom> wlist = WebCustom.loadAll(MainActivity.this);
                         if (wi >= 0 && wi < wlist.size()) {
-                            String act = wlist.get(wi).clickAction;
-                            if (act != null && act.length() > 0) {
-                                if (BalanceFetcher.CLICK_NONE.equals(act)) return;
-                                if (runClickAction(fi, act)) return;
-                            }
+                            showCustomButtons(fi, wlist.get(wi));
+                            return;
                         }
                     }
                     LockDialog.choose(MainActivity.this, fi.label,
