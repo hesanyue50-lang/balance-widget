@@ -896,6 +896,47 @@ public class BalanceFetcher {
     }
 
     /** DNS 解析（失败不抛，交给调用方决定要不要重试） */
+    /**
+     * 把底层网络异常翻译成人话。
+     *
+     * "Unable to resolve host: No address associated with hostname" 这种原文
+     * 对用户没有信息量 —— 他不知道这是 DNS 被干扰、该开代理还是等一等。
+     * 翻译成「域名解析失败」并给出建议，卡片上一眼能看懂。
+     */
+    static String friendlyError(Throwable e) {
+        String m = e.getMessage() == null ? "" : e.getMessage();
+        String cls = e.getClass().getSimpleName();
+        if (e instanceof java.net.UnknownHostException
+                || m.contains("Unable to resolve host")
+                || m.contains("No address associated")) {
+            return "域名解析失败（DNS 被干扰或网络未就绪）——可尝试开启网络加速，或稍后下拉重试";
+        }
+        if (e instanceof java.net.SocketTimeoutException || m.contains("timeout")) {
+            return "连接超时 —— 网络慢或该平台服务繁忙，稍后重试";
+        }
+        if (m.contains("SSLHandshakeException") || m.contains("SSL")
+                || m.contains("Connection reset") || m.contains("ECONNRESET")) {
+            return "连接被重置（常见于直连被墙的服务）—— 建议在「网络加速」里让该平台走代理";
+        }
+        if (m.contains("401") || m.contains("Unauthorized")) {
+            return "密钥无效或已过期 —— 点卡片检查 Key";
+        }
+        if (m.contains("429")) {
+            return "请求太频繁，被平台限流 —— 稍等几分钟再试";
+        }
+        if (m.contains("403") || m.contains("Forbidden")) {
+            return "服务端拒绝访问（403）—— Key 可能没开通对应权限，或该地区被限制（可尝试走代理）";
+        }
+        return (m.length() > 0 ? m : cls);
+    }
+
+    /**
+     * 域名解析：先走系统 DNS，失败再用 **DoH（DNS over HTTPS）** 兜底。
+     *
+     * 为什么要兜底：部分运营商会干扰境外域名的解析（返回空或污染地址），
+     * 表现是"Unable to resolve host" —— 但同一时刻DoH 查询是通的（HTTPS 443 很难被拦）。
+     * 兜底成功后整个请求就能继续走直连，不用非开代理不可。
+     */
     private static void resolve(String host, List<InetAddress> v4, List<InetAddress> v6) {
         try {
             InetAddress[] all = InetAddress.getAllByName(host);
@@ -904,6 +945,55 @@ public class BalanceFetcher {
                 else if (all[i] instanceof Inet6Address) v6.add(all[i]);
             }
         } catch (Exception ignore) { }
+        if (v4.isEmpty() && v6.isEmpty()) {
+            resolveDoh(host, v4, v6);
+        }
+    }
+
+    /** DoH 兜底：用阿里/谷歌的 HTTPS DNS 查 A 记录（JSON API）。失败静默，保持老行为。 */
+    private static void resolveDoh(String host, List<InetAddress> v4, List<InetAddress> v6) {
+        /* 两个源轮着试：阿里在国内直连可达（DoH 域名本身也可能被解析失败，用 IP 直连），
+           谷歌 DoH 在部分网络下可达。查询本身走 IP + SNI，不依赖系统 DNS。 */
+        String[][] sources = {
+                { "https://223.5.5.5/resolve?name=", "&type=A" },          // 阿里 DoH (JSON)
+                { "https://1.1.1.1/dns-query?name=", "&type=A" },          // Cloudflare
+        };
+        for (int s = 0; s < sources.length; s++) {
+            try {
+                URL u = new URL(sources[s][0] + host + sources[s][1]);
+                HttpURLConnection c = (HttpURLConnection) u.openConnection();
+                c.setConnectTimeout(4000);
+                c.setReadTimeout(4000);
+                c.setRequestProperty("accept", "application/dns-json");
+                /* DoH 服务器自己也可能被系统 DNS 拦 —— 用 IP 直连 + Host 头即可 */
+                int code = c.getResponseCode();
+                if (code != 200) continue;
+                BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                char[] buf = new char[2048];
+                int n;
+                while ((n = r.read(buf)) > 0) sb.append(buf, 0, n);
+                r.close();
+                JSONObject o = new JSONObject(sb.toString());
+                JSONArray ans = o.optJSONArray("Answer");
+                if (ans == null) continue;
+                for (int i = 0; i < ans.length(); i++) {
+                    JSONObject a = ans.optJSONObject(i);
+                    if (a == null) continue;
+                    String data = a.optString("data", "").trim();
+                    if (data.length() == 0) continue;
+                    try {
+                        InetAddress ad = InetAddress.getByName(data);
+                        if (ad instanceof Inet4Address) v4.add(ad);
+                        else if (ad instanceof Inet6Address) v6.add(ad);
+                    } catch (Exception ig) { }
+                }
+                if (!v4.isEmpty() || !v6.isEmpty()) {
+                    diag(null, "DoH 兜底解析成功 " + host + "（" + sources[s][0].replaceAll("https://", "") + "）");
+                    return;
+                }
+            } catch (Throwable ig) { }
+        }
     }
 
     /** 本机是否存在非环回 IPv4 出口。没有就是纯 IPv6 / NAT64 环境（移动数据常见）。 */
@@ -1672,7 +1762,7 @@ public class BalanceFetcher {
                                 + "   (" + (System.currentTimeMillis() - ts0) + "ms)");
                     } catch (Exception e) {
                         it.ok = false;
-                        it.error = (e.getMessage() == null) ? "查询失败" : e.getMessage();
+                        it.error = friendlyError(e);
                         it.amount = "—";
                         Log.w(TAG, "平台 " + it.id + " 失败: " + it.error
                                 + " | " + e.getClass().getSimpleName());
