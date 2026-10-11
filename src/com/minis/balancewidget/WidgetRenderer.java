@@ -235,10 +235,13 @@ public final class WidgetRenderer {
             v.setInt(R.id.w2_root, "setBackgroundResource",
                      WallpaperTint.bgRes(WallpaperTint.useDark(ctx)));
         } catch (Throwable ignored) { }
+        /* 组件本体与刷新按钮 → 走连击计数（单击同步 / 双击开应用 / 三击强制重拉）。
+           注意 requestCode 必须区分开：同一个 code 会被系统当成同一个 PendingIntent
+           互相覆盖，翻页按钮的 1/2 也是同理。 */
         v.setOnClickPendingIntent(R.id.w2_root,
-                pi(ctx, BalanceWidgetProvider.ACTION_REFRESH, 0));
+                pi(ctx, BalanceWidgetProvider.ACTION_TAP, 10));
         v.setOnClickPendingIntent(R.id.w2_refresh,
-                pi(ctx, BalanceWidgetProvider.ACTION_REFRESH, 0));
+                pi(ctx, BalanceWidgetProvider.ACTION_TAP, 11));
         v.setOnClickPendingIntent(R.id.w2_prev,
                 pi(ctx, BalanceWidgetProvider.ACTION_PREV, 1));
         v.setOnClickPendingIntent(R.id.w2_next,

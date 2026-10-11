@@ -33,6 +33,18 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     public static final String ACTION_FORCE_REDRAW = "com.minis.balancewidget.ACTION_FORCE_REDRAW";
     public static final String ACTION_PREV = "com.minis.balancewidget.ACTION_PREV";
     public static final String ACTION_NEXT = "com.minis.balancewidget.ACTION_NEXT";
+    /**
+     * 点小组件本体（非翻页按钮）走这个 action —— 由它累计连击次数：
+     * 单击 = 用缓存同步（老行为），**双击 = 打开应用**，**三击 = 强制联网重拉**。
+     */
+    public static final String ACTION_TAP = "com.minis.balancewidget.ACTION_TAP";
+
+    /* ---- 连击判定 ---- */
+    /** 两次点击间隔超过这个时长就不算连击 */
+    private static final long MULTI_TAP_GAP_MS = 500L;
+    private static int tapCount = 0;
+    private static long lastTapAt = 0L;
+    private static final Object TAP_LOCK = new Object();
 
     /** 后台抓取的超时预算（毫秒）。数组里的平台会并发抓，总耗时≈最慢的那个 */
     private static final int FETCH_TIMEOUT_MS = 8000;
@@ -42,6 +54,9 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             new java.util.concurrent.atomic.AtomicBoolean(false);
     private static volatile long LAST_FETCH_AT = 0L;
     private static final long MIN_GAP_MS = 2000L;
+    /** 下一次刷新要不要跳过节流（小组件三击置一次） */
+    private static final java.util.concurrent.atomic.AtomicBoolean FORCE_ONCE =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     // ---------- 生命周期 ----------
 
@@ -85,6 +100,12 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             Intent nxt = new Intent(ctx, BalanceWidgetProvider.class);
             nxt.setAction(ACTION_REFRESH);
             ctx.sendBroadcast(nxt);
+            return;
+        }
+
+        /* 点组件本体：按连击次数分派 —— 单击同步缓存 / 双击打开应用 / 三击强制重拉 */
+        if (ACTION_TAP.equals(a)) {
+            handleTap(ctx);
             return;
         }
 
@@ -134,6 +155,105 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         super.onReceive(ctx, intent);
     }
 
+    /**
+     * 小组件本体的点击：按连击次数派活。
+     *
+     * | 连击 | 行为 |
+     * |---|---|
+     * | 单击 | 用缓存同步一遍（老行为，不联网） |
+     * | 双击 | **打开应用** |
+     * | 三击 | **强制联网重拉**（忽略节流与缓存，真的去请求各家接口） |
+     *
+     * 为什么要等一小会儿再执行：收到第 1 击时不知道后面还有没有第 2 击，
+     * 只能等连击窗口过去再判定。窗口取 500ms —— 再长用户会觉得点了没反应。
+     */
+    private void handleTap(final Context ctx) {
+        final int n;
+        synchronized (TAP_LOCK) {
+            long now = System.currentTimeMillis();
+            if (now - lastTapAt > MULTI_TAP_GAP_MS) tapCount = 0;
+            tapCount++;
+            lastTapAt = now;
+            n = tapCount;
+        }
+        BalanceFetcher.diag(ctx, "小组件点击 第 " + n + " 下");
+
+        /* 等连击窗口过去再动手；期间后续点击会继续累加 tapCount */
+        new Thread(new Runnable() {
+            public void run() {
+                try { Thread.sleep(MULTI_TAP_GAP_MS + 60); } catch (InterruptedException ig) { }
+                synchronized (TAP_LOCK) {
+                    /* 窗口内又点了 → 说明是多击，交给那一次的处理去执行 */
+                    if (tapCount != n) return;
+                    tapCount = 0;
+                }
+                if (n >= 3) {
+                    forceFetch(ctx);
+                } else if (n == 2) {
+                    openApp(ctx);
+                } else {
+                    /* 单击 = 老行为：用缓存重画一次 */
+                    Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+                    it.setAction(ACTION_FORCE_REDRAW);
+                    ctx.sendBroadcast(it);
+                }
+            }
+        }).start();
+    }
+
+    /** 强制刷新撞上并发时，等 1.5 秒再试一次（最多 3 次） */
+    private void retryForceLater(final Context ctx) {
+        new Thread(new Runnable() {
+            public void run() {
+                for (int i = 0; i < 3; i++) {
+                    try { Thread.sleep(1500); } catch (InterruptedException ig) { return; }
+                    if (!FETCHING.get()) {
+                        FORCE_ONCE.set(true);
+                        Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+                        it.setAction(ACTION_REFRESH);
+                        ctx.sendBroadcast(it);
+                        return;
+                    }
+                }
+                BalanceFetcher.diag(ctx, "强制刷新重试 3 次仍未抢到，放弃");
+            }
+        }).start();
+    }
+
+    /** 双击：打开应用主界面 */
+    private void openApp(Context ctx) {
+        try {
+            Intent it = new Intent(ctx, MainActivity.class);
+            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            ctx.startActivity(it);
+            BalanceFetcher.diag(ctx, "小组件双击 → 打开应用");
+        } catch (Throwable t) {
+            BalanceFetcher.diag(ctx, "小组件双击打开应用失败：" + t);
+        }
+    }
+
+    /**
+     * 三击：强制联网重拉。
+     *
+     * 和普通刷新的区别：普通刷新会走节流（2 秒内不重复）且可能复用缓存，
+     * 这里要的是"用户明确要求重新拉一次"，所以两者都绕开。
+     */
+    private void forceFetch(final Context ctx) {
+        BalanceFetcher.diag(ctx, "小组件三击 → 强制联网重拉");
+        /* 只置"跳过节流"的标志；并发闸门不绕 —— 上一轮没跑完时硬开第二轮，
+           请求会挤在一起反而都超时，交给 retryForceLater 排队重试。 */
+        FORCE_ONCE.set(true);
+        try {
+            Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+            it.setAction(ACTION_REFRESH);
+            ctx.sendBroadcast(it);
+        } catch (Throwable t) {
+            BalanceFetcher.diag(ctx, "小组件三击刷新失败：" + t);
+        }
+    }
+
     /** 用缓存重画一遍所有实例（崩溃兜底 / App 更新后救场共用） */
     private void safeRedraw(Context ctx) {
         try {
@@ -172,13 +292,24 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         BalanceFetcher.diag(ctx, "实例 ids=" + java.util.Arrays.toString(ids)
                 + " 数量=" + (ids == null ? -1 : ids.length));
 
+        /* force = 用户明确要求重新拉一次（小组件三击）：跳过节流，
+           但**不跳过并发闸门** —— 上一轮还没跑完时硬开第二轮，
+           两家平台的请求会挤在一起，反而都超时。 */
+        /* force 用静态标志传（本方法拿不到 intent） */
+        boolean force = FORCE_ONCE.getAndSet(false);
         long now = System.currentTimeMillis();
-        if (now - LAST_FETCH_AT < MIN_GAP_MS) {
+        if (!force && now - LAST_FETCH_AT < MIN_GAP_MS) {
             BalanceFetcher.diag(ctx, "跳过刷新：距上次仅 " + (now - LAST_FETCH_AT) + "ms");
             return;
         }
         if (!FETCHING.compareAndSet(false, true)) {
-            BalanceFetcher.diag(ctx, "跳过刷新：上一轮仍在进行中");
+            BalanceFetcher.diag(ctx, force ? "强制刷新：上一轮仍在进行中，稍后重试"
+                    : "跳过刷新：上一轮仍在进行中");
+            /* 强制刷新遇到并发时等一下再试，别直接放弃 —— 用户明确点了要重拉 */
+            if (force) {
+                retryForceLater(ctx);
+                return;
+            }
             return;
         }
         LAST_FETCH_AT = now;
