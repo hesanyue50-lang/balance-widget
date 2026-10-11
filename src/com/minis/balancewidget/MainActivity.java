@@ -133,9 +133,11 @@ public class MainActivity extends Activity {
         int gi0 = getIntent().getIntExtra("goto_tab", -1);
         if (gt0 != null || gi0 >= 0) {
             /* 显式指定了目标页（通知、快捷方式等）：按 key 找它在当前可见页里的位置 */
-            if ("stats".equals(gt0) || gi0 == 1) showPanel(indexOfPage(PageStore.K_STATS));
-            else if ("vpn".equals(gt0) || gi0 == 2) showPanel(indexOfPage(PageStore.K_VPN));
-            else if ("settings".equals(gt0) || gi0 == 3) showPanel(indexOfPage(PageStore.K_SETTINGS));
+            /* 只认 key，不认旧版数字下标 —— 页面可隐藏/重排，下标早不可靠了
+               （旧版存档里的 1/2/3 对今天的可见列表完全是另一个页面） */
+            if ("stats".equals(gt0)) showPanel(indexOfPage(PageStore.K_STATS));
+            else if ("vpn".equals(gt0)) showPanel(indexOfPage(PageStore.K_VPN));
+            else if ("settings".equals(gt0)) showPanel(indexOfPage(PageStore.K_SETTINGS));
             else showPanel(indexOfPage(PageStore.K_API));
         } else {
             /* 没指定就落到「主页面」（用户自己设的，可能是任意一页） */
@@ -573,9 +575,14 @@ public class MainActivity extends Activity {
         /* 这两处**故意不加加载遮罩**：数据早已在内存/缓存里，重算只要几十毫秒，
            盖一层遮罩反而让人以为「卡了一下」，割裂感比省下的那点等待更明显。
            遮罩只留给真正可能耗时的操作（保存密钥要过 Keystore 加密、清理数据要删库）。 */
-        if (page == 1) {
+        /* ⚠️ 页面可以隐藏/重排，page 是**当前可见列表**里的下标，不是固定位置！
+           早先这里写死 page==1 是统计、page==2 是加速 —— 用户把「用量统计」或
+           「网络加速」隐藏后，下标全往前挪，buildStats/vpnBinder 就绑到了
+           错误的页面上，切页即崩（而且崩在动画回调里，很难查）。 */
+        String pk = curKey;
+        if (PageStore.K_STATS.equals(pk)) {
             buildStats();
-        } else if (page == 2) {
+        } else if (PageStore.K_VPN.equals(pk)) {
             if (vpnBinder == null) vpnBinder = new VpnBinder(this, findViewById(R.id.vpn_page));
             vpnBinder.bind();
             /* 导入订阅时立刻刷新加速页（否则要切走再切回才看得到新订阅） */
@@ -591,7 +598,7 @@ public class MainActivity extends Activity {
                 }
             };
             dropEditFocus();
-        } else if (page == 3) {
+        } else if (PageStore.K_SETTINGS.equals(pk)) {
             buildSettingsPanel();
             dropEditFocus();     // 设置页里有输入框，别让它一进来就抢焦点弹键盘
         }
@@ -1516,7 +1523,7 @@ public class MainActivity extends Activity {
                         if (isFinishing() || isDestroyed()) return;
                         loading = false;
                         render(r);
-                        if (statsRebuildAfterRefresh && curPanel == 1) {
+                        if (statsRebuildAfterRefresh && PageStore.K_STATS.equals(curKey)) {
                             statsRebuildAfterRefresh = false;
                             buildStats();
                         }
