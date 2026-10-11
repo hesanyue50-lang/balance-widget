@@ -161,6 +161,26 @@ public final class KeyStore {
         save(c, all);
     }
 
+    /**
+     * 删掉某平台下**所有** Key，返回删了几条。
+     *
+     * ⚠️ 删除自定义平台时必须调这个 —— 否则它的 Key 会变成孤儿：
+     * 平台没了、Key 还在 KeyStore 里，统计页遍历 KeyStore 时照常给它分组，
+     * 图例上就挂着一个解析不出名字的 "custom:0"（用户看到会以为见鬼了）。
+     */
+    public static int removeAllForPlatform(Context c, String platform) {
+        dataVersion++; invalidate();
+        List<ApiKey> all = load(c);
+        List<ApiKey> keep = new ArrayList<ApiKey>();
+        int n = 0;
+        for (int i = 0; i < all.size(); i++) {
+            if (platform.equals(all.get(i).platform)) n++;
+            else keep.add(all.get(i));
+        }
+        if (n > 0) save(c, keep);
+        return n;
+    }
+
     /** 某个平台下已配置的 Key 数量 */
     public static int countConfigured(Context c, String platform) {
         int n = 0;
@@ -219,7 +239,8 @@ public final class KeyStore {
         return out;
     }
 
-    private static void save(Context c, List<ApiKey> list) {
+    /** 保存全部（包内整理用：删除自定义平台后的 Key 重排要走这里） */
+    public static void save(Context c, List<ApiKey> list) {
         /* 这里不再自增 dataVersion：自增会让刚写好的缓存立刻失效，
            下一次读又得把所有 Key 重新解密一遍。版本号由调用方（add/update/remove）负责推。 */
         try {

@@ -523,7 +523,48 @@ public class SettingsBinder {
     /** 供宿主在外部状态变化后（如 MiMo 登录回来）重画密钥列表 */
     public void refreshKeys() { renderKeys(); }
 
+    /**
+     * 清理孤儿 Key：平台已被删除（custom:N / web:N 越界）但 Key 还挂着的条目。
+     *
+     * 一次性清掉历史遗留（比如用户见过的那种"统计页多出一个 custom:0"），
+     * 之后删除平台时会同步清 Key，理论上不会再产生新的孤儿。
+     * 每次渲染密钥列表时顺带跑一遍，代价是一次遍历。
+     */
+    private void cleanOrphanKeys() {
+        try {
+            List<KeyStore.ApiKey> all = KeyStore.all(act);
+            boolean changed = false;
+            List<KeyStore.ApiKey> keep = new java.util.ArrayList<KeyStore.ApiKey>();
+            for (int i = 0; i < all.size(); i++) {
+                KeyStore.ApiKey k = all.get(i);
+                String pf = k.platform == null ? "" : k.platform;
+                boolean orphan = false;
+                if (pf.startsWith("custom:")) {
+                    try {
+                        int pi = Integer.parseInt(pf.substring(7));
+                        List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(act);
+                        orphan = pi < 0 || pi >= cs.size();
+                    } catch (Throwable ig) { orphan = true; }
+                } else if (pf.startsWith("web:")) {
+                    try {
+                        int pi = Integer.parseInt(pf.substring(4));
+                        List<WebCustom> ws = WebCustom.loadAll(act);
+                        orphan = pi < 0 || pi >= ws.size();
+                    } catch (Throwable ig) { orphan = true; }
+                }
+                if (orphan) {
+                    changed = true;
+                    BalanceFetcher.diag(act, "清理孤儿 Key：" + pf + "（平台已删除）");
+                } else {
+                    keep.add(k);
+                }
+            }
+            if (changed) KeyStore.save(act, keep);
+        } catch (Throwable ig) { }
+    }
+
     private void renderKeys() {
+        cleanOrphanKeys();
         LinearLayout box = (LinearLayout) root.findViewById(R.id.key_fields);
         if (box == null) return;
         box.removeAllViews();
@@ -1284,6 +1325,9 @@ public class SettingsBinder {
                     if (idx < list.size()) {
                         list.remove(idx);
                         WebCustom.saveAll(act, list);
+                        /* 同步清掉这个平台的 Key —— 不然它会变成孤儿条目，
+                           统计页图例上永远挂着一个解析不出名字的 "web:N" */
+                        KeyStore.removeAllForPlatform(act, "web:" + idx);
                     }
                     Busy.run(act, "正在更新…", new Runnable() {
                         public void run() { renderWebs(); kick(); }
@@ -2180,6 +2224,23 @@ public class SettingsBinder {
                     if (idx < list.size()) {
                         list.remove(idx);
                         BalanceFetcher.saveCustom(act, list);
+                        /* 同步清掉这个平台的 Key（孤儿 Key 会让统计页出现 custom:N）。
+                           ⚠️ 后面的平台会前移（custom:1 → custom:0），
+                           所以要把 idx 之后的所有平台 Key 都重排 —— 干脆全清重标。 */
+                        List<KeyStore.ApiKey> all = KeyStore.all(act);
+                        List<KeyStore.ApiKey> keep = new java.util.ArrayList<KeyStore.ApiKey>();
+                        for (int ki = 0; ki < all.size(); ki++) {
+                            KeyStore.ApiKey kk = all.get(ki);
+                            String pf = kk.platform == null ? "" : kk.platform;
+                            if (pf.startsWith("custom:")) {
+                                try {
+                                    int pi = Integer.parseInt(pf.substring(7));
+                                    if (pi >= idx) continue;   // 删掉被删平台及其后的旧映射
+                                } catch (Throwable ig) { continue; }
+                            }
+                            keep.add(kk);
+                        }
+                        KeyStore.save(act, keep);
                     }
                     Busy.run(act, "正在更新…", new Runnable() {
                         public void run() { renderCustoms(); renderKeys(); kick(); }
