@@ -803,6 +803,23 @@ public class BalanceFetcher {
         }
 
         boolean localV4 = hasLocalIpv4();
+
+        /* 纯 IPv6 环境（移动数据的 464XLAT / NAT64）没有 IPv4 出口 ——
+           系统给的 IPv4 地址本机根本发不出去。运营商一般自带 DNS64 会合成 AAAA，
+           但解析被干扰、或 DoH 只拿到 A 记录时，就得自己按 RFC 6052 合成：
+           前缀 64:ff9b::/96 + 内嵌那 4 字节 IPv4。
+           合成地址排在真实 AAAA **后面**（可能不通，别拖慢正常路径）。 */
+        int synth = 0;
+        if (!localV4 && !v4.isEmpty()) {
+            for (int i = 0; i < v4.size(); i++) {
+                InetAddress n = nat64(v4.get(i));
+                if (n != null && !v6.contains(n)) { v6.add(n); synth++; }
+            }
+            if (synth > 0) {
+                diag(null, "纯 IPv6 环境：把 " + synth + " 个 IPv4 合成 NAT64 地址 " + host);
+            }
+        }
+
         List<InetAddress> ordered = new ArrayList<InetAddress>();
         /* 按本机**真实存在的出口协议**排序：移动数据/纯 IPv6（NAT64）环境没有 IPv4 路由，
            硬先试 IPv4 只会白等满超时，最后落到 IPv6 还可能被 Cloudflare 拒（ECONNREFUSED）。 */
@@ -1135,6 +1152,31 @@ public class BalanceFetcher {
     }
 
     /** 本机是否存在非环回 IPv4 出口。没有就是纯 IPv6 / NAT64 环境（移动数据常见）。 */
+    /**
+     * 把 IPv4 合成为 NAT64 地址（RFC 6052 well-known 前缀 64:ff9b::/96）。
+     *
+     * 纯 IPv6 的移动数据要靠它才能访问只有 IPv4 的服务器。
+     * 合成结果是 16 字节：前 4 字节 0064:ff9b，中间 8 字节 0，最后 4 字节放原 IPv4。
+     *
+     * ⚠️ 只在运营商确实提供 NAT64 时可用；不可用的话连接会失败 ——
+     * 所以调用方必须把合成地址排在真实 AAAA 之后，当兜底而不是首选。
+     */
+    private static InetAddress nat64(InetAddress v4) {
+        try {
+            byte[] b = v4.getAddress();
+            if (b.length != 4) return null;
+            byte[] v6addr = new byte[16];
+            v6addr[0] = 0x00;
+            v6addr[1] = 0x64;
+            v6addr[2] = (byte) 0xff;
+            v6addr[3] = (byte) 0x9b;
+            System.arraycopy(b, 0, v6addr, 12, 4);
+            return InetAddress.getByAddress(v6addr);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private static boolean hasLocalIpv4() {
         try {
             java.util.Enumeration<java.net.NetworkInterface> nis =
