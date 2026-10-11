@@ -830,6 +830,11 @@ public class BalanceFetcher {
         }
         if (ordered.isEmpty()) return getViaHost(url, bearer, cookie, timeoutMs);
 
+        /* 如果系统 DNS 给出的地址全部连不通，可能是**被污染成了错误 IP**
+           （移动数据下常见）—— 那就用 DoH 重新解析一轮再试。
+           注意沿用同一个 deadline：不给第二轮额外预算，避免总耗时翻倍。 */
+        boolean dohRetried = false;
+        while (true) {
         StringBuilder tried = new StringBuilder();
         /* 首选地址要吃满大部分预算：OpenRouter/七牛云实测稳定要 4~6s，
            按 timeoutMs/2 分（8000 → 4000）会让它们次次超时。
@@ -874,7 +879,30 @@ public class BalanceFetcher {
                 tried.append(ip).append('=').append(e.getClass().getSimpleName()).append("; ");
             }
         }
+        /* 这一轮全失败 —— 若还没试过 DoH，用它重新解析一次再跑一轮 */
+        if (!dohRetried) {
+            dohRetried = true;
+            List<InetAddress> d4 = new ArrayList<InetAddress>();
+            List<InetAddress> d6 = new ArrayList<InetAddress>();
+            diag(null, "系统解析的地址全失败，改用 DoH 重解析 " + host);
+            resolveDoh(host, d4, d6);
+            List<InetAddress> extra = new ArrayList<InetAddress>();
+            List<InetAddress> pref = localV4 ? d4 : d6;
+            List<InetAddress> sec  = localV4 ? d6 : d4;
+            for (int i = 0; i < pref.size(); i++) {
+                if (!ordered.contains(pref.get(i))) extra.add(pref.get(i));
+            }
+            for (int i = 0; i < sec.size(); i++) {
+                if (!ordered.contains(sec.get(i))) extra.add(sec.get(i));
+            }
+            if (!extra.isEmpty()) {
+                diag(null, "DoH 给出 " + extra.size() + " 个新地址，重试 " + host);
+                ordered = extra;
+                continue;
+            }
+        }
         throw new Exception("所有地址均失败 [" + (tried.length() == 0 ? "无" : tried.toString().trim()) + "]");
+        }
     }
 
     /** 数一下字符串里有几个换行 */
@@ -896,6 +924,32 @@ public class BalanceFetcher {
     }
 
     /** DNS 解析（失败不抛，交给调用方决定要不要重试） */
+    /** 当前是否走移动数据；以及一个可读的网络描述（写诊断日志用） */
+    static volatile boolean onCellular = false;
+    static volatile String netDesc = "";
+
+    /**
+     * 记下当前网络类型。移动数据的运营商 DNS 对境外域名很不可靠
+     * （返回空或污染地址），失败提示要据此给出不同建议。
+     * 在每次 fetch 开始时调一次即可，不做常驻监听（省电）。
+     */
+    public static void noteNetwork(Context c) {
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager)
+                    c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+            android.net.NetworkInfo ni = cm.getActiveNetworkInfo();
+            if (ni == null || !ni.isConnected()) {
+                onCellular = false;
+                netDesc = "无网络";
+                return;
+            }
+            onCellular = ni.getType() == android.net.ConnectivityManager.TYPE_MOBILE;
+            String sub = ni.getSubtypeName();
+            netDesc = (onCellular ? "移动数据" : "WiFi") + (sub == null || sub.length() == 0 ? "" : "/" + sub);
+        } catch (Throwable ig) { }
+    }
+
     /**
      * 把底层网络异常翻译成人话。
      *
@@ -909,6 +963,11 @@ public class BalanceFetcher {
         if (e instanceof java.net.UnknownHostException
                 || m.contains("Unable to resolve host")
                 || m.contains("No address associated")) {
+            /* 移动数据的运营商 DNS 会拦境外域名 —— 这个提示比笼统的"网络未就绪"有用得多 */
+            if (onCellular) {
+                return "域名解析失败 —— 当前是移动数据，运营商 DNS 可能拦截了境外域名。"
+                        + "可开启网络加速，或切到 WiFi 再试";
+            }
             return "域名解析失败（DNS 被干扰或网络未就绪）——可尝试开启网络加速，或稍后下拉重试";
         }
         if (e instanceof java.net.SocketTimeoutException || m.contains("timeout")) {
@@ -950,25 +1009,91 @@ public class BalanceFetcher {
         }
     }
 
-    /** DoH 兜底：用阿里/谷歌的 HTTPS DNS 查 A 记录（JSON API）。失败静默，保持老行为。 */
+    /**
+     * DoH 兜底：用 HTTPS DNS 查解析结果（JSON API）。
+     *
+     * ⚠️ 早先这里写的是 `https://223.5.5.5/resolve` —— **用 IP 直连 HTTPS 必然证书校验失败**
+     * （证书签给 dns.alidns.com，不是签给 IP），异常又被 catch 吞掉，
+     * 于是这个兜底**一次都没成功过**（日志里 0 次记录，当时还误判成"网络自己好了"）。
+     * 现在：先用**域名**（证书能对上），域名本身解析不出来时才退到 IP + 放行校验。
+     *
+     * A 和 AAAA 都查：移动数据常是纯 IPv6 / NAT64 环境，
+     * 只查 A 拿到的 IPv4 在那台机器上根本没有出口。
+     */
+    /** DoH 结果缓存：host → [过期时间, List<InetAddress>]。移动数据下系统 DNS 常年不可靠，
+        每次都查一遍 DoH 会让刷新明显变慢。 */
+    private static final java.util.Map<String, Object[]> DOH_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<String, Object[]>();
+    private static final long DOH_TTL_MS = 5 * 60 * 1000L;
+
     private static void resolveDoh(String host, List<InetAddress> v4, List<InetAddress> v6) {
-        /* 两个源轮着试：阿里在国内直连可达（DoH 域名本身也可能被解析失败，用 IP 直连），
-           谷歌 DoH 在部分网络下可达。查询本身走 IP + SNI，不依赖系统 DNS。 */
+        /* 先看缓存 —— 命中的话这次请求立刻继续，不用等查询 */
+        Object[] hit = DOH_CACHE.get(host);
+        if (hit != null && System.currentTimeMillis() < ((Long) hit[0]).longValue()) {
+            @SuppressWarnings("unchecked")
+            List<InetAddress> ips = (List<InetAddress>) hit[1];
+            for (int i = 0; i < ips.size(); i++) {
+                InetAddress a = ips.get(i);
+                if (a instanceof Inet4Address) v4.add(a);
+                else if (a instanceof Inet6Address) v6.add(a);
+            }
+            if (!v4.isEmpty() || !v6.isEmpty()) return;
+        }
+        dohLookup(host, v4, v6);
+        if (!v4.isEmpty() || !v6.isEmpty()) {
+            List<InetAddress> all = new ArrayList<InetAddress>();
+            all.addAll(v4);
+            all.addAll(v6);
+            DOH_CACHE.put(host, new Object[] {
+                    Long.valueOf(System.currentTimeMillis() + DOH_TTL_MS), all });
+        }
+    }
+
+    private static void dohLookup(String host, List<InetAddress> v4, List<InetAddress> v6) {
+        /* 前三项走域名（证书正常校验）；后两项是 IP 兜底，会放行证书校验 ——
+           对"查 DNS 记录"这件事来说可接受，而且这些 IP 是写死的。 */
         String[][] sources = {
-                { "https://223.5.5.5/resolve?name=", "&type=A" },          // 阿里 DoH (JSON)
-                { "https://1.1.1.1/dns-query?name=", "&type=A" },          // Cloudflare
+                { "https://dns.alidns.com/resolve?name=", "&type=A", "false" },   // 阿里（国内可达）
+                { "https://doh.pub/dns-query?name=", "&type=A", "false" },        // 腾讯
+                { "https://223.5.5.5/resolve?name=", "&type=A", "true" },         // 阿里 IP 兜底
+                { "https://1.1.1.1/dns-query?name=", "&type=A", "true" },         // CF IP 兜底
+                { "https://223.5.5.5/resolve?name=", "&type=AAAA", "true" },      // 纯 IPv6 环境要 AAAA
         };
         for (int s = 0; s < sources.length; s++) {
+            boolean lax = "true".equals(sources[s][2]);
             try {
                 URL u = new URL(sources[s][0] + host + sources[s][1]);
                 HttpURLConnection c = (HttpURLConnection) u.openConnection();
+                if (lax && c instanceof javax.net.ssl.HttpsURLConnection) {
+                    /* IP 直连：证书必然对不上域名，只能放行 —— 但只对这几个写死的 DoH 地址这么做 */
+                    javax.net.ssl.HttpsURLConnection hc = (javax.net.ssl.HttpsURLConnection) c;
+                    try {
+                        javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("TLS");
+                        sc.init(null, new javax.net.ssl.TrustManager[] {
+                                new javax.net.ssl.X509TrustManager() {
+                                    public void checkClientTrusted(
+                                            java.security.cert.X509Certificate[] ch, String a) { }
+                                    public void checkServerTrusted(
+                                            java.security.cert.X509Certificate[] ch, String a) { }
+                                    public java.security.cert.X509Certificate[]
+                                            getAcceptedIssuers() { return null; }
+                                }
+                        }, new java.security.SecureRandom());
+                        hc.setSSLSocketFactory(sc.getSocketFactory());
+                        hc.setHostnameVerifier(new javax.net.ssl.HostnameVerifier() {
+                            public boolean verify(String h2, javax.net.ssl.SSLSession ss) {
+                                return true;
+                            }
+                        });
+                    } catch (Throwable ig) { }
+                }
                 c.setConnectTimeout(4000);
                 c.setReadTimeout(4000);
                 c.setRequestProperty("accept", "application/dns-json");
-                /* DoH 服务器自己也可能被系统 DNS 拦 —— 用 IP 直连 + Host 头即可 */
                 int code = c.getResponseCode();
                 if (code != 200) continue;
-                BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"));
+                BufferedReader r = new BufferedReader(
+                        new InputStreamReader(c.getInputStream(), "UTF-8"));
                 StringBuilder sb = new StringBuilder();
                 char[] buf = new char[2048];
                 int n;
@@ -980,20 +1105,33 @@ public class BalanceFetcher {
                 for (int i = 0; i < ans.length(); i++) {
                     JSONObject a = ans.optJSONObject(i);
                     if (a == null) continue;
+                    /* ⚠️ 只认 A(1) 和 AAAA(28)。Answer 里还有 CNAME(5)，
+                       它的 data 是**域名**——对它调 getByName 会再去查一次系统 DNS，
+                       恰恰在最需要 DoH 的时候又踩一遍坑（还会把污染地址混进来）。
+                       实测阿里/腾讯的返回里 CNAME 就在 A 记录前面，必须跳过。 */
+                    int type = a.optInt("type", 0);
+                    if (type != 1 && type != 28) continue;
                     String data = a.optString("data", "").trim();
                     if (data.length() == 0) continue;
                     try {
                         InetAddress ad = InetAddress.getByName(data);
-                        if (ad instanceof Inet4Address) v4.add(ad);
-                        else if (ad instanceof Inet6Address) v6.add(ad);
+                        /* 去重：A / AAAA 两轮查询与系统解析可能拿到同一个地址 */
+                        if (ad instanceof Inet4Address) {
+                            if (!v4.contains(ad)) v4.add(ad);
+                        } else if (ad instanceof Inet6Address) {
+                            if (!v6.contains(ad)) v6.add(ad);
+                        }
                     } catch (Exception ig) { }
                 }
                 if (!v4.isEmpty() || !v6.isEmpty()) {
-                    diag(null, "DoH 兜底解析成功 " + host + "（" + sources[s][0].replaceAll("https://", "") + "）");
+                    diag(null, "DoH 兜底解析成功 " + host + " → "
+                            + v4.size() + " IPv4 / " + v6.size() + " IPv6（via "
+                            + sources[s][0].replace("https://", "").split("/")[0] + "）");
                     return;
                 }
             } catch (Throwable ig) { }
         }
+        diag(null, "DoH 兜底也失败 " + host);
     }
 
     /** 本机是否存在非环回 IPv4 出口。没有就是纯 IPv6 / NAT64 环境（移动数据常见）。 */
@@ -1532,6 +1670,9 @@ public class BalanceFetcher {
      *     - 调用方不再做"全失败重试"（Doze 下网络本就常不通，重试纯浪费）
      */
     public static Result fetch(Context ctx, int timeoutMs, boolean background) {
+        /* 记下网络类型：移动数据的运营商 DNS 对境外域名不可靠，
+           解析失败时的提示与降级策略都要据此区分 */
+        noteNetwork(ctx);
         if (!IN_FLIGHT.compareAndSet(false, true)) {
             /* 已有抓取在进行：直接复用上次结果，绝不叠加第二轮 */
             Result cached = WidgetCache.read(ctx);
