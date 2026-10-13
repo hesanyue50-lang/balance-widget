@@ -55,6 +55,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        /* 每次打开都重读崩溃日志的保存路径 —— 用户在设置里改了目录后，
+           进程还活着时也要生效，不能等到下次进程重启 */
+        CrashGuard.refreshDir(this);
         setContentView(R.layout.activity_main);
         /* 打开应用顺手把小组件催一遍（带节流，重复调用不会造成风暴）。
            刚更新完 App 时小组件常显示不出东西，这样至少开一次应用就能恢复。 */

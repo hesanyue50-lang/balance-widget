@@ -40,11 +40,25 @@ public final class CrashGuard {
 
     private CrashGuard() { }
 
-    /** 用户自定义的日志保存目录（设置里可改；空 = Download） */
+    /**
+     * 用户自定义的日志保存目录（设置里可改；空 = Download）。
+     *
+     * ⚠️ 不能只在 install() 时读一次 —— 用户在设置里改了目录后，
+     * 进程还活着，内存里的旧值会把日志继续写进老地方。
+     * 所以 App 每次进来都调 refreshDir() 重读。
+     */
     private static volatile String customDir = "";
 
     public static void setCustomDir(String dir) {
         customDir = dir == null ? "" : dir.trim();
+    }
+
+    /** 每次打开 App 时重读一次设置 —— 保证路径改动立刻生效 */
+    public static void refreshDir(Context c) {
+        try {
+            customDir = c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                    .getString("crash_dir", "");
+        } catch (Throwable ignored) { }
     }
 
     /** 日志目录：设置里自定义的优先，否则 Download */
@@ -57,14 +71,40 @@ public final class CrashGuard {
         return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
     }
 
+    /** 给通知/界面用的目录描述（有真实路径给路径，SAF 就说"你选择的文件夹"） */
+    public static String dirDesc(Context c) {
+        try {
+            String tree = c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                    .getString("crash_dir_uri", "");
+            if (tree.length() > 0) {
+                /* 树 URI 里能解出显示名（最后一段），比笼统一句"所选文件夹"有用 */
+                String docId = android.provider.DocumentsContract.getTreeDocumentId(
+                        android.net.Uri.parse(tree));
+                String[] ps = docId.split(":");
+                String tail = ps.length > 1 ? ps[ps.length - 1] : docId;
+                return "你选择的文件夹（" + tail + "）";
+            }
+        } catch (Throwable ignored) { }
+        return logDir(c).getAbsolutePath();
+    }
+
     public static void install(final Context ctx) {
         if (installed) return;
         installed = true;
 
-        /* 读取用户设置的自定义目录（在 install 前调用 setCustomDir 也行） */
+        /* 进程起来时先读一次（此后靠 refreshDir 跟随改动） */
+        refreshDir(ctx);
+
+        /* 通知渠道**现在就建**，别等崩溃时才建 ——
+           崩溃路径上任何一步都要尽量少做事；而且有些 ROM 对"崩溃瞬间建的渠道"
+           第一次通知会吞掉（渠道注册是异步生效的）。 */
         try {
-            customDir = ctx.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
-                    .getString("crash_dir", "");
+            NotificationManager nm = (NotificationManager)
+                    ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.createNotificationChannel(new NotificationChannel(CHANNEL,
+                        "崩溃报告", NotificationManager.IMPORTANCE_HIGH));
+            }
         } catch (Throwable ignored) { }
 
         final Context app = ctx.getApplicationContext();
@@ -79,9 +119,13 @@ public final class CrashGuard {
                     /* ① 诊断日志照写（自家用） */
                     BalanceFetcher.diag(app, "💥 崩溃 [" + t.getName() + "]\n" + stack);
 
-                    /* ② 用户可取的日志文件 + ③ 通知 */
-                    File f = saveLog(app, t, e, stack);
-                    notifyUser(app, f);
+                    /* ② 用户可取的日志文件 + ③ 通知（要带上文件名 ——
+                       MediaStore 路径拿不到真实 File，通知里至少得知道叫什么） */
+                    String fname = "BW崩溃-" + new SimpleDateFormat("MMdd-HHmmss", Locale.US)
+                            .format(new Date()) + "-"
+                            + e.getClass().getSimpleName().replaceAll("[^A-Za-z0-9]", "") + ".log";
+                    File f = saveLog(app, t, e, stack, fname);
+                    notifyUser(app, f, fname);
                 } catch (Throwable ignored) { }
                 if (prev != null) prev.uncaughtException(t, e);
             }
@@ -98,11 +142,8 @@ public final class CrashGuard {
      * - 默认 Download → **必须走 MediaStore**（targetSdk 29+ 直接 File 写
      *   Download 会 EACCES —— 那正是这个功能最要紧的场景，不能失败）
      */
-    private static File saveLog(Context c, Thread t, Throwable e, String stack) {
+    private static File saveLog(Context c, Thread t, Throwable e, String stack, String name) {
         String content = buildLog(c, t, e, stack);
-        String ts = new SimpleDateFormat("MMdd-HHmmss", Locale.US).format(new Date());
-        String cls = e.getClass().getSimpleName().replaceAll("[^A-Za-z0-9]", "");
-        String name = "BW崩溃-" + ts + "-" + cls + ".log";
 
         /* ① 用户自定义目录：SAF 树 URI（用户在文件选择器里选的）优先 */
         try {
@@ -206,17 +247,36 @@ public final class CrashGuard {
         } catch (Throwable ignored) { }
     }
 
-    private static void notifyUser(final Context c, final File f) {
+    /**
+     * 通知用户：崩了、日志在哪、可以发给开发者。
+     *
+     * 路径显示分三种情况，都要明确：
+     * - 自定义明文目录 → 完整文件路径
+     * - SAF 文件夹     → "你选择的文件夹（xxx）/文件名"
+     * - Download       → Download/BW崩溃-xxx.log（MediaStore 写入无真实路径，报相对位置）
+     */
+    private static void notifyUser(final Context c, final File f, final String fileName) {
         try {
             NotificationManager nm = (NotificationManager)
                     c.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
-            NotificationChannel ch = new NotificationChannel(CHANNEL,
-                    "崩溃报告", NotificationManager.IMPORTANCE_HIGH);
-            nm.createNotificationChannel(ch);
+            /* 通知权限没给时必须留痕 —— 否则"用户没收到通知"永远查不出原因 */
+            if (!nm.areNotificationsEnabled()) {
+                BalanceFetcher.diag(c, "崩溃通知未发出：应用没有通知权限"
+                        + "（系统设置里给本应用开通知后，下次崩溃就能收到）");
+                return;
+            }
+            nm.createNotificationChannel(new NotificationChannel(CHANNEL,
+                    "崩溃报告", NotificationManager.IMPORTANCE_HIGH));
 
-            String path = f == null ? logDir(c).getAbsolutePath() : f.getAbsolutePath();
-            String text = "日志已保存到：" + path + "\n长按可复制路径，把日志文件发给开发者即可修复";
+            String where;
+            if (f != null) {
+                where = f.getAbsolutePath();
+            } else {
+                where = dirDesc(c) + "/" + fileName;
+            }
+            String text = "日志已保存到：\n" + where
+                    + "\n\n打开 App → 设置 → 💥 崩溃日志 也可以查看，把日志发给开发者即可修复";
 
             Notification.Builder b;
             if (android.os.Build.VERSION.SDK_INT >= 26) {
@@ -225,17 +285,16 @@ public final class CrashGuard {
                 b = new Notification.Builder(c);
             }
             b.setSmallIcon(android.R.drawable.stat_notify_error)
-                    .setContentTitle("应用刚刚意外退出了")
-                    .setContentText("相关日志已保存，可以把日志发给开发者进行修复")
+                    .setContentTitle("应用意外退出，日志已保存")
+                    .setContentText("日志位置：" + where)
                     .setStyle(new Notification.BigTextStyle().bigText(text))
                     .setAutoCancel(true);
 
-            /* 点通知 = 打开日志所在的文件夹（用系统文件选择器兜底） */
+            /* 点通知 = 打开 App（设置里能直接看最近日志并复制 ——
+               比"打开文件夹"可靠：文件管理器对 file:// URI 越来越不友好） */
             try {
-                Intent i = new Intent(Intent.ACTION_VIEW);
-                i.setDataAndType(Uri.parse("file://" + (f != null ? f.getParentFile() : logDir(c))),
-                        "resource/folder");
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                Intent i = new Intent(c, MainActivity.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 b.setContentIntent(PendingIntent.getActivity(c, 9001, i,
                         PendingIntent.FLAG_UPDATE_CURRENT
                                 | (android.os.Build.VERSION.SDK_INT >= 23
