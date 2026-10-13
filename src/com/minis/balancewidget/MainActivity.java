@@ -55,6 +55,14 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        /* 上次崩溃了：先跳提示页，**任何**初始化都不做 ——
+           崩溃点可能就在这条链上（页面隐藏后切页崩），继续初始化可能当场又崩，
+           提示页就永远弹不出来。提示页自己极轻（只读字符串画 TextView），站得住。 */
+        if (App.takePendingCrashNotice()) {
+            startActivity(new Intent(this, CrashNoticeActivity.class));
+            finish();
+            return;
+        }
         /* 每次打开都重读崩溃日志的保存路径 —— 用户在设置里改了目录后，
            进程还活着时也要生效，不能等到下次进程重启 */
         CrashGuard.refreshDir(this);

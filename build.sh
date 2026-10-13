@@ -15,17 +15,19 @@ export PATH="$BT:$PATH"
 # 这些 9-patch 是 tools/gen_assets.py 画出来的，不是手工资源。
 # 一旦被误删，编译会报一堆 "resource not found"，很难一眼看出原因。
 # 所以这里先检查，缺了就自动重画。
+# ⚠️ 放在最前面：两条构建路径（并行 / 串行）都需要它。
 if [ ! -f "$SRC/res/drawable-nodpi/card_bg.9.png" ] \
    || [ ! -f "$SRC/res/drawable-nodpi/btn_bg.9.png" ] \
    || [ ! -f "$SRC/res/drawable-night-nodpi/card_bg.9.png" ] \
    || [ ! -f "$SRC/res/drawable-nodpi/wg_glass_l.9.png" ]; then
-  echo "[0/7] 资源缺失 → 自动重新生成"
+  echo "[0] 资源缺失 → 自动重新生成"
   python3 "$SRC/tools/gen_assets.py" || true
 fi
 
 # ---- 版本号自动生成 ----
 # 规则：年份后两位 . 月份 . 累计构建次数   （如 26.9.110）
 # 版本名不再手写 —— 手写容易忘记改、也容易和构建次数对不上。
+# ⚠️ 必须在**两条构建路径之前**执行，否则走并行路径时版本号会停滞不动。
 COUNT_FILE="$SRC/.buildcount"
 if [ -f "$COUNT_FILE" ]; then
   COUNT=$(cat "$COUNT_FILE")
@@ -40,6 +42,31 @@ echo "版本: $VNAME (versionCode=$CODE)"
 # 写回 manifest（编译前改，aapt2 才会带上）
 sed -i "s/android:versionCode=\"[0-9]*\"/android:versionCode=\"$CODE\"/" "$SRC/AndroidManifest.xml"
 sed -i "s/android:versionName=\"[0-9.]*\"/android:versionName=\"$VNAME\"/" "$SRC/AndroidManifest.xml"
+
+# ---- 优先走并行加速路径 ----
+# pbuild.py：aapt2 分片并行 + 增量缓存（27s → 15s），
+# 并自动做 CPU/内存额度协调（多任务同时跑时不抢核、不爆内存）。
+# 产物与原串行逻辑**逐字节等价**（dex / resources.arsc md5 已验证一致）。
+# ⚠️ 失败就退回下面的原串行路径，不会把构建卡死在这里 —— 这是加这层的前提。
+# 想强制走老路径：BUILD_SERIAL=1 sh build.sh
+if [ "$BUILD_SERIAL" != "1" ] && [ -f /var/minis/shared/pbuild/pbuild.py ]; then
+  LIBSO=/var/minis/shared/clash/libmihomo.so
+  SOARG=""
+  [ -f "$LIBSO" ] && SOARG="--so arm64-v8a=$LIBSO"
+  if python3 /var/minis/shared/pbuild/pbuild.py --project "$SRC" \
+       --out "$SRC/$PKG.apk" \
+       --keystore "$KS" --ks-pass android \
+       --min-api 24 --java-level 8 $SOARG "$@"; then
+    exit 0
+  fi
+  RC=$?
+  # ⚠️ 回退必须**看得见**。静默回退会误导排查：产物其实没问题，但因为走了
+  #    另一条路径（d8 参数不同），md5 与预期对不上，很容易误判成"并行版坏了"。
+  echo "⚠️⚠️ 并行构建失败（退出码 $RC）→ 已回退到串行路径" >&2
+  echo "    上面的错误信息来自 pbuild.py；本次 APK 由串行逻辑产出。" >&2
+fi
+
+# ==================== 原串行构建逻辑（保留作为回退）====================
 
 echo "[1/7] 清理"
 rm -rf "$OUT"

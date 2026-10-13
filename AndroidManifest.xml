@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="501"
-    android:versionName="26.10.501">
+    android:versionCode="503"
+    android:versionName="26.10.503">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -103,6 +103,15 @@
             android:name=".MimoLoginActivity"
             android:label="登录小米账号"
             android:exported="false" />
+
+        <!-- 上次崩溃的提示页：独立且极轻（只读两个字符串画几个 TextView），
+             不依赖任何可能崩的组件 —— 主界面初始化链上的崩溃也能稳稳站在废墟上。 -->
+        <activity
+            android:name=".CrashNoticeActivity"
+            android:label="崩溃提示"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/AppTheme" />
 
         <!-- 通用网页登录（高级自定义平台用）：内置 WebView 走完登录流程后，
              把该域名下的 Cookie 抄下来存进平台的「附加请求头」。 -->

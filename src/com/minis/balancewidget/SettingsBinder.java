@@ -1152,10 +1152,10 @@ public class SettingsBinder {
      * 看到日志真的出现在那里，才敢确认"下次真崩了日志也能拿到"。
      */
     private void crashDialog() {
-        SharedPreferences sp = act.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
-        final String curDir = sp.getString("crash_dir", "");
-        String curDesc = curDir.length() > 0 ? curDir
-                : "Download（系统默认）";
+        /* 显示统一走 CrashGuard.dirDesc()：SAF 选的文件夹、明文目录、Download
+           三种情况都覆盖 —— 早先这里只读 crash_dir 一个键，用户用文件选择器
+           换的目录（crash_dir_uri）在界面上永远显示不出来。 */
+        String curDesc = CrashGuard.dirDesc(act);
 
         LinearLayout panel = new LinearLayout(act);
         panel.setOrientation(LinearLayout.VERTICAL);

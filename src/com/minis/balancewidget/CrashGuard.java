@@ -125,6 +125,21 @@ public final class CrashGuard {
                             .format(new Date()) + "-"
                             + e.getClass().getSimpleName().replaceAll("[^A-Za-z0-9]", "") + ".log";
                     File f = saveLog(app, t, e, stack, fname);
+
+                    /* ④ 给下次启动的提示页留位置信息（SharedPreferences 同步写，
+                       保证崩溃前一定落盘）。通知有没有收到都无所谓了 ——
+                       下次打开 App 第一个看到的就是它。 */
+                    try {
+                        String where = f != null ? f.getAbsolutePath() : dirDesc(app) + "/" + fname;
+                        app.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("last_crash_where", where)
+                                .putString("last_crash_stack",
+                                        stack.length() > 900 ? stack.substring(0, 900) : stack)
+                                .putBoolean("crash_pending", true)
+                                .commit();        // 崩溃路径必须同步写，apply 可能没机会落盘
+                    } catch (Throwable ig) { }
+
                     notifyUser(app, f, fname);
                 } catch (Throwable ignored) { }
                 if (prev != null) prev.uncaughtException(t, e);
