@@ -1419,6 +1419,10 @@ public class MainActivity extends Activity {
             }
             return;
         }
+        /* 崩溃日志保存目录 */
+        if (SettingsBinder.onCrashDirResult(this, req, res, data)) {
+            return;
+        }
         super.onActivityResult(req, res, data);
     }
 

@@ -496,6 +496,19 @@
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/btn_crash"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/mini_btn_border"
+                android:gravity="center"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:text="💥 崩溃日志（保存位置 / 最近记录）"
+                android:textColor="@color/tx"
+                android:textSize="13sp" />
+
+            <TextView
                 android:id="@+id/btn_pin"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

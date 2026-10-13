@@ -1687,6 +1687,37 @@ public class BalanceFetcher {
         } catch (Throwable ignored) { }
     }
 
+    /**
+     * 读诊断日志的尾部（崩溃报告要附带"崩溃前操作流水"，没有它只有堆栈
+     * 根本定位不了 —— 堆栈只说哪行炸了，流水才知道用户当时在做什么）。
+     *
+     * @param lines 要几行
+     */
+    public static String recentDiag(Context ctx, int lines) {
+        try {
+            java.io.File dir = ctx.getExternalFilesDir(null);
+            if (dir == null) return "";
+            java.io.File fo = new java.io.File(dir, "diag.log");
+            if (!fo.exists()) return "";
+            java.io.RandomAccessFile r = new java.io.RandomAccessFile(fo, "r");
+            long len = r.length();
+            /* 只读末尾 16KB —— 足够 120 行了，也避免整文件读进内存 */
+            long start = Math.max(0, len - 16 * 1024);
+            byte[] buf = new byte[(int) (len - start)];
+            r.seek(start);
+            r.readFully(buf);
+            r.close();
+            String s = new String(buf, "UTF-8");
+            String[] ps = s.split("\n");
+            int from = Math.max(0, ps.length - lines);
+            StringBuilder sb = new StringBuilder();
+            for (int i = from; i < ps.length; i++) sb.append(ps[i]).append('\n');
+            return sb.toString();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
     // ---------- 主流程 ----------
 
     /**

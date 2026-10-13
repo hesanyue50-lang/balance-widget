@@ -224,6 +224,14 @@ public class SettingsBinder {
             });
         }
 
+        // ---- 崩溃日志 ----
+        View crashBtn = root.findViewById(R.id.btn_crash);
+        if (crashBtn != null) {
+            crashBtn.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { crashDialog(); }
+            });
+        }
+
         // ---- 隐藏 API（默认收起）----
         final View hideCard = root.findViewById(R.id.hide_card);
         final TextView hideToggle = (TextView) root.findViewById(R.id.hide_toggle);
@@ -1135,6 +1143,134 @@ public class SettingsBinder {
             row.addView(swStat);
             box.addView(row);
         }
+    }
+
+    /**
+     * 崩溃日志面板：看最近记录 / 设保存位置 / 主动触发一次测试崩溃。
+     *
+     * 「测试崩溃」看着吓人，其实是排障刚需 —— 用户配好目录后点一下，
+     * 看到日志真的出现在那里，才敢确认"下次真崩了日志也能拿到"。
+     */
+    private void crashDialog() {
+        SharedPreferences sp = act.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+        final String curDir = sp.getString("crash_dir", "");
+        String curDesc = curDir.length() > 0 ? curDir
+                : "Download（系统默认）";
+
+        LinearLayout panel = new LinearLayout(act);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(10), dp(20), 0);
+
+        TextView info = new TextView(act);
+        info.setText("当前保存位置：" + curDesc);
+        info.setTextColor(color(R.color.tx));
+        info.setTextSize(13);
+        panel.addView(info);
+
+        TextView tip = new TextView(act);
+        tip.setText("发生崩溃时会自动在这里保存一份日志，并发通知提醒你。\n"
+                + "把日志文件发给开发者就能快速定位问题。\n"
+                + "不设置就用系统的「下载」文件夹。");
+        tip.setTextColor(color(R.color.tx3));
+        tip.setTextSize(11.5f);
+        tip.setLineSpacing(dp(3), 1f);
+        tip.setPadding(0, dp(6), 0, 0);
+        panel.addView(tip);
+
+        new AlertDialog.Builder(act)
+                .setTitle("💥 崩溃日志")
+                .setView(panel)
+                .setItems(new CharSequence[] {
+                        "选择保存文件夹", "查看最近诊断日志", "触发一次测试崩溃" },
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface d, int w) {
+                                if (w == 0) pickCrashDir();
+                                else if (w == 1) showRecentDiag();
+                                else triggerTestCrash();
+                            }
+                        })
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    private void pickCrashDir() {
+        try {
+            android.net.Uri initial = null;
+            try {
+                String last = act.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                        .getString("crash_dir_uri", "");
+                if (last.length() > 0) initial = android.net.Uri.parse(last);
+            } catch (Throwable ig) { }
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            if (initial != null) {
+                i.putExtra("android.provider.extra.INITIAL_URI", initial);
+            }
+            act.startActivityForResult(i, 9101);
+        } catch (Throwable t) {
+            Toast.makeText(act, "打不开文件夹选择器：" + t, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showRecentDiag() {
+        String recent = BalanceFetcher.recentDiag(act, 80);
+        if (recent.trim().length() == 0) recent = "（还没有日志）";
+        TextView tv = new TextView(act);
+        tv.setText(recent);
+        tv.setTextSize(10.5f);
+        tv.setTypeface(Typeface.MONOSPACE);
+        android.widget.ScrollView sc = new android.widget.ScrollView(act);
+        sc.addView(tv);
+        new AlertDialog.Builder(act)
+                .setTitle("最近诊断日志")
+                .setView(sc)
+                .setPositiveButton("关闭", null)
+                .setNeutralButton("复制全部", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        android.content.ClipboardManager cm =
+                                (android.content.ClipboardManager) act.getSystemService(
+                                        Context.CLIPBOARD_SERVICE);
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText(
+                                "diag", BalanceFetcher.recentDiag(act, 400)));
+                        Toast.makeText(act, "已复制", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .show();
+    }
+
+    private void triggerTestCrash() {
+        new AlertDialog.Builder(act)
+                .setTitle("触发测试崩溃？")
+                .setMessage("App 会立刻崩溃一次，用于验证日志能不能正常保存。"
+                        + "崩溃后重新打开这个 App 即可。")
+                .setPositiveButton("崩吧", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        throw new IllegalStateException("测试崩溃（用户主动触发）");
+                    }
+                })
+                .setNegativeButton("算了", null)
+                .show();
+    }
+
+    /** 处理「选择保存文件夹」的返回（MainActivity.onActivityResult 转发） */
+    public static boolean onCrashDirResult(final Activity act, int req, int res, Intent data) {
+        if (req != 9101) return false;
+        if (res == Activity.RESULT_OK && data != null && data.getData() != null) {
+            android.net.Uri u = data.getData();
+            try {
+                act.getContentResolver().takePersistableUriPermission(u,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            } catch (Throwable ignored) { }
+            /* SAF 树 URI 不能直接当 File 用 —— 记下树 URI，CrashGuard 里用 DocumentFile 写。
+               同时把可读路径提示给用户。 */
+            act.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("crash_dir_uri", u.toString())
+                    .putString("crash_dir", "")
+                    .apply();
+            Toast.makeText(act, "已设置（走系统文件夹授权，崩溃时自动写入）", Toast.LENGTH_LONG).show();
+        }
+        return true;
     }
 
     // ---------------- 高级自定义平台（网页抓取） ----------------
