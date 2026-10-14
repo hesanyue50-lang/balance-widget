@@ -495,11 +495,7 @@ public class MainActivity extends Activity {
                 t.setTextSize(12);
                 t.setGravity(android.view.Gravity.CENTER);
                 t.setPadding(0, dp(8), 0, dp(8));
-                t.setLayoutParams(new LinearLayout.LayoutParams(0,
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        1f / vis.size() * vis.size() / (float) vis.size()));
-                /* weight 必须是 1，均分由 count 决定；上面那行是为了可读性写成等价形式，
-                   这里直接覆盖成 1f 更稳妥 */
+                /* weight 固定 1f：均分由 tab 数量决定（等价形式写法是历史遗留，删掉） */
                 t.setLayoutParams(new LinearLayout.LayoutParams(0,
                         LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
                 t.setOnClickListener(new View.OnClickListener() {

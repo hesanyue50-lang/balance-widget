@@ -1178,10 +1178,13 @@ public class SettingsActivity extends Activity {
         UiInsets.apply(this, R.id.settings_header, R.id.settings_scroll, 12, 20);
 
         // 与主界面同级导航：点 API余额/用量统计 左右滑回主界面对应页
-        findViewById(R.id.tab_api).setOnClickListener(new View.OnClickListener() {
+        // （空安全：tab 属于页面布局，找不到就跳过，别让死界面的残留崩起来）
+        View tApi = findViewById(R.id.tab_api);
+        if (tApi != null) tApi.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { gotoMain("api"); }
         });
-        findViewById(R.id.tab_stats).setOnClickListener(new View.OnClickListener() {
+        View tStats = findViewById(R.id.tab_stats);
+        if (tStats != null) tStats.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { gotoMain("stats"); }
         });
         // 设置页布局已默认高亮「设置」（无需指示块）

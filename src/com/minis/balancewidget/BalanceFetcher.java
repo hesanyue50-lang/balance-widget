@@ -38,8 +38,11 @@ public class BalanceFetcher {
 
     /* 会话音的内存缓存：解密要过 TEE，一次几毫秒到几十毫秒，
        而统计页/卡片渲染会反复问「登录了没」，不缓存就是白等。 */
-    private static String sessionCache;
-    private static boolean sessionCached = false;
+    /* volatile：fetch 线程与 UI 线程都会读写。两字段的更新没有原子性保证，
+       但 String 引用写入本身原子，volatile 保证可见性 —— 最坏情况是
+       短暂读到旧会话（下次读取就对了），不会读到撕裂值。 */
+    private static volatile String sessionCache;
+    private static volatile boolean sessionCached = false;
 
     /** 取 MiMo 会话音（空 = 还没登录过 / 已被清掉） */
     public static String mimoSession(Context c) {
