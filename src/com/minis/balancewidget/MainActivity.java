@@ -48,6 +48,44 @@ public class MainActivity extends Activity {
         }
     };
 
+    /**
+     * 安全绑定点击：找不到 View 只记日志，**绝不崩**。
+     *
+     * 背景：onCreate 里会去点 total_card / range_pick / stats_clean 这些
+     * **属于各页面布局（page_*.xml，被 activity_main include）** 的控件。
+     * 正常情况下 include 是静态展开、findViewById 能找到；
+     * 但华为平板（SCM-W09 / Android 10）上实测会返回 null ——
+     * 推测是第三方市场重打包时资源 id 被重映射过。
+     * 裸调用 .setOnClickListener 直接 NPE，且发生在 onCreate，
+     * 表现是"一打开就闪退"（用户报的那种恶性崩溃）。
+     *
+     * 找不到时记下具体是哪个 id —— 下次再遇到类似崩溃，
+     * 日志能直接指出缺失的控件，不用再靠猜。
+     */
+    private void click(int id, View.OnClickListener l) {
+        try {
+            View v = findViewById(id);
+            if (v == null) {
+                String name = "?";
+                try { name = getResources().getResourceEntryName(id); } catch (Throwable ig) { }
+                BalanceFetcher.diag(this, "⚠️ 布局里找不到控件 " + name
+                        + "（id=" + id + "），已跳过点击绑定");
+                return;
+            }
+            v.setOnClickListener(l);
+        } catch (Throwable t) {
+            BalanceFetcher.diag(this, "绑定点击失败：" + t);
+        }
+    }
+
+    /** 安全隐藏：行内布局的控件不一定都存在（不同皮肤/老版本布局），找不到就跳过 */
+    private void hide(View parent, int id) {
+        try {
+            View v = parent.findViewById(id);
+            if (v != null) v.setVisibility(View.GONE);
+        } catch (Throwable ignored) { }
+    }
+
     private final View.OnClickListener refreshClick = new View.OnClickListener() {
         public void onClick(View v) { refresh(); }
     };
@@ -114,21 +152,21 @@ public class MainActivity extends Activity {
         tTotal = (TextView) findViewById(R.id.t_total);
         tSub = (TextView) findViewById(R.id.t_sub);
         // 刷新按钮已移除：点总余额栏或任意卡片刷新
-        findViewById(R.id.total_card).setOnClickListener(refreshClick);
+        click(R.id.total_card, refreshClick);
 
         applyWindowInsets();
         setupPager();
         bindPullToRefresh();
 
-        findViewById(R.id.total_card).setOnClickListener(refreshClick);
+        click(R.id.total_card, refreshClick);
         /* 导航标签改由 rebuildNav() 动态创建（页面可隐藏，数量会变），
            这里不再对布局里的固定 id 设点击 —— 那些 id 已经删掉了。 */
 
         // 日期范围下拉（5/7/14/30/90/180 天）
-        findViewById(R.id.range_pick).setOnClickListener(new View.OnClickListener() {
+        click(R.id.range_pick, new View.OnClickListener() {
             public void onClick(View v) { showRangePicker(); }
         });
-        findViewById(R.id.btn_fix_recharge).setOnClickListener(new View.OnClickListener() {
+        click(R.id.btn_fix_recharge, new View.OnClickListener() {
             public void onClick(View v) { showFixRecharge(); }
         });
 
@@ -161,10 +199,15 @@ public class MainActivity extends Activity {
         BackupUi.handleViewIntent(this, getIntent());
 
         // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
-        findViewById(R.id.settings_container).postDelayed(new Runnable() {
-            public void run() { buildSettingsPanel(); }
-        }, 900);
-        findViewById(R.id.stats_clean).setOnClickListener(new View.OnClickListener() {
+        View sc0 = findViewById(R.id.settings_container);
+        if (sc0 != null) {
+            sc0.postDelayed(new Runnable() {
+                public void run() { buildSettingsPanel(); }
+            }, 900);
+        } else {
+            BalanceFetcher.diag(this, "⚠️ 找不到 settings_container，跳过设置面板预热");
+        }
+        click(R.id.stats_clean, new View.OnClickListener() {
             public void onClick(View v) {
                 final int[] keep = { 7, 30, 90, 180 };
                 new android.app.AlertDialog.Builder(MainActivity.this)
@@ -2142,8 +2185,8 @@ public class MainActivity extends Activity {
                 amount.setTextColor(getColor(R.color.tx3));
                 unit.setVisibility(View.GONE);
                 conv.setVisibility(View.GONE);
-                v.findViewById(R.id.p_conv2).setVisibility(View.GONE);
-                v.findViewById(R.id.p_pct_box).setVisibility(View.GONE);
+                hide(v, R.id.p_conv2);
+                hide(v, R.id.p_pct_box);
                 rows.setVisibility(View.VISIBLE);
                 /* 网关没在跑：不是"查询失败"，而是"服务没起" ——
                    提示要说清怎么解决，并让点一下就能拉起。 */
