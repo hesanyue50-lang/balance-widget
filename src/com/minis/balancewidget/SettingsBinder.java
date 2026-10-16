@@ -917,7 +917,7 @@ public class SettingsBinder {
 
             TextView lnk = new TextView(act);
             lnk.setText(GATEWAY_REPO);
-            lnk.setTextColor(0xFF3D6FD6);
+            lnk.setTextColor(color(R.color.accent));   // 走 token，暗色下才够亮
             lnk.setTextSize(12);
             lnk.setPaintFlags(lnk.getPaintFlags()
                     | android.graphics.Paint.UNDERLINE_TEXT_FLAG);

@@ -23,24 +23,29 @@
     </style>
 
     <!-- 设置页分组样式 -->
+    <!-- ⚠️ 标题色用 tx（主文字），不是 tx3 ——
+         tx3 是"占位/辅助"档，做成标题会显得整页发灰、对比度不足
+         （用户反馈过"设置页可读性差"）。分区标题是**导航锚点**，
+         必须比正文更显眼，不是更弱。 -->
     <style name="SectionTitle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">24dp</item>
         <item name="android:layout_marginLeft">6dp</item>
         <item name="android:layout_marginBottom">10dp</item>
-        <item name="android:textColor">@color/tx3</item>
-        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/tx</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.06</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="SectionCard">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">vertical</item>
-        <item name="android:background">@drawable/card_bg</item>
-        <item name="android:padding">27dp</item>
+        <item name="android:background">@drawable/card_aurora</item>
+        <!-- 8pt 网格：27 → 24，对齐 skill 的固定间距集合 -->
+        <item name="android:padding">24dp</item>
     </style>
 
     <style name="FieldRow">
@@ -66,7 +71,7 @@
         <item name="android:textColor">@color/tx</item>
         <item name="android:textColorHint">@color/hint_c</item>
         <item name="android:singleLine">true</item>
-        <item name="android:background">@drawable/input_bg</item>
+        <item name="android:background">@drawable/input_aurora</item>
         <item name="android:paddingLeft">20dp</item>
         <item name="android:paddingRight">20dp</item>
         <item name="android:paddingTop">19dp</item>

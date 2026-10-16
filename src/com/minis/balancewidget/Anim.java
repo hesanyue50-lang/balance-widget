@@ -159,16 +159,48 @@ public final class Anim {
     public static boolean pressFeedback(View v, android.view.MotionEvent e) {
         switch (e.getActionMasked()) {
             case android.view.MotionEvent.ACTION_DOWN:
-                v.animate().scaleX(0.97f).scaleY(0.97f)
-                        .setDuration(90).start();
+                /* 按下：0.96（skill 铁律值），快进不出冲 */
+                v.animate().scaleX(0.96f).scaleY(0.96f)
+                        .setDuration(110).start();
                 break;
             case android.view.MotionEvent.ACTION_UP:
             case android.view.MotionEvent.ACTION_CANCEL:
+                /* 松开：弹簧过冲回弹（OvershootInterpolator ≈ M3 spatial-fast 的
+                   +9% 过冲），比线性回弹"活"得多 —— 这是"显旧"与"现代"的分界 */
                 v.animate().scaleX(1f).scaleY(1f)
-                        .setDuration(140).start();
+                        .setDuration(270)
+                        .setInterpolator(new android.view.animation.OvershootInterpolator(3.2f))
+                        .start();
                 break;
         }
         return false;
+    }
+
+    /**
+     * 给整棵 View 树上**所有可点元素**挂按下反馈（skill 铁律 5）。
+     *
+     * 为什么用全局遍历而不是逐个手挂：全工程 60+ 处 setOnClickListener，
+     * 手挂必然漏；而且新增控件时没人记得挂。树遍历一次到位，
+     * 规则是"有 OnClickListener 且自身可点"的 View 才挂 —— 不影响列表滚动。
+     *
+     * ⚠️ 只在页面构建完成后调一次；动态添加的 View（对话框）不在此列，
+     * 对话框按钮走 AlertDialog 自带的按压态，不需要。
+     */
+    public static void attachGlobalPressFeedback(View root) {
+        if (root == null) return;
+        if (root.isClickable() && root.hasOnClickListeners()) {
+            root.setOnTouchListener(new android.view.View.OnTouchListener() {
+                public boolean onTouch(View v, android.view.MotionEvent e) {
+                    return pressFeedback(v, e);
+                }
+            });
+        }
+        if (root instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) root;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                attachGlobalPressFeedback(g.getChildAt(i));
+            }
+        }
     }
 
     private static float dp(View v, float value) {

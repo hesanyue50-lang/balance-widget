@@ -198,6 +198,10 @@ public class MainActivity extends Activity {
         /* 冷启动就是"点开备份文件"进来的情况 */
         BackupUi.handleViewIntent(this, getIntent());
 
+        /* skill 铁律：每个可点元素必须有按下反馈。
+           整树挂载一次（约 60+ 处点击绑定，手挂必漏）。 */
+        Anim.attachGlobalPressFeedback(findViewById(R.id.main_root));
+
         // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
         View sc0 = findViewById(R.id.settings_container);
         if (sc0 != null) {

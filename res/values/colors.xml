@@ -1,32 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#E6EAF1</color>
-    <color name="neu_surface">#E7ECF4</color>
+    <!-- ===== Aurora Glass 亮色 token =====
+         对齐 modern-ui-design skill 亮色基准：
+         底 #F6F7F9（非纯白）、卡片纯白、描边 rgba(9,12,20,.075)、强调 #4166F5 -->
+
+    <color name="bg">#F6F7F9</color>
+
+    <color name="neu_surface">#FFFFFF</color>
     <color name="neu_light">#FFFFFF</color>
-    <color name="neu_dark">#BAC4D4</color>
-    <color name="neu_sunken">#DCE1E9</color>
+    <color name="neu_dark">#E5E9EF</color>
+    <color name="neu_sunken">#EEF0F4</color>
 
-    <color name="line">#00000000</color>
-    <color name="card_c">#E7ECF4</color>
-    <color name="btn_c">#E7ECF4</color>
-    <color name="input_c">#DCE1E9</color>
-    <color name="total_start">#E7ECF4</color>
-    <color name="total_end">#E7ECF4</color>
+    <color name="line">#13FFFFFF</color>
+    <color name="card_c">#FFFFFF</color>
+    <color name="btn_c">#F1F3F7</color>
+    <color name="input_c">#EEF0F4</color>
+    <color name="total_start">#EDF1FB</color>
+    <color name="total_end">#E4EAF8</color>
 
-    <color name="tx">#39424F</color>
-    <color name="tx2">#5E6878</color>
-    <color name="tx3">#8A94A3</color>
-    <color name="tx_conv">#99A3B2</color>
-    <color name="tx_detail">#525C6B</color>
-    <color name="hint_c">#A2ABB9</color>
+    <color name="tx">#0B0E14</color>
+    <color name="tx2">#5A6272</color>
+    <color name="tx3">#656F7F</color>
+    <color name="tx_conv">#687283</color>
+    <color name="tx_detail">#39424F</color>
+    <color name="hint_c">#7C8698</color>
 
-    <color name="accent">#3D6FD6</color>
+    <color name="accent">#4166F5</color>
     <color name="accent_tx">#FFFFFF</color>
-    <color name="danger">#C93B3B</color>
-    <color name="warn">#A8730F</color>
+    <color name="danger">#E5484D</color>
+    <color name="warn">#B4690E</color>
 
-    <color name="widget_bg_c">#E7ECF4</color>
-    <color name="widget_line">#00000000</color>
+    <color name="widget_bg_c">#FFFFFF</color>
+    <color name="widget_line">#13000000</color>
 
     <!-- 玻璃风格专用：面板恒为深色半透明，故文字恒用浅色，
          不随系统深浅色切换（否则浅色模式下深字压深底，看不见） -->
@@ -44,11 +49,11 @@
     <color name="glass_div_line">#3DFFFFFF</color>
 
     <!-- ===== 小组件 v2（重写版）配色 ===== -->
-    <color name="w2_card">#F3F5F9</color>      <!-- 卡片底色 -->
-    <color name="w2_tx">#2B3442</color>        <!-- 主文字 -->
-    <color name="w2_tx2">#5A6472</color>       <!-- 次文字 -->
-    <color name="w2_tx3">#8C96A4</color>       <!-- 弱化文字 -->
-    <color name="w2_div">#2E9AA6B2</color>     <!-- 制式分档线 -->
-    <color name="w2_accent">#4D6BFE</color>    <!-- 平台圆点 -->
-    <color name="w2_danger">#C93B3B</color>    <!-- 低余额预警 -->
+    <color name="w2_card">#FFFFFF</color>
+    <color name="w2_tx">#0B0E14</color>
+    <color name="w2_tx2">#5A6472</color>
+    <color name="w2_tx3">#656F7F</color>
+    <color name="w2_div">#2E9AA6B2</color>
+    <color name="w2_accent">#4166F5</color>
+    <color name="w2_danger">#E5484D</color>
 </resources>

@@ -89,7 +89,7 @@ public final class LockDialog {
         if ((type & android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0) {
             e.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());
         }
-        e.setBackgroundResource(R.drawable.input_bg);
+        e.setBackgroundResource(R.drawable.input_aurora);
         e.setPadding(dp(ctx, 20), dp(ctx, 19), dp(ctx, 20), dp(ctx, 19));
         return e;
     }
@@ -344,7 +344,7 @@ public final class LockDialog {
         kv.setTextSize(14);
         kv.setTypeface(Typeface.MONOSPACE);
         kv.setTextIsSelectable(true);               // 也能长按手动选
-        kv.setBackgroundResource(R.drawable.input_bg);
+        kv.setBackgroundResource(R.drawable.input_aurora);
         kv.setPadding(dp(ctx, 20), dp(ctx, 19), dp(ctx, 20), dp(ctx, 19));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);

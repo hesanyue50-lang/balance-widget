@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通用卡片背景（Aurora Glass）：
+     圆角 20 + 半透明叠加底 + 1px 半透明描边。
+     替代原 9-patch（card_bg.9.png）—— 半透明 token 体系下 shape 更可控，
+     且深浅色自动跟随 colors.xml，不用维护两套图。
+     ⚠️ 没做顶边高光：layer-list 里再叠一层 inset 渐变会在部分 ROM 上
+     和 9-patch 混用出接缝，先保持简单。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="20dp" />
+    <solid android:color="@color/card_c" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/line" />
+</shape>

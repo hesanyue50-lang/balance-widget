@@ -31,7 +31,8 @@
             android:text="—"
             android:textColor="@color/tx"
             android:textSize="32sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:letterSpacing="-0.024" />
 
         <TextView
             android:id="@+id/t_sub"

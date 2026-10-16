@@ -62,7 +62,7 @@ public class SettingsActivity extends Activity {
         if ((type & InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0) {
             et.setTransformationMethod(PasswordTransformationMethod.getInstance());
         }
-        et.setBackgroundResource(R.drawable.input_bg);
+        et.setBackgroundResource(R.drawable.input_aurora);
         et.setPadding(dp(20), dp(19), dp(20), dp(19));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1052,7 +1052,7 @@ public class SettingsActivity extends Activity {
         eThr.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         eThr.setSingleLine(true);
         eThr.setGravity(Gravity.END);
-        eThr.setBackgroundResource(R.drawable.input_bg);
+        eThr.setBackgroundResource(R.drawable.input_aurora);
         eThr.setPadding(dp(20), dp(19), dp(20), dp(19));
         if (src.threshold > 0) eThr.setText(src.threshold == Math.floor(src.threshold)
                 ? String.valueOf((long) src.threshold) : String.valueOf(src.threshold));
