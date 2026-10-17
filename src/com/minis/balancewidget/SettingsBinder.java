@@ -1393,6 +1393,7 @@ public class SettingsBinder {
     private void renderWebs() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.web_fields);
         if (box == null) return;
+        final boolean first = box.getChildCount() == 0;
         box.removeAllViews();
 
         List<WebCustom> ws = WebCustom.loadAll(act);
@@ -1480,6 +1481,7 @@ public class SettingsBinder {
             t.setTextSize(12);
             box.addView(t);
         }
+        if (first) Anim.staggerChildren(box, 0, 10);
     }
 
     /** 抓一次并在对话框里显示识别结果（成功：值 + 识别方式；失败：原文片段） */
@@ -2326,6 +2328,7 @@ public class SettingsBinder {
     private void renderCustoms() {
         LinearLayout box = (LinearLayout) root.findViewById(R.id.custom_fields);
         if (box == null) return;
+        final boolean first = box.getChildCount() == 0;
         box.removeAllViews();
 
         /* 「上面 N 家」里的 N 用内置平台数实时算 —— 加一家平台不用再来改文案。
@@ -2386,6 +2389,7 @@ public class SettingsBinder {
             row.addView(del);
             box.addView(row);
         }
+        if (first) Anim.staggerChildren(box, 0, 10);
     }
 
     /**
@@ -2511,8 +2515,8 @@ public class SettingsBinder {
 
         TextView title = new TextView(act);
         title.setText("安全");
-        title.setTextColor(color(R.color.tx3));
-        title.setTextSize(12);
+        title.setTextColor(color(R.color.tx));      // 与其它分区标题一致（14sp + 主文字色）
+        title.setTextSize(14);
         title.setTypeface(null, Typeface.BOLD);
         box.addView(title);
 

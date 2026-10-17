@@ -114,8 +114,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/sec_keys"
-                    android:textColor="@color/tx3"
-                    android:textSize="12sp"
+                    android:textColor="@color/tx"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -327,8 +327,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="隐藏 API"
-                    android:textColor="@color/tx3"
-                    android:textSize="12sp"
+                    android:textColor="@color/tx"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
 
                 <TextView

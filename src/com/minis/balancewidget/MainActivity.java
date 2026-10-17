@@ -637,8 +637,11 @@ public class MainActivity extends Activity {
         if (PageStore.K_STATS.equals(pk)) {
             buildStats();
         } else if (PageStore.K_VPN.equals(pk)) {
+            boolean firstVpn = vpnBinder == null;
             if (vpnBinder == null) vpnBinder = new VpnBinder(this, findViewById(R.id.vpn_page));
             vpnBinder.bind();
+            /* 首次进入这页才播进场 —— 每次切页都播会显得页面在"跳" */
+            if (firstVpn) Anim.enterPage(findViewById(R.id.scroll_vpn));
             /* 导入订阅时立刻刷新加速页（否则要切走再切回才看得到新订阅） */
             ClashImport.onPending = new Runnable() {
                 public void run() {
@@ -653,7 +656,9 @@ public class MainActivity extends Activity {
             };
             dropEditFocus();
         } else if (PageStore.K_SETTINGS.equals(pk)) {
+            boolean firstSet = !settingsPanelBuilt;
             buildSettingsPanel();
+            if (firstSet) Anim.enterPage(findViewById(R.id.scroll_settings));
             dropEditFocus();     // 设置页里有输入框，别让它一进来就抢焦点弹键盘
         }
         // 回到该页顶部：沿用上一页的滚动位置会让人以为内容没加载
@@ -1586,6 +1591,9 @@ public class MainActivity extends Activity {
                             buildStats();
                         }
                         hidePullRefresh();
+                        /* 手动刷新（非自动）完成时，给总额一个"活一下"的确认 ——
+                           数字没变也值得，否则用户看不出刷新到底有没有生效 */
+                        if (!silent) Anim.pulse(tTotal);
                     }
                 });
             }
@@ -1963,7 +1971,17 @@ public class MainActivity extends Activity {
 
         /* 总资产不再标 ≈：那点折算误差（0.02 vs 0.0221）在这个精度下没意义，
            反而让数字看着不干净。真正的估算说明放在网关卡片自己身上。 */
-        tTotal.setText("¥" + String.format("%.2f", r.totalCny));
+        /* 总额变化时做一次交叉淡入 —— 数字没变就不动（避免每次自动刷新都闪）。
+           这是"数据更新了"最直接的视觉确认。 */
+        final String newTotal = "¥" + String.format("%.2f", r.totalCny);
+        String oldTotal = tTotal.getText() == null ? "" : tTotal.getText().toString();
+        if (!firstFill && oldTotal.length() > 0 && !newTotal.equals(oldTotal)) {
+            Anim.valueChange(tTotal, new Runnable() {
+                public void run() { tTotal.setText(newTotal); }
+            });
+        } else {
+            tTotal.setText(newTotal);
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("汇率 1 USD = ").append(String.format("%.2f", r.rate));
         sb.append("  ·  ").append(r.configured - r.failed).append("/").append(r.configured).append(" 个平台");
@@ -2203,7 +2221,10 @@ public class MainActivity extends Activity {
                 }
             }
             cards.addView(v);
-            if (firstFill) Anim.stagger(v, cards.getChildCount() - 1);
+            if (firstFill) {
+                /* 首次填充：缩放 + 淡入 + 上移，逐条错开 32ms */
+                Anim.popIn(v, Math.min(cards.getChildCount() - 1, 12) * 32L);
+            }
         }
     }
 
