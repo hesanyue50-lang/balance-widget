@@ -265,7 +265,10 @@ public final class KeyStore {
                         ? "balance" : k.planMode);
                 arr.put(o);
             }
-            sp(c).edit().putString(K_KEYS, arr.toString()).apply();
+            /* ⚠️ 必须 commit：这是用户手录的密钥，apply() 异步写盘时
+               若进程被回收，内存缓存已经是新值、磁盘还是旧值 ——
+               表现就是"明明保存了，重启后没了"。几十条 Key 的序列化只有几毫秒。 */
+            sp(c).edit().putString(K_KEYS, arr.toString()).commit();
             cache = new ArrayList<ApiKey>(list);   // 回填缓存，省掉下一次重解密
             cacheVer = dataVersion;
         } catch (Throwable ignored) { }

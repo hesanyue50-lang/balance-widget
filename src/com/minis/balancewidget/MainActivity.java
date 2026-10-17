@@ -1427,6 +1427,13 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        /* ⚠️ 必须停掉前台自动刷新的定时器：
+           它 postDelayed 自己，Activity 销毁后仍会继续跑 ——
+           既拖住整个 Activity 不放（内存泄漏），又会往已销毁的界面刷新。
+           onPause 里虽然也移除了，但销毁路径不一定经过（直接 finish / 被系统杀）。 */
+        autoHandler.removeCallbacks(autoTask);
+        /* 加速页的测速线程池要 shutdown —— 否则 8 个核心线程一直活着并持有界面 */
+        try { if (vpnBinder != null) vpnBinder.release(); } catch (Throwable ignored) { }
         /* 主界面销毁时把这个引用让出来，避免静态字段拖住已结束的实例 */
         if (settingsBinder != null) settingsBinder.detach();
         super.onDestroy();

@@ -573,16 +573,23 @@ public class WebCustom {
         InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
         String cs = (charset == null || charset.trim().length() == 0) ? "UTF-8" : charset.trim();
         StringBuilder sb = new StringBuilder();
-        if (is != null) {
-            BufferedReader r;
-            try {
-                r = new BufferedReader(new InputStreamReader(is, cs));
-            } catch (Exception e) {
-                r = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+        BufferedReader r = null;
+        try {
+            if (is != null) {
+                try {
+                    r = new BufferedReader(new InputStreamReader(is, cs));
+                } catch (Exception e) {
+                    /* 编码名非法（用户手填了 "UTF8 " 之类）→ 退回 UTF-8，别让整个抓取失败 */
+                    r = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+                }
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line).append('\n');
             }
-            String line;
-            while ((line = r.readLine()) != null) sb.append(line).append('\n');
-            r.close();
+        } finally {
+            /* ⚠️ 必须 finally：readLine 抛异常时原来的 r.close() 不会执行，
+               流和底层连接就漏了 —— 反复抓取会累积到连不上。 */
+            try { if (r != null) r.close(); } catch (Throwable ig) { }
+            try { c.disconnect(); } catch (Throwable ig) { }
         }
         if (code < 200 || code >= 300) {
             throw new Exception("HTTP " + code + "，响应开头：" + clip(sb.toString(), 120));

@@ -1111,14 +1111,23 @@ public class BalanceFetcher {
                 c.setReadTimeout(4000);
                 c.setRequestProperty("accept", "application/dns-json");
                 int code = c.getResponseCode();
-                if (code != 200) continue;
-                BufferedReader r = new BufferedReader(
-                        new InputStreamReader(c.getInputStream(), "UTF-8"));
+                if (code != 200) { try { c.disconnect(); } catch (Throwable ig) { } continue; }
                 StringBuilder sb = new StringBuilder();
-                char[] buf = new char[2048];
-                int n;
-                while ((n = r.read(buf)) > 0) sb.append(buf, 0, n);
-                r.close();
+                /* 流和连接都要在 finally 关 —— DoH 是"系统 DNS 失败后的兜底"，
+                   它自己再漏连接，等于在最需要它的时候把连接池耗光。 */
+                try {
+                    BufferedReader r = new BufferedReader(
+                            new InputStreamReader(c.getInputStream(), "UTF-8"));
+                    try {
+                        char[] buf = new char[2048];
+                        int n;
+                        while ((n = r.read(buf)) > 0) sb.append(buf, 0, n);
+                    } finally {
+                        try { r.close(); } catch (Throwable ig) { }
+                    }
+                } finally {
+                    try { c.disconnect(); } catch (Throwable ig) { }
+                }
                 JSONObject o = new JSONObject(sb.toString());
                 JSONArray ans = o.optJSONArray("Answer");
                 if (ans == null) continue;
@@ -1675,8 +1684,18 @@ public class BalanceFetcher {
     }
 
     /** 诊断日志：写到 App 专属外部目录（不需要存储权限），方便用 shell 排查 */
+    /**
+     * 写一行诊断日志。
+     *
+     * ⚠️ 必须同步：一轮抓取会开 6+ 个线程，每个都在写同一个文件 ——
+     * 不加锁时行会交错甚至写坏（catch 会把异常吞掉，于是日志"看起来正常但内容是乱的"，
+     * 排查时比没有日志更误导）。写一行只有几十微秒，锁的代价可以忽略。
+     */
+    private static final Object DIAG_LOCK = new Object();
+
     public static void diag(Context ctx, String msg) {
         if (ctx == null) return;      // 少数深层调用点拿不到 Context，静默跳过即可
+        synchronized (DIAG_LOCK) {
         try {
             java.io.File dir = ctx.getExternalFilesDir(null);
             if (dir == null) return;
@@ -1688,6 +1707,7 @@ public class BalanceFetcher {
                         .format(new java.util.Date()) + "  " + msg + "\n");
             w.close();
         } catch (Throwable ignored) { }
+        }
     }
 
     /**
@@ -1702,14 +1722,18 @@ public class BalanceFetcher {
             if (dir == null) return "";
             java.io.File fo = new java.io.File(dir, "diag.log");
             if (!fo.exists()) return "";
+            byte[] buf;
             java.io.RandomAccessFile r = new java.io.RandomAccessFile(fo, "r");
-            long len = r.length();
-            /* 只读末尾 16KB —— 足够 120 行了，也避免整文件读进内存 */
-            long start = Math.max(0, len - 16 * 1024);
-            byte[] buf = new byte[(int) (len - start)];
-            r.seek(start);
-            r.readFully(buf);
-            r.close();
+            try {
+                long len = r.length();
+                /* 只读末尾 16KB —— 足够 120 行了，也避免整文件读进内存 */
+                long start = Math.max(0, len - 16 * 1024);
+                buf = new byte[(int) (len - start)];
+                r.seek(start);
+                r.readFully(buf);
+            } finally {
+                try { r.close(); } catch (Throwable ig) { }   // 异常路径也要关
+            }
             String s = new String(buf, "UTF-8");
             String[] ps = s.split("\n");
             int from = Math.max(0, ps.length - lines);

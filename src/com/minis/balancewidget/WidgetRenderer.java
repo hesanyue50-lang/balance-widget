@@ -110,7 +110,7 @@ public final class WidgetRenderer {
         v.setTextViewText(R.id.w2_sub, "正在刷新");
         v.setTextViewText(R.id.w2_page, "");
         hideAll(v);
-        bind(ctx, v);
+        bind(ctx, v, id);
         push(ctx, mgr, id, v);
     }
 
@@ -119,7 +119,7 @@ public final class WidgetRenderer {
         int cols = 2;                       // 新布局固定两列（窄屏靠缩小字号自适应）
         int perPage = WidgetStyle.capacityFor(mgr, id);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), LAYOUT);
-        bind(ctx, v);
+        bind(ctx, v, id);
 
         /* 从壁纸吸色挑一套预设（亮壁纸 → 浅玻璃+深字，暗壁纸 → 深玻璃+浅字）。
            所有文字色都由它决定，不再依赖布局里写死的颜色 —— 布局里的色值只是
@@ -228,7 +228,7 @@ public final class WidgetRenderer {
         for (int i = 0; i < DIV.length; i++) v.setViewVisibility(DIV[i], View.GONE);
     }
 
-    private static void bind(Context ctx, RemoteViews v) {
+    private static void bind(Context ctx, RemoteViews v, int widgetId) {
         /* 背景：布局里已经写了，这里再设一次兜底 ——
            桌面会缓存 View 树，布局里新加的资源引用有时不生效 */
         try {
@@ -239,21 +239,29 @@ public final class WidgetRenderer {
            注意 requestCode 必须区分开：同一个 code 会被系统当成同一个 PendingIntent
            互相覆盖，翻页按钮的 1/2 也是同理。 */
         v.setOnClickPendingIntent(R.id.w2_root,
-                pi(ctx, BalanceWidgetProvider.ACTION_TAP, 10));
+                pi(ctx, BalanceWidgetProvider.ACTION_TAP, 10, widgetId));
         v.setOnClickPendingIntent(R.id.w2_refresh,
-                pi(ctx, BalanceWidgetProvider.ACTION_TAP, 11));
+                pi(ctx, BalanceWidgetProvider.ACTION_TAP, 11, widgetId));
         v.setOnClickPendingIntent(R.id.w2_prev,
-                pi(ctx, BalanceWidgetProvider.ACTION_PREV, 1));
+                pi(ctx, BalanceWidgetProvider.ACTION_PREV, 1, widgetId));
         v.setOnClickPendingIntent(R.id.w2_next,
-                pi(ctx, BalanceWidgetProvider.ACTION_NEXT, 2));
+                pi(ctx, BalanceWidgetProvider.ACTION_NEXT, 2, widgetId));
     }
 
-    private static PendingIntent pi(Context ctx, String action, int code) {
+    /**
+     * @param code    动作编号（每个动作一个）
+     * @param widgetId 实例 id —— **必须混进 requestCode**，否则多个小组件实例的
+     *                 PendingIntent 会被系统当成同一个互相覆盖（点 A 触发 B 的动作）；
+     *                 同时塞进 extra，让连击计数能按实例分开。
+     */
+    private static PendingIntent pi(Context ctx, String action, int code, int widgetId) {
         Intent it = new Intent(ctx, BalanceWidgetProvider.class);
         it.setAction(action);
+        it.putExtra("widgetId", widgetId);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (android.os.Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
-        return PendingIntent.getBroadcast(ctx, code, it, flags);
+        int req = code * 1000 + (widgetId % 1000);
+        return PendingIntent.getBroadcast(ctx, req, it, flags);
     }
 
     private static void push(Context ctx, AppWidgetManager mgr, int id, RemoteViews v) {

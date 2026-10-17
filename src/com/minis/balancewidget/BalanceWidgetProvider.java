@@ -42,8 +42,13 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     /* ---- 连击判定 ---- */
     /** 两次点击间隔超过这个时长就不算连击 */
     private static final long MULTI_TAP_GAP_MS = 500L;
-    private static int tapCount = 0;
-    private static long lastTapAt = 0L;
+    /* ⚠️ 连击状态**必须按 widgetId 分开**：用户桌面上可能有两个小组件，
+       点 A 一下、点 B 一下会被全局计数当成"双击" → 莫名其妙打开应用。
+       用 HashMap 按实例记，超过 8 个实例就清一次（防无限增长）。 */
+    private static final java.util.HashMap<Integer, int[]> TAPS =
+            new java.util.HashMap<Integer, int[]>();
+    private static final java.util.HashMap<Integer, Long> TAP_AT =
+            new java.util.HashMap<Integer, Long>();
     private static final Object TAP_LOCK = new Object();
 
     /** 后台抓取的超时预算（毫秒）。数组里的平台会并发抓，总耗时≈最慢的那个 */
@@ -105,7 +110,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
 
         /* 点组件本体：按连击次数分派 —— 单击同步缓存 / 双击打开应用 / 三击强制重拉 */
         if (ACTION_TAP.equals(a)) {
-            handleTap(ctx);
+            handleTap(ctx, intent == null ? -1 : intent.getIntExtra("widgetId", -1));
             return;
         }
 
@@ -167,14 +172,26 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
      * 为什么要等一小会儿再执行：收到第 1 击时不知道后面还有没有第 2 击，
      * 只能等连击窗口过去再判定。窗口取 500ms —— 再长用户会觉得点了没反应。
      */
-    private void handleTap(final Context ctx) {
+    private void handleTap(final Context ctx, final int widgetId) {
         final int n;
         synchronized (TAP_LOCK) {
             long now = System.currentTimeMillis();
-            if (now - lastTapAt > MULTI_TAP_GAP_MS) tapCount = 0;
-            tapCount++;
-            lastTapAt = now;
-            n = tapCount;
+            Long last = TAP_AT.get(widgetId);
+            int[] cnt = TAPS.get(widgetId);
+            if (cnt == null || last == null || now - last.longValue() > MULTI_TAP_GAP_MS) {
+                cnt = new int[] { 0 };
+                TAPS.put(widgetId, cnt);
+            }
+            cnt[0]++;
+            TAP_AT.put(widgetId, Long.valueOf(now));
+            n = cnt[0];
+            /* 实例数防膨胀（卸载小组件后对应条目没人清） */
+            if (TAPS.size() > 8) {
+                TAPS.clear();
+                TAP_AT.clear();
+                TAPS.put(widgetId, new int[] { 1 });
+                TAP_AT.put(widgetId, Long.valueOf(now));
+            }
         }
         BalanceFetcher.diag(ctx, "小组件点击 第 " + n + " 下");
 
@@ -183,9 +200,10 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             public void run() {
                 try { Thread.sleep(MULTI_TAP_GAP_MS + 60); } catch (InterruptedException ig) { }
                 synchronized (TAP_LOCK) {
+                    int[] cnt = TAPS.get(widgetId);
                     /* 窗口内又点了 → 说明是多击，交给那一次的处理去执行 */
-                    if (tapCount != n) return;
-                    tapCount = 0;
+                    if (cnt == null || cnt[0] != n) return;
+                    cnt[0] = 0;
                 }
                 if (n >= 3) {
                     forceFetch(ctx);

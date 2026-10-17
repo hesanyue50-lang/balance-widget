@@ -1407,6 +1407,9 @@ public class VpnBinder {
     private void testAll() {
         if (!Clash.isRunning()) { toast("请先启动加速"); return; }
         if (groups.isEmpty()) { toast("还没读到节点"); return; }
+        /* ⚠️ groupIdx 可能是**上一次的旧值**：之前选的是第 3 个策略组，
+           后来订阅更新只剩 1 组 —— 只判 isEmpty() 不够，会 IndexOutOfBounds。 */
+        if (groupIdx < 0 || groupIdx >= groups.size()) groupIdx = 0;
 
         final List<String> names = new ArrayList<String>();
         List<Clash.Node> ns = groups.get(groupIdx).nodes;
@@ -1502,5 +1505,21 @@ public class VpnBinder {
 
     private int dp(float v) {
         return (int) (v * act.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /**
+     * 释放资源：停掉测速线程池。
+     *
+     * ⚠️ 不 shutdown 的话，8 个核心线程会一直活着并持有本对象（进而持有 Activity）——
+     * 用户切走/退出后整块界面都回收不掉。必须在 Activity 销毁时调。
+     */
+    public void release() {
+        try {
+            if (pool != null) pool.shutdownNow();
+        } catch (Throwable ignored) { }
+        pool = null;
+        try {
+            if (runHandler != null) runHandler.removeCallbacksAndMessages(null);
+        } catch (Throwable ignored) { }
     }
 }

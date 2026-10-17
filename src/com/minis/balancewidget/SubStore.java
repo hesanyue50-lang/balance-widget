@@ -123,7 +123,7 @@ public final class SubStore {
     }
 
     public static void setActive(Context c, String id) {
-        sp(c).edit().putString(K_ACTIVE, id == null ? "" : id).apply();
+        sp(c).edit().putString(K_ACTIVE, id == null ? "" : id).commit();
     }
 
     /**
@@ -200,7 +200,7 @@ public final class SubStore {
                 j.put("autoUpdate", s.autoUpdate);
                 arr.put(j);
             }
-            sp(c).edit().putString(K_SUBS, arr.toString()).apply();
+            sp(c).edit().putString(K_SUBS, arr.toString()).commit();
         } catch (Throwable ignored) { }
     }
 
@@ -215,13 +215,13 @@ public final class SubStore {
             if (sp(c).getBoolean("clash_subs_migrated", false)) return;
             List<Sub> l = all(c);
             if (!l.isEmpty()) {
-                sp(c).edit().putBoolean("clash_subs_migrated", true).apply();
+                sp(c).edit().putBoolean("clash_subs_migrated", true).commit();
                 return;
             }
             String oldUrl = sp(c).getString("clash_sub_url", "");
             String yaml = Clash.readText(new java.io.File(Clash.workDir(c), "sub.yaml"));
             if (oldUrl.length() == 0 && yaml.length() == 0) {
-                sp(c).edit().putBoolean("clash_subs_migrated", true).apply();
+                sp(c).edit().putBoolean("clash_subs_migrated", true).commit();
                 return;
             }
             Sub s = new Sub();
@@ -234,7 +234,7 @@ public final class SubStore {
             l.add(s);
             save(c, l);
             setActive(c, s.id);
-            sp(c).edit().putBoolean("clash_subs_migrated", true).apply();
+            sp(c).edit().putBoolean("clash_subs_migrated", true).commit();
             BalanceFetcher.diag(c, "Clash 订阅已迁移到多订阅结构");
         } catch (Throwable t) {
             BalanceFetcher.diag(c, "订阅迁移失败 " + t);

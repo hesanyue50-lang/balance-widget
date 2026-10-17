@@ -49,7 +49,7 @@ public class StatsOpt {
         /* 钱类平台不接受写入：它的 inStats 恒为 true，写了也是死数据，
            将来有人改判定逻辑时会被这堆历史值咬一口。 */
         if (isMoneyPlatform(platform)) return;
-        sp(c).edit().putBoolean("in_" + platform, in).apply();
+        sp(c).edit().putBoolean("in_" + platform, in).commit();
     }
 
     public static boolean toggle(Context c, String platform) {
@@ -71,7 +71,7 @@ public class StatsOpt {
 
     public static void setInChart(Context c, String platform, boolean in) {
         if (isMoneyPlatform(platform)) return;
-        sp(c).edit().putBoolean("chart_" + platform, in).apply();
+        sp(c).edit().putBoolean("chart_" + platform, in).commit();
     }
 
     public static void toggleChart(Context c, String platform) {
@@ -90,7 +90,7 @@ public class StatsOpt {
     }
 
     public static void setRate(Context c, String platform, double rate) {
-        sp(c).edit().putFloat("rate_" + platform, (float) rate).apply();
+        sp(c).edit().putFloat("rate_" + platform, (float) rate).commit();
     }
 
     /** 用户单独指定的「控制台」地址。空 = 没填。 */
@@ -102,7 +102,7 @@ public class StatsOpt {
     }
 
     public static void setConsoleUrl(Context c, String platform, String url) {
-        sp(c).edit().putString("console_" + platform, url == null ? "" : url.trim()).apply();
+        sp(c).edit().putString("console_" + platform, url == null ? "" : url.trim()).commit();
     }
 
     /* ==================== 图表配色 ==================== */
@@ -119,8 +119,8 @@ public class StatsOpt {
 
     /** 0 = 清除自定义，回到自动分配。 */
     public static void setChartColor(Context c, String platform, int argb) {
-        if (argb == 0) sp(c).edit().remove("cc_" + platform).apply();
-        else sp(c).edit().putInt("cc_" + platform, argb).apply();
+        if (argb == 0) sp(c).edit().remove("cc_" + platform).commit();
+        else sp(c).edit().putInt("cc_" + platform, argb).commit();
     }
 
     /**

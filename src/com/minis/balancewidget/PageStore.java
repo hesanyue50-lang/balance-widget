@@ -145,7 +145,7 @@ public final class PageStore {
      */
     public static void setHome(Context c, String key) {
         if (!isKnown(key)) return;
-        sp(c).edit().putString(P_HOME, key).apply();
+        sp(c).edit().putString(P_HOME, key).commit();
         List<String> o = order(c);
         o.remove(key);
         o.add(0, key);
@@ -184,7 +184,7 @@ public final class PageStore {
         try {
             JSONArray a = new JSONArray();
             for (int i = 0; i < vals.size(); i++) a.put(vals.get(i));
-            sp(c).edit().putString(key, a.toString()).apply();
+            sp(c).edit().putString(key, a.toString()).commit();
         } catch (Throwable ignored) { }
     }
 }

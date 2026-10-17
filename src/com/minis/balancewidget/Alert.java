@@ -118,7 +118,9 @@ public class Alert {
             if (thr <= 0) continue;
             ed.putBoolean(ALERTED_PREFIX + alertKey(it), it.low);
         }
-        ed.apply();
+        /* 必须 commit：这是"已经提醒过"的幂等标记，丢了就会对同一批平台重复推送 ——
+           而且推送往往发生在后台刷新刚结束时，正是进程容易被回收的时机。 */
+        ed.commit();
 
         if (fresh.isEmpty() || !canNotify(c)) return;
         notifyLow(c, fresh);

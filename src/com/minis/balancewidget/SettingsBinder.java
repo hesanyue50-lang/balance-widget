@@ -1462,9 +1462,24 @@ public class SettingsBinder {
                     if (idx < list.size()) {
                         list.remove(idx);
                         WebCustom.saveAll(act, list);
-                        /* 同步清掉这个平台的 Key —— 不然它会变成孤儿条目，
-                           统计页图例上永远挂着一个解析不出名字的 "web:N" */
-                        KeyStore.removeAllForPlatform(act, "web:" + idx);
+                        /* ⚠️ 不能只删被删平台自己的 Key：删掉 web:1 之后，
+                           原来的 web:2 会变成新的 web:1 —— 后面所有平台的 Key
+                           都挂在旧 id 上，等于全部错配（还会留下孤儿）。
+                           所以 idx 及之后的旧映射一律清掉（和删自定义平台同一套处理）。 */
+                        List<KeyStore.ApiKey> all = KeyStore.all(act);
+                        List<KeyStore.ApiKey> keep = new java.util.ArrayList<KeyStore.ApiKey>();
+                        for (int ki = 0; ki < all.size(); ki++) {
+                            KeyStore.ApiKey kk = all.get(ki);
+                            String pf = kk.platform == null ? "" : kk.platform;
+                            if (pf.startsWith("web:")) {
+                                try {
+                                    int pi = Integer.parseInt(pf.substring(4));
+                                    if (pi >= idx) continue;   // 被删平台及其后的旧映射
+                                } catch (Throwable ig) { continue; }
+                            }
+                            keep.add(kk);
+                        }
+                        KeyStore.save(act, keep);
                     }
                     Busy.run(act, "正在更新…", new Runnable() {
                         public void run() { renderWebs(); kick(); }
@@ -1489,7 +1504,11 @@ public class SettingsBinder {
         final List<WebCustom> ws = WebCustom.loadAll(act);
         if (idx < 0 || idx >= ws.size()) return;
         final WebCustom w = ws.get(idx);
-        Busy.run(act, "正在抓取…", new Runnable() {
+        /* ⚠️ 抓取必须在**后台线程**：Busy.run 的重活是 post 到主线程执行的，
+           在里面直接 fetch 会抛 NetworkOnMainThreadException —— 表现是
+           "测试永远失败"。之前就是这么写的，等于测试按钮从来没work过。 */
+        Busy.show(act, "正在抓取…");
+        new Thread(new Runnable() {
             public void run() {
                 String msg;
                 try {
@@ -1503,6 +1522,8 @@ public class SettingsBinder {
                 final String m = msg;
                 act.runOnUiThread(new Runnable() {
                     public void run() {
+                        Busy.hide(act);
+                        if (act.isFinishing() || act.isDestroyed()) return;
                         new AlertDialog.Builder(act)
                                 .setTitle("测试结果")
                                 .setMessage(m)
@@ -1511,7 +1532,7 @@ public class SettingsBinder {
                     }
                 });
             }
-        });
+        }).start();
     }
 
     /**
@@ -2038,22 +2059,36 @@ public class SettingsBinder {
                             Toast.makeText(act, "先填网址再测试", Toast.LENGTH_SHORT).show();
                             return;
                         }
-                        try {
-                            WebCustom.Result r = w.fetch(w.foreign, 12000);
-                            new AlertDialog.Builder(act)
-                                    .setTitle("测试成功")
-                                    .setMessage("显示：" + r.display
+                        /* ⚠️ 后台线程抓取（同 testWeb：主线程联网会直接抛异常） */
+                        final WebCustom wt = w;
+                        Busy.show(act, "正在抓取…");
+                        new Thread(new Runnable() {
+                            public void run() {
+                                String title, body;
+                                try {
+                                    WebCustom.Result r = wt.fetch(wt.foreign, 12000);
+                                    title = "测试成功";
+                                    body = "显示：" + r.display
                                             + "\n识别方式：" + r.how
-                                            + "\n数值：" + r.value)
-                                    .setPositiveButton("好", null)
-                                    .show();
-                        } catch (Throwable t) {
-                            new AlertDialog.Builder(act)
-                                    .setTitle("测试失败")
-                                    .setMessage(t.getMessage())
-                                    .setPositiveButton("好", null)
-                                    .show();
-                        }
+                                            + "\n数值：" + r.value;
+                                } catch (Throwable t) {
+                                    title = "测试失败";
+                                    body = t.getMessage() == null ? "未知错误" : t.getMessage();
+                                }
+                                final String ft = title, fb = body;
+                                act.runOnUiThread(new Runnable() {
+                                    public void run() {
+                                        Busy.hide(act);
+                                        if (act.isFinishing() || act.isDestroyed()) return;
+                                        new AlertDialog.Builder(act)
+                                                .setTitle(ft)
+                                                .setMessage(fb)
+                                                .setPositiveButton("好", null)
+                                                .show();
+                                    }
+                                });
+                            }
+                        }).start();
                     }
                 })
                 .setNegativeButton("取消", null)
@@ -2191,6 +2226,10 @@ public class SettingsBinder {
     /** 宿主销毁时调用：只清掉属于自己的那个静态引用（别人可能刚接管） */
     public void detach() {
         if (active == this) active = null;
+        /* ⚠️ 必须清掉防抖保存任务：用户改完输入框立刻退出时，
+           500ms 后的 saveTask 还会跑，持有已销毁的 Activity（泄漏），
+           还会去碰已经不存在的 View。 */
+        try { h.removeCallbacksAndMessages(null); } catch (Throwable ignored) { }
     }
 
     /** 渲染「本机备份记录」列表（可恢复 / 可删除） */

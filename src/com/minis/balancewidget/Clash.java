@@ -280,9 +280,14 @@ public final class Clash {
             }
             String why2 = tail(log, 400);
             BalanceFetcher.diag(c, "内核启动超时，core.log 末尾：\n" + why2);
+            /* ⚠️ 必须把进程杀掉：否则它活着但 API 不通，isRunning() 会一直返回 true，
+               下次 start 直接当"已在跑"返回成功 —— 用户看着已启动，实际代理是坏的，
+               而且永远不会有重试。 */
+            stop(c);
             return "内核启动超时（8 秒内控制端口未就绪）\n" + why2;
         } catch (Throwable t) {
             BalanceFetcher.diag(c, "clash 启动异常 " + t);
+            stop(c);        // 同上：异常路径也不能留下半死进程
             return "启动异常：" + t;
         }
     }

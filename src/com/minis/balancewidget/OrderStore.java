@@ -55,7 +55,7 @@ public final class OrderStore {
         try {
             JSONArray arr = new JSONArray();
             for (int i = 0; i < ids.size(); i++) arr.put(ids.get(i));
-            sp(c).edit().putString(which, arr.toString()).apply();
+            sp(c).edit().putString(which, arr.toString()).commit();
         } catch (Throwable ignored) { }
     }
 
