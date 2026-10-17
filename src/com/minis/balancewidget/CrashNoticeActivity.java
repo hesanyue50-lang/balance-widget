@@ -43,7 +43,7 @@ public class CrashNoticeActivity extends Activity {
         TextView title = new TextView(this);
         title.setText("💥 应用上次意外退出了");
         title.setTextSize(18f);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setTextColor(0xFFE23B3B);
         root.addView(title);
 
@@ -52,19 +52,19 @@ public class CrashNoticeActivity extends Activity {
                 + (logPath.length() > 0 ? logPath : "Download 文件夹（默认位置）")
                 + "\n\n把日志文件发给开发者（QQ 群 1108314670 / GitHub Issue），"
                 + "就能快速定位修复。");
-        where.setTextSize(14f);
+        where.setTextSize(14);
         where.setLineSpacing(dp(3), 1f);
         root.addView(where);
 
         TextView tail = new TextView(this);
-        tail.setTextSize(13f);
+        tail.setTextSize(13);
         if (stack != null && stack.length() > 0) {
             tail.setText("\n异常摘要：\n" + stack);
             tail.setTypeface(android.graphics.Typeface.MONOSPACE);
         }
         TextView copy = new TextView(this);
         copy.setText("点击这里复制日志路径");
-        copy.setTextSize(13f);
+        copy.setTextSize(13);
         copy.setTextColor(0xFF2563EB);
         copy.setPadding(0, dp(14), 0, dp(4));
         copy.setOnClickListener(new View.OnClickListener() {
@@ -83,7 +83,7 @@ public class CrashNoticeActivity extends Activity {
 
         TextView ok = new TextView(this);
         ok.setText("知道了，进入应用");
-        ok.setTextSize(14.5f);
+        ok.setTextSize(14);
         ok.setTextColor(0xFFFFFFFF);
         ok.setGravity(Gravity.CENTER);
         ok.setPadding(0, dp(12), 0, dp(12));

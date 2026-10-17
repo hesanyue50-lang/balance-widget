@@ -274,7 +274,7 @@
                         android:paddingBottom="11dp"
                         android:text="分享"
                         android:textColor="@color/tx2"
-                        android:textSize="12.5sp" />
+                        android:textSize="12sp" />
 
                     <TextView
                         android:id="@+id/btn_pack_export"
@@ -288,7 +288,7 @@
                         android:paddingBottom="11dp"
                         android:text="导出文件"
                         android:textColor="@color/tx2"
-                        android:textSize="12.5sp" />
+                        android:textSize="12sp" />
 
                     <TextView
                         android:id="@+id/btn_pack_import"
@@ -302,7 +302,7 @@
                         android:paddingBottom="11dp"
                         android:text="导入"
                         android:textColor="@color/accent"
-                        android:textSize="12.5sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <TextView

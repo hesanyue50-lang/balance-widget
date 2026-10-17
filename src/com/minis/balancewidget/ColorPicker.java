@@ -80,7 +80,7 @@ public class ColorPicker {
         TextView sep = new TextView(act);
         sep.setText("自定义颜色");
         sep.setTextColor(act.getColor(R.color.tx2));
-        sep.setTextSize(12.5f);
+        sep.setTextSize(12);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         sp.topMargin = dp(act, 14);

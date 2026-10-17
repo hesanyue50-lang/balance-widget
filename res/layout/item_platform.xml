@@ -90,7 +90,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/tx3"
-            android:textSize="11sp" />
+            android:textSize="11.5sp" />
 
         <!-- 进度条用纯 View 画：这是个轻量指示条，不值得为它引入 ProgressBar -->
         <FrameLayout

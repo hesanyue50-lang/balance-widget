@@ -48,7 +48,7 @@ public final class LockDialog {
         TextView t = new TextView(ctx);
         t.setText(title);
         t.setTextColor(ctx.getColor(R.color.tx));
-        t.setTextSize(17);
+        t.setTextSize(16);
         t.setTypeface(null, Typeface.BOLD);
         card.addView(t);
 

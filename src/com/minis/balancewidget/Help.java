@@ -171,7 +171,7 @@ public final class Help {
 
         TextView foot = new TextView(a);
         foot.setText("版本 " + version(a) + "\n点标题可展开或收起");
-        foot.setTextSize(11f);
+        foot.setTextSize(11.5f);
         foot.setTextColor(0xFFA2ABB9);
         foot.setPadding(0, dp(a, 16), 0, 0);
         box.addView(foot);
@@ -200,7 +200,7 @@ public final class Help {
     private static TextView section(Activity a, String t) {
         TextView tv = new TextView(a);
         tv.setText(t);
-        tv.setTextSize(15);
+        tv.setTextSize(16);
         tv.setTextColor(0xFF39424F);
         tv.setTypeface(null, Typeface.BOLD);
         tv.setPadding(0, dp(a, 16), 0, dp(a, 6));
@@ -213,13 +213,13 @@ public final class Help {
 
         TextView t = new TextView(a);
         t.setText("· " + title);
-        t.setTextSize(13.5f);
+        t.setTextSize(14);
         t.setTextColor(0xFF2F3946);
         wrap.addView(t);
 
         TextView d = new TextView(a);
         d.setText("   " + desc);
-        d.setTextSize(12.5f);
+        d.setTextSize(12);
         d.setTextColor(0xFF5E6878);
         d.setPadding(0, dp(a, 2), 0, dp(a, 8));
         wrap.addView(d);

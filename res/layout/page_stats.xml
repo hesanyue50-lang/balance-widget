@@ -25,7 +25,7 @@
             android:layout_height="wrap_content" android:gravity="center"
             android:background="@drawable/mini_btn_border" android:paddingLeft="12dp" android:paddingRight="12dp"
             android:paddingTop="4dp" android:paddingBottom="4dp"
-            android:text="近 7 天 ▽" android:textColor="@color/tx" android:textSize="11sp" />
+            android:text="近 7 天 ▽" android:textColor="@color/tx" android:textSize="11.5sp" />
     </LinearLayout>
 
     <!-- ③ 平台数据源开关（圆点+名称+Switch） -->
@@ -52,7 +52,7 @@
         android:layout_marginTop="10dp"
         android:text="近 7 日"
         android:textColor="@color/tx"
-        android:textSize="15sp"
+        android:textSize="14sp"
         android:textStyle="bold" />
 
     <!-- ⑤ 每平台充值/消耗明细 -->
@@ -84,7 +84,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:textColor="@color/tx"
-        android:textSize="15sp"
+        android:textSize="14sp"
         android:textStyle="bold" />
 
     <!-- ⑥b 采样精度声明 -->

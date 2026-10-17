@@ -67,7 +67,7 @@
             android:minWidth="0dp"
             android:includeFontPadding="false"
             android:textColor="@color/w2_tx3"
-            android:textSize="11sp" />
+            android:textSize="11.5sp" />
 
         <!-- 上一页 / 下一页：紧挨放，属于"翻页"这一组 -->
         <ImageView

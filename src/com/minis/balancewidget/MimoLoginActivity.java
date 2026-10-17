@@ -90,7 +90,7 @@ public class MimoLoginActivity extends Activity {
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView t1 = new TextView(this);
         t1.setText("登录小米账号");
-        t1.setTextSize(16f);
+        t1.setTextSize(16);
         t1.setTextColor(0xFF1F2329);
         t1.setTypeface(null, android.graphics.Typeface.BOLD);
         titles.addView(t1);
@@ -106,7 +106,7 @@ public class MimoLoginActivity extends Activity {
 
         TextView close = new TextView(this);
         close.setText("关闭");
-        close.setTextSize(13f);
+        close.setTextSize(13);
         close.setTextColor(0xFF4D6BFE);
         close.setPadding(dp(12), dp(6), dp(12), dp(6));
         close.setOnClickListener(new View.OnClickListener() {

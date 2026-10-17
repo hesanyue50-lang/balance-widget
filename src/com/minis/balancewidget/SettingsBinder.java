@@ -743,7 +743,7 @@ public class SettingsBinder {
         TextView b = new TextView(act);
         b.setText(s);
         b.setTextColor(c);
-        b.setTextSize(11);
+        b.setTextSize(11.5f);
         b.setGravity(Gravity.CENTER);
         b.setBackgroundResource(R.drawable.mini_btn_border);
         b.setPadding(dp(10), dp(5), dp(10), dp(5));
@@ -812,7 +812,7 @@ public class SettingsBinder {
                 + "订阅制平台填的是「提前几天提醒」，填 3 就是到期前 3 天提醒。\n"
                 + "留空或填 0 = 不预警。阈值只有后台刷新时才判断，前台刷新不打扰你。");
         tipThr.setTextColor(color(R.color.tx3));
-        tipThr.setTextSize(11);
+        tipThr.setTextSize(11.5f);
         tipThr.setLineSpacing(dp(2), 1f);
         tipThr.setPadding(0, dp(4), 0, 0);
         panel.addView(tipThr);
@@ -895,7 +895,7 @@ public class SettingsBinder {
                     + "AccessKey 在阿里云控制台创建，RAM 用户给只读权限即可。"
                     + "两项都填才会发起查询，否则卡片显示「见控制台」。");
             tip.setTextColor(color(R.color.tx3));
-            tip.setTextSize(11);
+            tip.setTextSize(11.5f);
             tip.setPadding(0, dp(6), 0, 0);
             panel.addView(tip);
         }
@@ -950,7 +950,7 @@ public class SettingsBinder {
                     + "端口不是 7863 就改成实际端口；网关在别的机器上就填它的局域网地址。\n"
                     + "卡片菜单里的「控制台」会打开这个地址下的 /panel/ 页面。");
             tipw.setTextColor(color(R.color.tx3));
-            tipw.setTextSize(11);
+            tipw.setTextSize(11.5f);
             tipw.setPadding(0, dp(6), 0, 0);
             panel.addView(tipw);
         }
@@ -1098,7 +1098,7 @@ public class SettingsBinder {
 
             Switch swCard = new Switch(act);
             swCard.setText("卡片");
-            swCard.setTextSize(11);
+            swCard.setTextSize(11.5f);
             swCard.setTextColor(color(R.color.tx2));
             swCard.setChecked(hideCard);
             swCard.setTrackTintList(new android.content.res.ColorStateList(
@@ -1122,7 +1122,7 @@ public class SettingsBinder {
 
             Switch swStat = new Switch(act);
             swStat.setText("统计");
-            swStat.setTextSize(11);
+            swStat.setTextSize(11.5f);
             swStat.setTextColor(color(R.color.tx2));
             swStat.setChecked(drawOff);
             swStat.setTrackTintList(new android.content.res.ColorStateList(
@@ -1636,8 +1636,8 @@ public class SettingsBinder {
             TextView cap = new TextView(act);
             cap.setText("按钮 " + (i + 1));
             cap.setTextColor(color(R.color.tx));
-            cap.setTextSize(12.5f);
-            cap.setTypeface(Typeface.DEFAULT_BOLD);
+            cap.setTextSize(12);
+            cap.setTypeface(null, Typeface.BOLD);
             cap.setPadding(0, i == 0 ? 0 : dp(14), 0, 0);
             btnBox.addView(cap);
 
@@ -2076,8 +2076,8 @@ public class SettingsBinder {
         TextView t = new TextView(act);
         t.setText(title);
         t.setTextColor(color(R.color.tx));
-        t.setTextSize(13.5f);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextSize(14);
+        t.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams lp0 = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp0.topMargin = dp(18);

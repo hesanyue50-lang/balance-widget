@@ -360,7 +360,7 @@ public class SettingsActivity extends Activity {
 
             Switch swCard = new Switch(this);
             swCard.setText("卡片");
-            swCard.setTextSize(11);
+            swCard.setTextSize(11.5f);
             swCard.setTextColor(getColor(R.color.tx2));
             swCard.setChecked(ak.hideCard);
             swCard.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
@@ -374,7 +374,7 @@ public class SettingsActivity extends Activity {
 
             Switch swStat = new Switch(this);
             swStat.setText("统计");
-            swStat.setTextSize(11);
+            swStat.setTextSize(11.5f);
             swStat.setTextColor(getColor(R.color.tx2));
             swStat.setChecked(!ak.draw);   // 开关语义=「在统计中隐藏」
             swStat.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
@@ -902,7 +902,7 @@ public class SettingsActivity extends Activity {
         TextView t2 = new TextView(this);
         t2.setText(sub.toString());
         t2.setTextColor(getColor(R.color.tx3));
-        t2.setTextSize(11);
+        t2.setTextSize(11.5f);
         col.addView(t2);
         row.addView(col);
 

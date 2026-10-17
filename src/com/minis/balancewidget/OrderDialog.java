@@ -135,7 +135,7 @@ public final class OrderDialog {
     private static TextView arrow(Activity a, String sym, boolean enabled, View.OnClickListener l) {
         TextView t = new TextView(a);
         t.setText(sym);
-        t.setTextSize(15);
+        t.setTextSize(16);
         t.setGravity(Gravity.CENTER);
         t.setWidth(dp(a, 44));
         t.setHeight(dp(a, 40));

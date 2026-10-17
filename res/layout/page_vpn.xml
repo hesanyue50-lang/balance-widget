@@ -147,7 +147,7 @@
                 android:layout_weight="1"
                 android:text="节点"
                 android:textColor="@color/tx"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -177,7 +177,7 @@
             android:paddingBottom="9dp"
             android:text="策略组：—"
             android:textColor="@color/tx"
-            android:textSize="12.5sp" />
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/node_hint"

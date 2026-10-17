@@ -1281,7 +1281,7 @@ public class MainActivity extends Activity {
             wrap.setPadding(dp(2), dp(10), dp(2), 0);
 
             final TextView head = new TextView(this);
-            head.setTextSize(12.5f);
+            head.setTextSize(12);
             head.setTextColor(getColor(R.color.tx3));
             head.setPadding(dp(6), dp(8), dp(6), dp(8));
             head.setBackgroundResource(R.drawable.mini_btn_border);

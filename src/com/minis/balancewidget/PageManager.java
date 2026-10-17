@@ -81,7 +81,7 @@ public final class PageManager {
                     nm.setText(PageStore.nameOf(key)
                             + (isHome ? "   ★主页" : "")
                             + (hidden ? "   （已隐藏）" : ""));
-                    nm.setTextSize(13.5f);
+                    nm.setTextSize(14);
                     nm.setTextColor(hidden ? 0xFF8A94A3 : 0xFF39424F);
                     nm.setTypeface(null, isHome ? Typeface.BOLD : Typeface.NORMAL);
                     col.addView(nm);
@@ -183,7 +183,7 @@ public final class PageManager {
     private static TextView arrow(Activity a, String sym, boolean enabled, View.OnClickListener l) {
         TextView t = new TextView(a);
         t.setText(sym);
-        t.setTextSize(15);
+        t.setTextSize(16);
         t.setGravity(Gravity.CENTER);
         t.setWidth(dp(a, 42));
         t.setHeight(dp(a, 38));

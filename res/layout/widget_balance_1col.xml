@@ -31,7 +31,7 @@
             android:singleLine="true"
             android:text="@string/widget_title"
             android:textColor="@color/tx2"
-            android:textSize="11sp"
+            android:textSize="11.5sp"
             android:textStyle="bold" />
 
         <ImageView

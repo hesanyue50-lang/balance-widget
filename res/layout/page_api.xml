@@ -41,7 +41,7 @@
             android:layout_marginTop="3dp"
             android:text="@string/tap_refresh"
             android:textColor="@color/tx3"
-            android:textSize="11sp" />
+            android:textSize="11.5sp" />
     </LinearLayout>
 
     <!-- 平台卡片容器（动态填充） -->

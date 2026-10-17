@@ -173,7 +173,7 @@ public class VpnBinder {
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
                 t = new TextView(act);
-                t.setTextSize(13.5f);
+                t.setTextSize(14);
                 col.addView(t);
 
                 d = new TextView(act);
@@ -355,7 +355,7 @@ public class VpnBinder {
         sb.append("  ·  剩余 ").append(fmtBytes(sub.leftBytes()));
         if (sub.expire > 0) sb.append("  ·  ").append(fmtExpire(sub.expire)).append(" 到期");
         t.setText(sb.toString());
-        t.setTextSize(11f);
+        t.setTextSize(11.5f);
         t.setTextColor(act.getColor(R.color.tx3));
         t.setPadding(0, dp(4), 0, 0);
         wrap.addView(t);
@@ -505,13 +505,13 @@ public class VpnBinder {
         row.setPadding(0, dp(7), 0, 0);
 
         TextView kt = new TextView(act);
-        kt.setTextSize(12.5f);
+        kt.setTextSize(12);
         kt.setTextColor(act.getColor(R.color.tx2));
         kt.setWidth(dp(72));
         row.addView(kt);
 
         TextView vt = new TextView(act);
-        vt.setTextSize(12.5f);
+        vt.setTextSize(12);
         vt.setTextColor(act.getColor(R.color.tx));
         row.addView(vt);
 
@@ -526,14 +526,14 @@ public class VpnBinder {
 
         TextView kt = new TextView(act);
         kt.setText(k);
-        kt.setTextSize(12.5f);
+        kt.setTextSize(12);
         kt.setTextColor(act.getColor(R.color.tx2));
         kt.setWidth(dp(72));
         row.addView(kt);
 
         TextView vt = new TextView(act);
         vt.setText(v);
-        vt.setTextSize(12.5f);
+        vt.setTextSize(12);
         vt.setTextColor(act.getColor(R.color.tx));
         row.addView(vt);
 
@@ -622,7 +622,7 @@ public class VpnBinder {
 
             TextView nm = new TextView(act);
             nm.setText(sub.name + (on ? "   使用中" : ""));
-            nm.setTextSize(13.5f);
+            nm.setTextSize(14);
             nm.setTextColor(act.getColor(on ? R.color.accent : R.color.tx));
             if (on) nm.setTypeface(null, Typeface.BOLD);
             col.addView(nm);
@@ -949,7 +949,7 @@ public class VpnBinder {
             row.addView(nm);
 
             Switch sw = new Switch(act);
-            sw.setTextSize(11);
+            sw.setTextSize(11.5f);
             sw.setChecked(Clash.platformViaProxy(act, plat, p != null && p.foreign));
             sw.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
@@ -1119,7 +1119,7 @@ public class VpnBinder {
 
         TextView note = new TextView(act);
         note.setText("开启后，打开应用时会自动检查并更新（最快每 6 小时一次）");
-        note.setTextSize(11);
+        note.setTextSize(11.5f);
         note.setTextColor(act.getColor(R.color.tx3));
         p.addView(note);
 
