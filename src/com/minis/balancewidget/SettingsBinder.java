@@ -2440,6 +2440,127 @@ public class SettingsBinder {
      * 「添加成功，但设置页和主界面都看不到它」。两个现象一个根因。
      */
     /**
+     * 模板选择：三层引导，确保用户知道"模板能做什么 / 哪个能自动查 / 接下来干什么"。
+     *
+     * 设计依据：模板本身只是"预填元数据"，但用户很容易以为"选了就能用"。
+     * 所以第一次点进来先讲清边界，列表里标出能力，选中后再给分步动作。
+     */
+    private void showTemplatePicker(final Runnable after) {
+        SharedPreferences sp = act.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+        boolean seen = sp.getBoolean("tpl_intro_seen", false);
+        if (seen) { templateList(after); return; }
+
+        sp.edit().putBoolean("tpl_intro_seen", true).commit();
+        new AlertDialog.Builder(act)
+                .setTitle("模板是什么？")
+                .setMessage("模板会帮你**自动填好**：\n"
+                        + "　平台名称、币种、制式、控制台地址\n\n"
+                        + "但它**不会凭空变出余额** —— 余额接口不是行业标准，\n"
+                        + "大多数平台根本没有公开的「查余额」API。\n\n"
+                        + "所以模板分两种：\n"
+                        + "　✓ 可自动查余额：填了 Key 就能查（目前只有少数平台）\n"
+                        + "　仅记录：卡片显示「余额见控制台」，点一下跳到控制台自己看\n\n"
+                        + "选「仅记录」不会报错，也不会在卡片上显示红字。")
+                .setPositiveButton("开始选择", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { templateList(after); }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void templateList(final Runnable after) {
+        final PlatformTemplates.Tpl[] all = PlatformTemplates.ALL;
+        String[] names = new String[all.length];
+        for (int i = 0; i < all.length; i++) names[i] = PlatformTemplates.label(all[i]);
+
+        new AlertDialog.Builder(act)
+                .setTitle("选择平台")
+                .setItems(names, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int which) {
+                        addFromTemplate(all[which], after);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /**
+     * 按模板建平台。
+     *
+     * 关键：**没有确认端点的模板一律建成"静态卡"**（text 模式，url 留空）——
+     * 这样卡片显示「余额见控制台」而不是查询失败的红字。
+     * 用户填了接口地址后才真正去请求。
+     */
+    private void addFromTemplate(final PlatformTemplates.Tpl t, final Runnable after) {
+        final boolean auto = PlatformTemplates.autoQuery(t);
+        BalanceFetcher.Custom c = new BalanceFetcher.Custom();
+        c.name = t.name;
+        c.unit = t.unit;
+        c.console = t.console == null ? "" : t.console;   // 点卡片能直接跳过去
+        c.kind = auto ? t.kind : "asset";     // 静态卡不进总资产
+        if (auto) {
+            c.url = t.url;
+            c.path = t.paths;
+        } else {
+            c.url = "";                        // 不发请求
+            c.text = "余额见控制台";
+        }
+        List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
+        list.add(c);
+        BalanceFetcher.saveCustom(act, list);
+        renderCustoms();
+        renderKeys();
+        kick();
+
+        if (auto) {
+            new AlertDialog.Builder(act)
+                    .setTitle("✅ " + t.name + " 已添加")
+                    .setMessage("这个平台**可以自动查余额**，还差一步：填 API Key。\n\n"
+                            + "1. 打开控制台，复制 API Key\n"
+                            + "2. 回到这里，在这个平台下面点「添加 Key」\n"
+                            + "3. 粘进去保存 —— 之后下拉刷新就能看到余额了\n\n"
+                            + "控制台：" + t.console)
+                    .setPositiveButton("去填 Key", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface d, int w) {
+                            /* 滚到密钥区并提示：直接把用户送到该平台的 Key 分组 */
+                            scrollToKeys();
+                        }
+                    })
+                    .setNegativeButton("我知道了", null)
+                    .show();
+        } else {
+            new AlertDialog.Builder(act)
+                    .setTitle(t.name + " 已添加（仅记录）")
+                    .setMessage("这个平台**没有公开的余额接口**，所以卡片上会显示\n"
+                            + "「余额见控制台」，不会自动查余额、也不会报错。\n\n"
+                            + "用法：点卡片 → 直接打开控制台看余额。\n\n"
+                            + "如果你知道它的接口地址，可以点「编辑」填进去，\n"
+                            + "填了之后就会真的去查了。\n\n"
+                            + "控制台：" + t.console
+                            + (t.note != null && t.note.length() > 0 ? "\n\n" + t.note : ""))
+                    .setPositiveButton("去填接口地址", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface d, int w) {
+                            List<BalanceFetcher.Custom> l2 = BalanceFetcher.loadCustom(act);
+                            customDialog(l2.size() - 1);
+                        }
+                    })
+                    .setNegativeButton("就这样用", null)
+                    .show();
+        }
+        if (after != null) after.run();
+    }
+
+    /** 把用户带到密钥列表（填 Key 的地方） */
+    private void scrollToKeys() {
+        try {
+            View box = root.findViewById(R.id.key_fields);
+            if (box != null) box.requestFocus();
+            Toast.makeText(act, "在「API 密钥与平台」里找到该平台，点「添加 Key」",
+                    Toast.LENGTH_LONG).show();
+        } catch (Throwable ignored) { }
+    }
+
+    /**
      * 添加 / 编辑自定义平台（OpenAI 兼容接口）。
      *
      * ⚠️ 两处历史欠账，一次补齐：
@@ -2464,6 +2585,34 @@ public class SettingsBinder {
         final EditText eName = new EditText(act);
         eName.setHint("比如：我的自建网关");
         eName.setText(c0.name);
+
+        /* 「从模板选择」：常见平台的名称/控制台/单位一次填好。
+           余额端点不是行业标准（多数平台没公开余额 API），所以模板只保证
+           **确定的信息**，端点让用户按官方文档确认 —— 比盲加内置平台诚实得多。 */
+        if (!isEdit) {
+            /* 文案要点：说清"给什么"和"不给什么"，避免用户以为选了就能自动查 */
+            final TextView tpl = mkBtn("📋 从常见平台模板开始", color(R.color.accent));
+            tpl.setPadding(dp(12), dp(8), dp(12), dp(8));
+            tpl.setTextSize(13);
+            tpl.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { showTemplatePicker(null); }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = dp(6);
+            tpl.setLayoutParams(lp);
+            panel.addView(tpl);
+
+            TextView tplTip = new TextView(act);
+            tplTip.setText("自动填好名称、币种、控制台地址。\n"
+                    + "不会自动查余额 —— 多数平台没有公开的余额接口，\n"
+                    + "选「仅记录」会显示「余额见控制台」，点卡片跳过去看。");
+            tplTip.setTextColor(color(R.color.tx3));
+            tplTip.setTextSize(11.5f);
+            tplTip.setLineSpacing(dp(2), 1f);
+            tplTip.setPadding(dp(4), dp(6), dp(4), dp(10));
+            panel.addView(tplTip);
+        }
         eName.setMaxLines(1);
         addField(panel, "① 名称",
                 "显示在余额卡片和设置页列表里的名字。",
@@ -2494,6 +2643,15 @@ public class SettingsBinder {
                         + "留空时程序自动识别常见字段名（balance / amount / money 等）。",
                 ePath);
 
+        final EditText eConsole = new EditText(act);
+        eConsole.setHint("https://…（可留空）");
+        eConsole.setText(c0.console == null ? "" : c0.console);
+        eConsole.setMaxLines(1);
+        addField(panel, "⑤ 控制台地址（可留空）",
+                "点卡片 →「控制台」会打开这个地址，方便随时去看真实余额。\n"
+                        + "模板添加的平台这里已经填好了，想改就改。",
+                eConsole);
+
         /* 字段多了要能滚，否则小屏上「保存」够不着 */
         final android.widget.ScrollView scroll = new android.widget.ScrollView(act);
         scroll.addView(panel);
@@ -2508,6 +2666,7 @@ public class SettingsBinder {
                         c.url = eUrl.getText().toString().trim();
                         c.key = c0.key;      // Key 不在这里填，沿用旧值（一般为 ""）
                         c.path = ePath.getText().toString().trim();
+                        c.console = eConsole.getText().toString().trim();
                         /* 阈值不在这里设 —— 和 Key 一样，到「平台下面添加的密钥」里填 */
                         c.threshold = c0.threshold;
                         /* 保留旧值里没在这一屏露出的字段（单位/制式/后缀/静态文本），

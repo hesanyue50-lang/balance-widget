@@ -556,7 +556,7 @@ public class SettingsActivity extends Activity {
 
         final java.util.ArrayList<String> siteLabels = new java.util.ArrayList<String>();
         final java.util.ArrayList<String> siteUrls = new java.util.ArrayList<String>();
-        int nSites = BalanceFetcher.collectSites(platform, siteLabels, siteUrls);
+        int nSites = BalanceFetcher.collectSites(this, platform, siteLabels, siteUrls);
         if (nSites > 0) {
             TextView site = mkTextWrap("控制台",
                     getColor(R.color.tx2), 11f);

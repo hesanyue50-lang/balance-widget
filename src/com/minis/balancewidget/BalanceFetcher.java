@@ -386,6 +386,13 @@ public class BalanceFetcher {
                    "百炼控制台 → API-KEY 管理。计费走预付费资源包，用量与剩余额度在控制台查看",
                    "https://bailian.console.aliyun.com/",
                    "https://usercenter2.aliyun.com/finance/expense-report/expense-bill"),
+        /* PPIO 派欧云：端点实测存在（无效 key 返回 {"code":403,"reason":"INVALID_API_KEY"}），
+           成功时余额在 data.balance。2026-10-18 验证。 */
+        new Preset("ppio", "PPIO 派欧云", "https://api.ppio.com/v3/account/balance",
+                   "data.balance|balance|data.credit|credit", "CNY", "balance",
+                   "ppio.com → API 密钥。余额接口 /v3/account/balance",
+                   "https://ppio.com/user/balance",
+                   "https://ppio.com/user/balance"),
         new Preset("compshare", "优云智算", "https://api.compshare.cn/v1/user/balance",
                    BAL_PATHS, "CNY", "balance", "compshare.cn → API 密钥",
                    "https://www.compshare.cn/console",
@@ -478,11 +485,40 @@ public class BalanceFetcher {
      * 收集该平台的官网入口。控制台优先，充值页不同才另给一项。
      * 返回条数（0 = 没收录）。
      */
-    public static int collectSites(String platform,
+    public static int collectSites(Context ctx, String platform,
                                    java.util.List<String> labels,
                                    java.util.List<String> urls) {
         Preset p = presetOf(platform);
-        if (p == null) return 0;
+        if (p == null) {
+            /* 自定义平台 / 高级平台没有 Preset —— 用它们自己带的控制台地址。
+               没有就返回 0，调用方会提示"还没填控制台地址"。 */
+            String c = "";
+            try {
+                if (platform != null && platform.startsWith("custom")) {
+                    int idx = Integer.parseInt(platform.startsWith("custom:")
+                            ? platform.substring(7) : platform.substring(6));
+                    List<Custom> cs = loadCustom(ctx);
+                    if (idx >= 0 && idx < cs.size()) c = cs.get(idx).console;
+                } else if (platform != null && platform.startsWith("web")) {
+                    int idx = Integer.parseInt(platform.startsWith("web:")
+                            ? platform.substring(4) : platform.substring(3));
+                    List<WebCustom> ws = WebCustom.loadAll(ctx);
+                    if (idx >= 0 && idx < ws.size()) {
+                        /* 高级平台：取第 1 个按钮里看起来像控制台的地址 */
+                        for (int i = 0; i < 4; i++) {
+                            String u = ws.get(idx).btnUrls[i];
+                            if (u != null && u.startsWith("http")) { c = u; break; }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) { }
+            if (c != null && c.trim().length() > 0) {
+                labels.add("控制台");
+                urls.add(c.trim());
+                return urls.size();
+            }
+            return 0;
+        }
         String c = p.console == null ? "" : p.console.trim();
         String t = p.topup == null ? "" : p.topup.trim();
         if (c.length() > 0) {
@@ -522,6 +558,8 @@ public class BalanceFetcher {
         public String text = "";
         /** 低余额预警阈值（原币种，0 = 不预警） */
         public double threshold = 0;
+        /** 控制台地址（模板填的，或用户自己填）。点卡片 →「控制台」用它 */
+        public String console = "";
 
         /** 配置完备吗？—— 静态文本模式不用填 URL，其余要有 URL */
         public boolean ready() {
@@ -582,6 +620,7 @@ public class BalanceFetcher {
             o.put("suffix", c.suffix);
             o.put("text", c.text);
             o.put("threshold", c.threshold);
+            o.put("console", c.console == null ? "" : c.console);
         } catch (Exception ignored) { }
         return o;
     }
@@ -599,6 +638,7 @@ public class BalanceFetcher {
         c.suffix = o.optString("suffix", "");
         c.text = o.optString("text", "");
         c.threshold = o.optDouble("threshold", 0);
+        c.console = o.optString("console", "");
         return c;
     }
 

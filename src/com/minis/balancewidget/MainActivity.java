@@ -1796,7 +1796,7 @@ public class MainActivity extends Activity {
             openUrl(base + "/panel/");
             return;
         }
-        int n = BalanceFetcher.collectSites(platformOf(it), labels, urls);
+        int n = BalanceFetcher.collectSites(this, platformOf(it), labels, urls);
         if (n == 0) {
             android.widget.Toast.makeText(this, "这个平台还没收录官网地址",
                     android.widget.Toast.LENGTH_SHORT).show();
