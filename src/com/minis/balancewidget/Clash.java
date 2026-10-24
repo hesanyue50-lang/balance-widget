@@ -236,18 +236,35 @@ public final class Clash {
         return portAlive();
     }
 
-    /** 7890 端口是否有人在监听（只看「有没有代理可用」，不追究是谁起的） */
+    /** 端口探测结果的短缓存：一次刷新里 N 个平台线程各问一次，没必要真探 N 次 */
+    private static volatile long lastProbeAt = 0L;
+    private static volatile boolean lastProbeOk = false;
+
+    /**
+     * 7890 端口是否有人在监听（只看「有没有代理可用」，不追究是谁起的）。
+     *
+     * 结果缓存 1.5 秒：抓取时每个平台一个线程，都会问一次 isRunning()。
+     * 内核没跑时每次探测要等满 250ms 超时 —— 虽然线程是并发的，
+     * 但白建 N 个 socket 也没意义。缓存窗口刻意很短，
+     * 保证「刚点开加速」能在两秒内被识别到。
+     */
     private static boolean portAlive() {
+        long now = System.currentTimeMillis();
+        if (now - lastProbeAt < 1500L) return lastProbeOk;
+        boolean ok = false;
         java.net.Socket s = null;
         try {
             s = new java.net.Socket();
             s.connect(new java.net.InetSocketAddress("127.0.0.1", PROXY_PORT), 250);
-            return true;
+            ok = true;
         } catch (Throwable t) {
-            return false;
+            ok = false;
         } finally {
             try { if (s != null) s.close(); } catch (Throwable ig) { }
         }
+        lastProbeOk = ok;
+        lastProbeAt = now;
+        return ok;
     }
 
     public static long uptimeMs() {

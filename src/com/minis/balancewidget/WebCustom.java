@@ -285,7 +285,23 @@ public class WebCustom {
      * 分流决定权照旧在 Clash.shouldProxy（平台级）。
      */
     public Result fetch(boolean viaProxy, int timeoutMs) throws Exception {
-        String raw = http(viaProxy, timeoutMs);
+        String raw;
+        try {
+            raw = http(viaProxy, timeoutMs);
+        } catch (Exception e) {
+            /* 高级平台走的是自己的 HttpURLConnection（为了支持任意请求头），
+               所以拿不到 BalanceFetcher 那条链的多地址/DoH 兜底。
+               至少补上「网络类异常立即重试一次」——
+               换网后旧连接失效、VPN 分流瞬时抖动，都靠这一下救回来。
+               服务器已应答（有响应码）的情况不重试：那是内容问题，重试没用。 */
+            if (e instanceof java.net.ConnectException
+                    || e instanceof java.net.SocketException
+                    || e instanceof java.net.SocketTimeoutException) {
+                raw = http(viaProxy, timeoutMs);
+            } else {
+                throw e;
+            }
+        }
         return extract(raw);
     }
 
@@ -541,6 +557,9 @@ public class WebCustom {
                 "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36");
         c.setRequestProperty("Accept", "*/*");
         c.setRequestProperty("Accept-Encoding", "identity");
+        /* 与 BalanceFetcher.getViaHost 同理：不复用连接。
+           网页抓取是低频操作，多一次握手换来"换网后第一次就能通"。 */
+        c.setRequestProperty("Connection", "close");
         /* 自定义请求头：多行「名字: 值」，允许覆盖上面的默认值 */
         if (headers != null && headers.trim().length() > 0) {
             String[] lines = headers.split("\n");

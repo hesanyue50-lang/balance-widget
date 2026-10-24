@@ -1250,7 +1250,14 @@ public class BalanceFetcher {
                 { "https://1.1.1.1/dns-query?name=", "&type=A", "true" },         // CF IP 兜底
                 { "https://223.5.5.5/resolve?name=", "&type=AAAA", "true" },      // 纯 IPv6 环境要 AAAA
         };
+        /* DoH 总预算：5 个源 × 4 秒 = 20 秒，而调用方的整体预算可能只有 3~8 秒。
+           没有这道闸，系统 DNS 一失败，刷新就会被 DoH 拖到 20 秒以上 ——
+           用户看到的是"卡住不动"，比直接报错还难受。
+           6 秒足够国内源跑两轮，跑不完就认输，让调用方按原错误处理。 */
+        final long dohDeadline = System.currentTimeMillis() + 6000L;
         for (int s = 0; s < sources.length; s++) {
+            long left = dohDeadline - System.currentTimeMillis();
+            if (left <= 500) break;                 // 预算耗尽，别再试后面的源
             boolean lax = "true".equals(sources[s][2]);
             try {
                 URL u = new URL(sources[s][0] + host + sources[s][1]);
@@ -1278,8 +1285,12 @@ public class BalanceFetcher {
                         });
                     } catch (Throwable ig) { }
                 }
-                c.setConnectTimeout(4000);
-                c.setReadTimeout(4000);
+                int tmo = (int) Math.min(2500, Math.max(500, dohDeadline - System.currentTimeMillis()));
+                c.setConnectTimeout(tmo);
+                c.setReadTimeout(tmo);
+                /* 同 getViaHost：DoH 是最需要它的时候才被调用（系统 DNS 已失败），
+                   这里再踩上"换网后旧连接失效"就等于兜底也废了。 */
+                c.setRequestProperty("Connection", "close");
                 c.setRequestProperty("accept", "application/dns-json");
                 int code = c.getResponseCode();
                 if (code != 200) { try { c.disconnect(); } catch (Throwable ig) { } continue; }
@@ -1384,6 +1395,8 @@ public class BalanceFetcher {
      * 而抓取本来就是「每个平台一个线程」，线程局部天然就是「按平台分流」的粒度。
      */
     private static final ThreadLocal<Boolean> VIA_PROXY = new ThreadLocal<Boolean>();
+    /** 重定向跳数（按线程计，防止 3xx 打转把预算耗光） */
+    private static final ThreadLocal<Integer> REDIRECT_HOPS = new ThreadLocal<Integer>();
 
     static boolean useProxyNow() {
         Boolean b = VIA_PROXY.get();
@@ -1464,15 +1477,29 @@ public class BalanceFetcher {
             }
             boolean chunked = false;
             String line;
+            String loc2 = null;
             while ((line = readLine(in2)) != null && line.length() > 0) {
                 String l = line.toLowerCase();
                 if (l.startsWith("transfer-encoding") && l.indexOf("chunked") >= 0) chunked = true;
                 else if (l.startsWith("subscription-userinfo")) captureUserInfo(line);
+                else if (l.startsWith("location:")) loc2 = line.substring(9).trim();
             }
             String body = chunked ? readChunked(in2) : readRest(in2);
             LAST_BODY_INFO = "代理 chunked=" + chunked
                     + " len=" + body.length() + " nl=" + countNl(body);
             if (code < 200 || code >= 300) {
+                /* 与直连路径一致：3xx 跟一次，别把"换地址"当成"失败" */
+                if (code >= 300 && code < 400 && loc2 != null && loc2.startsWith("http")) {
+                    int hops = REDIRECT_HOPS.get() == null ? 0 : REDIRECT_HOPS.get().intValue();
+                    if (hops >= 3) throw new StatusException("重定向次数过多 (" + code + ")");
+                    REDIRECT_HOPS.set(Integer.valueOf(hops + 1));
+                    try {
+                        Log.i(TAG, "  跟随重定向(代理 " + code + ") → " + loc2);
+                        return get(loc2, bearer, cookie, Math.max(2500, timeoutMs));
+                    } finally {
+                        REDIRECT_HOPS.set(Integer.valueOf(hops));
+                    }
+                }
                 if (code == 401 || code == 403) throw new StatusException("Key 无效或未授权 (" + code + ")");
                 if (code == 429) throw new StatusException("请求过于频繁 (429)");
                 throw new StatusException("HTTP " + code);
@@ -1521,15 +1548,32 @@ public class BalanceFetcher {
             }
             boolean chunked = false;
             String line;
+            String loc = null;
             while ((line = readLine(in)) != null && line.length() > 0) {
                 String l = line.toLowerCase();
                 if (l.startsWith("transfer-encoding") && l.indexOf("chunked") >= 0) chunked = true;
                 else if (l.startsWith("subscription-userinfo")) captureUserInfo(line);
+                else if (l.startsWith("location:")) loc = line.substring(9).trim();
             }
             String body = chunked ? readChunked(in) : readRest(in);
             LAST_BODY_INFO = "直连 chunked=" + chunked
                     + " len=" + body.length() + " nl=" + countNl(body);
             if (code < 200 || code >= 300) {
+                /* 3xx 跟一次：平台换域名/换路径时会先回 301/308。
+                   以前这里直接把 "HTTP 301" 当错误抛出去，用户看到的就是
+                   "接口地址不存在"式的莫名失败 —— 而其实服务端只是让你换个地址。
+                   跳数用 ThreadLocal 限制（最多 3 跳），防止 A→B→A 打转。 */
+                if (code >= 300 && code < 400 && loc != null && loc.startsWith("http")) {
+                    int hops = REDIRECT_HOPS.get() == null ? 0 : REDIRECT_HOPS.get().intValue();
+                    if (hops >= 3) throw new StatusException("重定向次数过多 (" + code + ")");
+                    REDIRECT_HOPS.set(Integer.valueOf(hops + 1));
+                    try {
+                        Log.i(TAG, "  跟随重定向(" + code + ") → " + loc);
+                        return get(loc, bearer, cookie, Math.max(2500, timeoutMs));
+                    } finally {
+                        REDIRECT_HOPS.set(Integer.valueOf(hops));
+                    }
+                }
                 if (code == 401 || code == 403) throw new StatusException("Key 无效或未授权 (" + code + ")");
                 if (code == 404) throw new StatusException("接口地址不存在 (404)");
                 if (code == 429) throw new StatusException("请求过于频繁 (429)");
@@ -1997,8 +2041,18 @@ public class BalanceFetcher {
             diag(ctx, "后台精简刷新：跳过汇率查询，用缓存 " + res.rate);
         } else
         try {
-            String j = get(RATE_URL,
-                           null, Math.min(timeoutMs, 3000));
+            /* 汇率源在境外（api.frankfurter.dev）。之前这里没设代理标志，
+               于是无论用户怎么配分流，汇率请求永远是直连 —— 墙内基本必失败，
+               只能一直吃缓存。按"境外"走一次正规分流判断。 */
+            boolean rateViaProxy = Clash.enabled(ctx) && Clash.isRunning()
+                    && Clash.shouldProxy(ctx, "rate", true);
+            if (rateViaProxy) VIA_PROXY.set(Boolean.TRUE);
+            String j;
+            try {
+                j = get(RATE_URL, null, Math.min(timeoutMs, 3000));
+            } finally {
+                if (rateViaProxy) VIA_PROXY.remove();
+            }
             JSONObject r = new JSONObject(j).optJSONObject("rates");
             if (r != null) {
                 double v = num(r, "CNY");
