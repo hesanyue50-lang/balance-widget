@@ -982,6 +982,21 @@ public class BalanceFetcher {
                 } catch (Exception e2) {
                     tried.append(ip).append('=').append(e2.getClass().getSimpleName()).append("+retry; ");
                 }
+            } catch (java.net.ConnectException ce) {
+                /* 连接被拒（RST）：多数情况是"这个 IP 从当前网络够不着"，换地址才有意义。
+                   但在 VPN/tun 环境下，内核瞬时抽风也会 RST 一批本来能通的连接 ——
+                   立即失败不耗预算，同地址白捡一次重试很划算。 */
+                Log.w(TAG, "  ❌ " + ip + " 连接被拒，重试一次");
+                long left2 = deadline - System.currentTimeMillis();
+                if (left2 <= 400) { tried.append(ip).append("=拒绝且预算尽; "); break; }
+                try {
+                    String r2 = getViaIp(ordered.get(i), host, port, https, path, bearer, cookie,
+                                         (int) Math.min(per, left2));
+                    Log.i(TAG, "  ✅(重试) " + ip);
+                    return r2;
+                } catch (Exception e2) {
+                    tried.append(ip).append('=') .append(e2.getClass().getSimpleName()).append("+retry; ");
+                }
             } catch (Exception e) {
                 Log.w(TAG, "  ❌ " + ip + " " + (System.currentTimeMillis() - t0) + "ms: " + e);
                 /* 把每个地址的失败原因攒进异常消息 —— logcat 在很多 ROM 上读不到（本机就是），
@@ -1010,6 +1025,20 @@ public class BalanceFetcher {
                 ordered = extra;
                 continue;
             }
+        }
+        /* 直连与 DoH 全部崩溃的最后兜底：走本地代理。
+           最常见的场景是「用户自己开着 VPN」—— tun 接管流量后，
+           运营商 CDN 的 IP 路由可能被 VPN 内核处理得不干净（一片 ConnectException），
+           而本 App 的代理走 127.0.0.1 回环（回环流量不进任何 tun），
+           内核再从物理网络出去 —— 与直连是完全不同的路径，经常能活。
+           只对「原本按分流规则不该走代理」的请求兜底：该走代理的早就走过一遍了，
+           再来一次纯属浪费预算。 */
+        if (!forceDirect && !useProxyNow() && Clash.proxyAlive()) {
+            try {
+                diag(null, "直连与 DoH 全失败，兜底走本地代理 " + host);
+                return getThroughProxy(host, port, https, path, bearer, cookie,
+                                       Math.max(2500, timeoutMs / 2));
+            } catch (Throwable ig) { /* 代理也不通 —— 往下抛直连的原始错误 */ }
         }
         throw new Exception("所有地址均失败 [" + (tried.length() == 0 ? "无" : tried.toString().trim()) + "]");
         }
@@ -1111,6 +1140,14 @@ public class BalanceFetcher {
                         + "可开启网络加速，或切到 WiFi 再试";
             }
             return "域名解析失败（DNS 被干扰或网络未就绪）——可尝试开启网络加速，或稍后下拉重试";
+        }
+        if (e instanceof java.net.ConnectException || m.contains("ConnectException")) {
+            /* 连接被拒 ≠ 服务器挂了：几乎都是"解析到的 IP 从当前出口够不着"。
+               开着 VPN 时国内平台一片 ConnectException，就是 tun 分流后
+               CDN 路由不匹配的典型症状 —— 提示要直接告诉用户怎么解。 */
+            return "连接被拒 —— 解析出的服务器地址从当前网络够不着。"
+                    + "若开着 VPN：这是分流后路由不匹配的典型症状，"
+                    + "可把 VPN 分流设为「绕行国内地址」，或暂时关闭 VPN 再刷新";
         }
         if (e instanceof java.net.SocketTimeoutException || m.contains("timeout")) {
             /* 移动数据下大面积超时，最常见的原因不是"网慢"，而是**节点协议**：
