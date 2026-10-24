@@ -2131,6 +2131,24 @@ public class MainActivity extends Activity {
 
             if (it.ok) {
                 amount.setText(it.amount);
+                /* 余额位是 27sp 粗体，为数字设计。像「见控制台」这种提示语直接塞进去
+                   会撑破卡片（4 个字 ≈ 108dp），所以按内容自适应字号。
+                   ⚠️ 不能简单地"非数字就缩小" ——「免费」只有两个字，
+                   缩到 15sp 会显得莫名其妙地小，和旁边卡片的数字完全不成比例。
+                   按字数分级：≤3 字（免费 / —）跟数字同字号。 */
+                String av = it.amount == null ? "" : it.amount;
+                boolean numeric = av.matches("[¥$€]?[-\\d,.]+.*");
+                float amtSize;
+                if (numeric) {
+                    amtSize = av.length() > 10 ? 22f : 27f;
+                } else if (av.length() <= 3) {
+                    amtSize = 27f;          // 免费、— ：正常大小
+                } else if (av.length() <= 5) {
+                    amtSize = 19f;          // 见控制台、需登录
+                } else {
+                    amtSize = 15f;          // 需重新登录
+                }
+                amount.setTextSize(amtSize);
                 // 低于预警阈值 → 标红
                 amount.setTextColor(getColor(it.low ? R.color.danger : R.color.tx));
                 /* 单位挂在数字右下角：网关是「积分」，其他平台是货币（¥/$ 已在 amount 里，

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="534"
-    android:versionName="26.10.534">
+    android:versionCode="546"
+    android:versionName="26.10.546">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -102,6 +102,12 @@
         <activity
             android:name=".MimoLoginActivity"
             android:label="登录小米账号"
+            android:exported="false" />
+
+        <!-- OpenAI 同理：官方关掉了普通 Key 的余额接口，只能靠浏览器会话 -->
+        <activity
+            android:name=".OpenAILoginActivity"
+            android:label="登录 OpenAI 账号"
             android:exported="false" />
 
         <!-- 上次崩溃的提示页：独立且极轻（只读两个字符串画几个 TextView），

@@ -124,8 +124,12 @@ public final class Clash {
         if (MODE_ALL.equals(m) || MODE_APP.equals(m)) return true;
         /* 系统全局模式下，整机流量都已经进了 tun，本应用不必再走本地代理 ——
            否则本应用会「先连 127.0.0.1:7890，再被自己的 tun 抓一次」，
-           虽然回环不受影响，但绕一圈毫无意义。直接当直连处理，由 tun 兜住。 */
-        if (MODE_SYSTEM.equals(m)) return false;
+           虽然回环不受影响，但绕一圈毫无意义。直接当直连处理，由 tun 兜住。
+
+           ⚠️ 但 tun 不是永远在：换网、用户手动断开 VPN、系统回收服务都会让它消失，
+           而模式值还留在配置里。这时如果继续「当直连处理」，境外平台就是**裸奔直连**，
+           表现就是"怎么刷都不通"。所以这里要问一句 VPN 到底还在不在。 */
+        if (MODE_SYSTEM.equals(m)) return !ClashVpnService.isRunning();
         return platformViaProxy(c, platform, foreign);
     }
 
@@ -210,15 +214,39 @@ public final class Clash {
     // ---------- 运行状态 ----------
 
     public static boolean isRunning() {
-        if (proc == null) return false;
+        if (proc != null) {
+            try {
+                // exitValue() 只在进程已结束时返回，抛异常说明还活着
+                proc.exitValue();
+                return false;
+            } catch (IllegalThreadStateException alive) {
+                return true;
+            } catch (Throwable t) {
+                // 判断失败，往下走端口探测
+            }
+        }
+        /* proc 为 null 的两种情形，都必须靠端口探测才能判准：
+           · App 进程被系统回收后重启 —— 内存引用没了，但内核可能是活着的孤儿进程
+           · 内核是上一次会话启动的，本次进程根本没见过它
+
+           只看内存引用的后果很严重：判成「没在跑」→
+             ① 所有请求改走直连，境外平台必然全部失败（用户看到的就是"怎么刷都不通"）
+             ② 主界面还会重复启动内核，去抢一个已被占用的 7890 端口，启动必然失败
+           所以这里必须问端口，而不是问内存。 */
+        return portAlive();
+    }
+
+    /** 7890 端口是否有人在监听（只看「有没有代理可用」，不追究是谁起的） */
+    private static boolean portAlive() {
+        java.net.Socket s = null;
         try {
-            // exitValue() 只在进程已结束时返回，抛异常说明还活着
-            proc.exitValue();
-            return false;
-        } catch (IllegalThreadStateException alive) {
+            s = new java.net.Socket();
+            s.connect(new java.net.InetSocketAddress("127.0.0.1", PROXY_PORT), 250);
             return true;
         } catch (Throwable t) {
             return false;
+        } finally {
+            try { if (s != null) s.close(); } catch (Throwable ig) { }
         }
     }
 

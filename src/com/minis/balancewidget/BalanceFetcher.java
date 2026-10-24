@@ -125,6 +125,32 @@ public class BalanceFetcher {
     }
 
     /** MiMo 控制台余额接口（小米账号会话音鉴权，返回 {balance: 元}） */
+    /**
+     * OpenAI 登录态余额接口。
+     *
+     * 为什么走这个而不是 API：官方 2024 起关闭了普通 API Key 对
+     * dashboard/billing 的访问，只剩浏览器会话能查"剩余额度"。
+     * 所以这里和小米 MiMo 一样 —— 填 Cookie，用登录态去读。
+     *
+     * 实测（2026-10-18，走代理）：未登录请求返回 403（Cloudflare），
+     * 说明端点存在，带有效 Cookie 才能拿到 JSON。
+     */
+    public static final String OPENAI_CREDITS_URL =
+            "https://platform.openai.com/backend-api/dashboard/billing/credit_grants";
+
+    /** 填的是浏览器 Cookie 还是 API Key？ */
+    private static boolean looksLikeCookie(String v) {
+        if (v == null || v.length() < 16) return false;
+        if (v.startsWith("sk-")) return false;
+        return v.indexOf('=') >= 0 || v.indexOf(';') >= 0;
+    }
+
+    /** 只粘了 token 值时补上前缀，粘了整串就用原样 */
+    private static String openaiCookie(String v) {
+        if (v.indexOf('=') < 0) return "__Secure-next-auth.session-token=" + v;
+        return v;
+    }
+
     public static final String MIMO_BALANCE_URL =
             "https://platform.xiaomimimo.com/api/v1/balance";
     /** 登录页用的域（取 cookie 只认这个域） */
@@ -276,6 +302,11 @@ public class BalanceFetcher {
     public static String mimoBalanceRaw(String cookie, int timeoutMs) throws Exception {
         return get(MIMO_BALANCE_URL, null, cookie, timeoutMs);
     }
+
+    /** OpenAI 登录态取余额原始应答（给登录页做"登录成功"判定用） */
+    public static String openaiBalanceRaw(String cookie, int timeoutMs) throws Exception {
+        return get(OPENAI_CREDITS_URL, null, cookie, timeoutMs);
+    }
     private static final String TAG = "BalanceWidget";
 
     /**
@@ -386,6 +417,25 @@ public class BalanceFetcher {
                    "百炼控制台 → API-KEY 管理。计费走预付费资源包，用量与剩余额度在控制台查看",
                    "https://bailian.console.aliyun.com/",
                    "https://usercenter2.aliyun.com/finance/expense-report/expense-bill"),
+        /* OpenAI / Gemini：官方都没有"给普通 Key 用的余额接口"。
+           2025-10 社区确认：dashboard/billing/* 已不对普通 sk- Key 开放
+           （要么要浏览器 session key，要么要 Admin Key）。
+           所以这里做成"静态卡"：不请求、不报错，卡片显示「余额见控制台」。
+           OpenAI 若填 Admin Key（sk-admin-…），走 organization/costs 查本月已用。 */
+        new Preset("openai", "OpenAI", "https://api.openai.com/v1/dashboard/billing/subscription",
+                   "hard_limit_usd", "USD", "balance",
+                   "官方已关闭普通 Key 的余额查询。两种能用的填法：\n"
+                           + "· 浏览器 Cookie（推荐，能读剩余额度）\n"
+                           + "　 电脑登录 platform.openai.com → F12 → Network → 任意请求 → 复制 Cookie\n"
+                           + "· Admin Key（sk-admin- 开头，只能查本月已用）",
+                   "https://platform.openai.com/usage",
+                   "https://platform.openai.com/settings/organization/billing/overview"),
+        new Preset("gemini", "Google Gemini", "https://generativelanguage.googleapis.com/v1beta/models",
+                   "", "USD", "balance",
+                   "Google 没给个人开发者余额接口：AI Studio 是免费配额制（看的是每分钟/每天限额，不是余额），\n"
+                           + "付费走 Google Cloud 结算中心，要 OAuth 不是 Cookie。这张卡只做跳转。",
+                   "https://aistudio.google.com/app/apikey",
+                   "https://aistudio.google.com/"),
         /* PPIO 派欧云：端点实测存在（无效 key 返回 {"code":403,"reason":"INVALID_API_KEY"}），
            成功时余额在 data.balance。2026-10-18 验证。 */
         new Preset("ppio", "PPIO 派欧云", "https://api.ppio.com/v3/account/balance",
@@ -993,6 +1043,19 @@ public class BalanceFetcher {
      * （返回空或污染地址），失败提示要据此给出不同建议。
      * 在每次 fetch 开始时调一次即可，不做常驻监听（省电）。
      */
+    /**
+     * 上一次的网络指纹。换网（WiFi ↔ 移动数据、换 WiFi）时指纹会变。
+     *
+     * 为什么需要它：换网后**两个缓存都还在说旧话** ——
+     *   · DOH_CACHE 里存着旧网络解析出的 IP（TTL 5 分钟）
+     *   · InetAddress 的 JVM 级 DNS 缓存（Android 上 TTL 可以很长）
+     * 旧 IP 在新网络下多半不可达，于是"全部平台查不出来"，
+     * 等一会儿缓存过期、再刷新又好了 —— 用户看到的就是「要重试一次才通」。
+     */
+    private static volatile String lastNetFp = "";
+    /** 最近一次网络切换的时刻；60 秒内视为"刚换网"，解析策略要变 */
+    private static volatile long netChangedAt = 0L;
+
     public static void noteNetwork(Context c) {
         try {
             android.net.ConnectivityManager cm = (android.net.ConnectivityManager)
@@ -1002,11 +1065,30 @@ public class BalanceFetcher {
             if (ni == null || !ni.isConnected()) {
                 onCellular = false;
                 netDesc = "无网络";
+                /* 断网也算"网络状态变了"：飞行模式开关、移动数据关再开，
+                   指纹可能和之前一模一样，但底层连接和 DNS 早就换了。
+                   标记一下，恢复后 60 秒内走 DoH 重新解析，别用旧 IP。 */
+                netChangedAt = System.currentTimeMillis();
+                DOH_CACHE.clear();
                 return;
             }
             onCellular = ni.getType() == android.net.ConnectivityManager.TYPE_MOBILE;
             String sub = ni.getSubtypeName();
             netDesc = (onCellular ? "移动数据" : "WiFi") + (sub == null || sub.length() == 0 ? "" : "/" + sub);
+
+            /* 指纹 = 类型 + 子类型 + 网络名。换 WiFi 时 extraInfo(SSID) 也会变，
+               只比类型会漏掉「同一个 WiFi 换了另一个热点」这种情形。 */
+            String extra = ni.getExtraInfo() == null ? "" : ni.getExtraInfo();
+            String fp = ni.getType() + "|" + (sub == null ? "" : sub) + "|" + extra;
+            String prev = lastNetFp;
+            if (!fp.equals(prev)) {
+                lastNetFp = fp;
+                if (prev.length() > 0) {
+                    netChangedAt = System.currentTimeMillis();
+                    DOH_CACHE.clear();
+                    diag(c, "网络已切换（" + prev + " → " + fp + "），DNS 缓存已清");
+                }
+            }
         } catch (Throwable ig) { }
     }
 
@@ -1031,6 +1113,13 @@ public class BalanceFetcher {
             return "域名解析失败（DNS 被干扰或网络未就绪）——可尝试开启网络加速，或稍后下拉重试";
         }
         if (e instanceof java.net.SocketTimeoutException || m.contains("timeout")) {
+            /* 移动数据下大面积超时，最常见的原因不是"网慢"，而是**节点协议**：
+               Hysteria2 / QUIC 这类走 UDP 的节点，很多运营商直接限速或丢包，
+               WiFi 下好好的，一切到流量就全超时。这个提示能省掉大量瞎试。 */
+            if (onCellular) {
+                return "连接超时 —— 当前是移动数据。若加速节点用的是 Hysteria2/QUIC 等 UDP 协议，"
+                        + "运营商可能限制，换个 TCP 节点（VMess/VLESS/Trojan）试试";
+            }
             return "连接超时 —— 网络慢或该平台服务繁忙，稍后重试";
         }
         if (m.contains("SSLHandshakeException") || m.contains("SSL")
@@ -1057,13 +1146,18 @@ public class BalanceFetcher {
      * 兜底成功后整个请求就能继续走直连，不用非开代理不可。
      */
     private static void resolve(String host, List<InetAddress> v4, List<InetAddress> v6) {
-        try {
-            InetAddress[] all = InetAddress.getAllByName(host);
-            for (int i = 0; i < all.length; i++) {
-                if (all[i] instanceof Inet4Address) v4.add(all[i]);
-                else if (all[i] instanceof Inet6Address) v6.add(all[i]);
-            }
-        } catch (Exception ignore) { }
+        /* 刚换网 → 系统 DNS 缓存里还是旧网络的 IP，直接用它只会连到不可达地址。
+           这 60 秒内跳过系统解析、直接走 DoH（DoH 缓存也刚被清空，是干净的）。 */
+        boolean freshNet = System.currentTimeMillis() - netChangedAt < 60_000L;
+        if (!freshNet) {
+            try {
+                InetAddress[] all = InetAddress.getAllByName(host);
+                for (int i = 0; i < all.length; i++) {
+                    if (all[i] instanceof Inet4Address) v4.add(all[i]);
+                    else if (all[i] instanceof Inet6Address) v6.add(all[i]);
+                }
+            } catch (Exception ignore) { }
+        }
         if (v4.isEmpty() && v6.isEmpty()) {
             resolveDoh(host, v4, v6);
         }
@@ -1563,6 +1657,10 @@ public class BalanceFetcher {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestMethod(method == null ? "GET" : method);
+        /* 不复用连接：换网后连接池里的旧 socket 全部失效，第一次请求会写失败/读到 EOF，
+           表现就是"换网后第一次刷新全红、再刷一次才好"。
+           余额查询是低频操作，多一次 TLS 握手的代价（约 100-300ms）完全可以接受。 */
+        c.setRequestProperty("Connection", "close");
         String _acc2 = SUB_ACCEPT.get();
         c.setRequestProperty("Accept", _acc2 == null ? "application/json" : _acc2);
         String _ua2 = SUB_UA.get();
@@ -2376,11 +2474,19 @@ public class BalanceFetcher {
     private static void fillCustom(Context ctx0, Item it, Custom c, double rate, int t) throws Exception {
         /* 没填 URL：这个服务没有可查的额度（免费的魔搭），只作展示，一个请求都不发 */
         if (c.url == null || c.url.length() == 0) {
-            String shown = (c.text != null && c.text.length() > 0) ? c.text : "免费";
-            it.amount = shown;
+            /* 没填接口地址 = 静态卡：不发请求，直接显示 text（空则显示"免费"）。
+               ⚠️ 这里必须显式 ok=true —— Item.ok 默认是 false，
+               不设的话卡片会走失败样式（红字/报错态），
+               用户会以为"加了平台就坏了"。 */
+            boolean hasText = c.text != null && c.text.length() > 0;
+            it.ok = true;
+            it.amount = hasText ? c.text : "免费";
             it.cny = 0;
             it.bal = 0;
-            it.rows = shown;
+            it.low = false;                 // 余额 0 不等于"余额低"，别标红
+            it.rows = hasText
+                    ? "点卡片 → 控制台 查看\n（该平台没有公开的余额接口）"
+                    : "";
             return;
         }
         boolean usd = "USD".equals(it.tag);
@@ -2434,10 +2540,139 @@ public class BalanceFetcher {
                 c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH));
     }
 
+    /**
+     * OpenAI Admin Key 查本月已用金额。
+     *
+     * 接口：GET /v1/organization/costs?start_time=<本月1日>
+     * 返回按天分桶，每天若干 result，每个 result 有 amount.value —— 全部加起来。
+     *
+     * 注意：这是「已用」不是「余额」。官方没有给余额的接口，
+     * 所以卡片上必须写清"本月已用"，不能让用户以为是剩余额度。
+     */
+    private static double openaiMonthCost(String key, int t) {
+        try {
+            java.util.Calendar c = java.util.Calendar.getInstance();
+            c.set(java.util.Calendar.DAY_OF_MONTH, 1);
+            c.set(java.util.Calendar.HOUR_OF_DAY, 0);
+            c.set(java.util.Calendar.MINUTE, 0);
+            c.set(java.util.Calendar.SECOND, 0);
+            long start = c.getTimeInMillis() / 1000L;
+            String url = "https://api.openai.com/v1/organization/costs?start_time="
+                    + start + "&limit=180";
+            String body = get(url, key, t);
+            JSONObject o = new JSONObject(body);
+            JSONArray data = o.optJSONArray("data");
+            if (data == null) return Double.NaN;
+            double sum = 0;
+            for (int i = 0; i < data.length(); i++) {
+                JSONObject bucket = data.optJSONObject(i);
+                if (bucket == null) continue;
+                JSONArray rs = bucket.optJSONArray("results");
+                if (rs == null) continue;
+                for (int j = 0; j < rs.length(); j++) {
+                    JSONObject r = rs.optJSONObject(j);
+                    if (r == null) continue;
+                    JSONObject amt = r.optJSONObject("amount");
+                    if (amt != null) sum += amt.optDouble("value", 0);
+                }
+            }
+            return sum;
+        } catch (Throwable e) {
+            return Double.NaN;
+        }
+    }
+
     private static void fill(Context ctx, Item it, KeyStore.ApiKey apiKey, double rate, int t) throws Exception {
         String id = it.platform;              // 解析逻辑按「平台」选，不按 Key
         boolean usd = "USD".equals(it.tag);
         String key = apiKey != null ? apiKey.key : "";
+
+        /* Gemini：官方没有任何"查余额"的公开接口（Google Cloud Billing 要 OAuth+项目号，
+           不是一个 API Key 能干的）。所以直接返回静态卡 —— 不发请求、不报错，
+           卡片显示「余额见控制台」，点卡片能跳 aistudio。 */
+        if ("gemini".equals(id)) {
+            it.ok = true;
+            it.bal = 0;
+            it.cny = 0;
+            it.amount = "见控制台";
+            it.kind = "balance";
+            it.low = false;          // 不是"余额低"，别标红
+            it.rows = "Google 没有公开余额接口\n点卡片 → 控制台 查看用量";
+            return;
+        }
+
+        /* OpenAI：三种凭据，按填的内容自动分辨 ——
+           ① Admin Key（sk-admin-…）→ organization/costs，拿本月已用
+           ② 浏览器 Cookie（像 MiMo 那样登录态）→ backend-api/dashboard/billing/credit_grants
+              这是唯一能拿到"剩余额度"的路子：普通 API Key 官方已关闭查询
+           ③ 都没有 → 静态卡，不报错 */
+        if ("openai".equals(id)) {
+            String k = key == null ? "" : key.trim();
+            if (k.startsWith("sk-admin-") || k.startsWith("sk-proj-admin")) {
+                double used = openaiMonthCost(k, t);
+                if (!Double.isNaN(used)) {
+                    it.ok = true;
+                    it.bal = used;
+                    it.cny = 0;
+                    it.amount = money(used, true);
+                    it.kind = "asset";          // 不进总资产（这是"已用"不是余额）
+                    it.rows = "本月已用  " + money(used, true)
+                            + "\n（Admin Key 只能查到用量，余额请去控制台）";
+                    return;
+                }
+            } else if (looksLikeCookie(k)) {
+                String body;
+                try {
+                    body = get(OPENAI_CREDITS_URL, null, openaiCookie(k), Math.max(t, 12000));
+                } catch (StatusException se) {
+                    /* 401/403 多半是会话过期或 Cloudflare 拦了 */
+                    it.ok = true;
+                    it.noData = true;
+                    it.bal = 0;
+                    it.cny = 0;
+                    it.amount = "需重新登录";
+                    it.kind = "balance";
+                    it.low = false;
+                    it.rows = "OpenAI 登录态已过期或被拦截\n"
+                            + "重新复制一次浏览器 Cookie\n"
+                            + "（" + clip(se.getMessage(), 40) + "）";
+                    return;
+                }
+                diag(ctx, "OpenAI 余额应答 " + clip(body.replaceAll("\\s+", " "), 300));
+                JSONObject root = new JSONObject(body);
+                double avail = findNum(root, new String[] {
+                        "total_available", "totalAvailable", "available" });
+                if (Double.isNaN(avail)) avail = pick(root);
+                if (Double.isNaN(avail)) {
+                    throw new Exception("未识别余额字段，返回：" + clip(body.replaceAll("\\s+", " "), 140));
+                }
+                it.ok = true;
+                it.bal = avail;
+                it.cny = 0;
+                it.kind = "balance";
+                it.low = false;
+                it.amount = money(avail, true);
+                double granted = findNum(root, new String[] { "total_granted", "totalGranted" });
+                double used = findNum(root, new String[] { "total_used", "totalUsed" });
+                it.rows = "剩余  " + money(avail, true);
+                if (!Double.isNaN(granted) && !Double.isNaN(used)) {
+                    it.rows = "剩余  " + money(avail, true)
+                            + "\n已用  " + money(used, true)
+                            + " / " + money(granted, true);
+                }
+                return;
+            }
+            it.ok = true;
+            it.bal = 0;
+            it.cny = 0;
+            it.amount = "见控制台";
+            it.kind = "balance";
+            it.low = false;          // 不是"余额低"，别标红
+            it.rows = "填浏览器 Cookie 可读余额\n"
+                    + "（普通 API Key 查不到）\n"
+                    + "点卡片 → 控制台 查看";
+            return;
+        }
 
         /* WorkBuddy 网关：本机自建服务。
            流程 = 探活 → 取余额。

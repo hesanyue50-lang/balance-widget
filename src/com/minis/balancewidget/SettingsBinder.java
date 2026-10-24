@@ -793,6 +793,15 @@ public class SettingsBinder {
         eKey.setText(src.key);
         eKey.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         eKey.setTextSize(14);
+        /* 这两个平台官方不给普通 Key 查余额，要填浏览器 Cookie —— 提示得说清，
+           否则用户会拿 sk- 开头的 Key 反复试。Cookie 同样是凭据，仍然隐藏显示。 */
+        if ("openai".equals(platform)) {
+            eKey.setHint("粘贴浏览器 Cookie，或 Admin Key（sk-admin-…）");
+        } else if ("gemini".equals(platform)) {
+            eKey.setHint("这个平台不需要填（无余额接口）");
+        } else {
+            eKey.setHint("粘贴 API Key");
+        }
         panel.addView(eKey);
 
         /* ---------- 低余额预警阈值 ----------
