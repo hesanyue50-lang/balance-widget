@@ -251,11 +251,16 @@ public final class Clash {
     private static boolean portAlive() {
         long now = System.currentTimeMillis();
         if (now - lastProbeAt < 1500L) return lastProbeOk;
+        /* 主线程给更短的超时：本机回环连接正常时 <5ms 就返回，
+           80ms 已经非常宽裕；只有"端口确实没开"时才会等满。
+           设置页渲染路径上有十几处 isRunning()，不能让它们把 UI 卡住。 */
+        boolean onMain = android.os.Looper.myLooper() == android.os.Looper.getMainLooper();
+        int tmo = onMain ? 80 : 250;
         boolean ok = false;
         java.net.Socket s = null;
         try {
             s = new java.net.Socket();
-            s.connect(new java.net.InetSocketAddress("127.0.0.1", PROXY_PORT), 250);
+            s.connect(new java.net.InetSocketAddress("127.0.0.1", PROXY_PORT), tmo);
             ok = true;
         } catch (Throwable t) {
             ok = false;

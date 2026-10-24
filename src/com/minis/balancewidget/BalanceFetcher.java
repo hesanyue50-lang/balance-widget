@@ -1912,20 +1912,113 @@ public class BalanceFetcher {
      */
     private static final Object DIAG_LOCK = new Object();
 
+    /**
+     * 同步写一条诊断日志。
+     *
+     * **只给崩溃路径用**：崩溃线程马上就要死了，异步队列来不及刷盘。
+     * 常规路径一律走下面的 diag()，否则每次请求都要做几次同步磁盘 IO。
+     */
+    public static void diagNow(Context ctx, String msg) {
+        if (ctx == null) return;
+        synchronized (DIAG_LOCK) {
+            try {
+                java.io.File dir = ctx.getExternalFilesDir(null);
+                if (dir == null) return;
+                if (!dir.exists()) dir.mkdirs();
+                java.io.File fo = new java.io.File(dir, "diag.log");
+                if (fo.length() > 256 * 1024) fo.delete();
+                java.io.FileWriter w = new java.io.FileWriter(fo, true);
+                w.write(new java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+                            .format(new java.util.Date()) + "  " + msg + "\n");
+                w.close();
+            } catch (Throwable ignored) { }
+        }
+    }
+
+    /* ---------- 异步诊断日志 ----------
+       旧实现每次调用都：new SimpleDateFormat + stat 文件长度 + open + write + close，
+       而且全在一把全局锁里。抓取时每个平台线程都会打几条，20 个平台就是几十次
+       同步磁盘 IO 串行排队 —— 白占请求线程的时间。
+       现在改成"入队 + 后台单线程批量刷"：请求线程只做一次入队，IO 全部移出。 */
+    private static final java.util.concurrent.LinkedBlockingQueue<String> DIAG_Q =
+            new java.util.concurrent.LinkedBlockingQueue<String>(512);
+    private static volatile java.io.File diagDir = null;
+    private static volatile Thread diagWorker = null;
+
     public static void diag(Context ctx, String msg) {
         if (ctx == null) return;      // 少数深层调用点拿不到 Context，静默跳过即可
-        synchronized (DIAG_LOCK) {
         try {
-            java.io.File dir = ctx.getExternalFilesDir(null);
-            if (dir == null) return;
-            if (!dir.exists()) dir.mkdirs();
-            java.io.File fo = new java.io.File(dir, "diag.log");
-            if (fo.length() > 256 * 1024) fo.delete();
-            java.io.FileWriter w = new java.io.FileWriter(fo, true);
-            w.write(new java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
-                        .format(new java.util.Date()) + "  " + msg + "\n");
-            w.close();
+            if (diagDir == null) {
+                java.io.File d = ctx.getExternalFilesDir(null);
+                if (d == null) return;
+                diagDir = d;
+            }
+            String line = new java.text.SimpleDateFormat("MM-dd HH:mm:ss",
+                    java.util.Locale.US).format(new java.util.Date()) + "  " + msg;
+            if (!DIAG_Q.offer(line)) {      // 队列满（磁盘卡住）→ 丢最老的，别阻塞请求
+                DIAG_Q.poll();
+                DIAG_Q.offer(line);
+            }
+            ensureDiagWorker();
         } catch (Throwable ignored) { }
+    }
+
+    private static void ensureDiagWorker() {
+        Thread t = diagWorker;
+        if (t != null && t.isAlive()) return;
+        synchronized (DIAG_Q) {
+            t = diagWorker;
+            if (t != null && t.isAlive()) return;
+            t = new Thread(new Runnable() {
+                public void run() {
+                    StringBuilder buf = new StringBuilder(4096);
+                    java.text.SimpleDateFormat fmt =
+                            new java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US);
+                    while (true) {
+                        try {
+                            String first = DIAG_Q.poll(3, java.util.concurrent.TimeUnit.SECONDS);
+                            if (first == null) {
+                                if (buf.length() > 0) flushDiag(buf);
+                                continue;
+                            }
+                            buf.append(first).append('\n');
+                            String more;
+                            while (buf.length() < 6000 && (more = DIAG_Q.poll()) != null) {
+                                buf.append(more).append('\n');
+                            }
+                            if (buf.length() >= 2048) flushDiag(buf);
+                        } catch (InterruptedException ie) {
+                            return;
+                        } catch (Throwable ignored) { }
+                    }
+                }
+            }, "diag-writer");
+            t.setDaemon(true);
+            t.start();
+            diagWorker = t;
+        }
+    }
+
+    private static void flushDiag(StringBuilder buf) {
+        if (buf.length() == 0) return;
+        try {
+            synchronized (DIAG_LOCK) {
+                java.io.File d = diagDir;
+                if (d == null) return;
+                if (!d.exists()) d.mkdirs();
+                java.io.File fo = new java.io.File(d, "diag.log");
+                if (fo.length() > 256 * 1024) fo.delete();
+                java.io.FileWriter w = new java.io.FileWriter(fo, true);
+                try {
+                    w.write(buf.toString());
+                    w.flush();
+                } finally {
+                    try { w.close(); } catch (Throwable ig) { }
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            buf.setLength(0);      // 无论写没写成功都清空，避免同一条反复重试撑爆缓冲
         }
     }
 

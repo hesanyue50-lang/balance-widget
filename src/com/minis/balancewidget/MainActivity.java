@@ -121,28 +121,32 @@ public class MainActivity extends Activity {
              影响不外溢 → 打开 App 直接接上，不必每次手动点一下。
            - 系统全局：建的是接管整机的系统 VPN，还要弹授权框 ——
              替用户做这个决定不合适，留给他手动开。 */
-        BalanceFetcher.diag(this, "[自动启动] enabled=" + Clash.enabled(this)
-                + " running=" + Clash.isRunning() + " mode=" + Clash.mode(this));
-        if (Clash.enabled(this) && !Clash.isRunning()) {
-            if (!Clash.autoStartAllowed(this)) {
-                BalanceFetcher.diag(this, "全局代理模式，等待用户手动开启");
-            } else {
-            final Context c0 = this;
-            new Thread(new Runnable() {
-                public void run() {
-                    try {
-                        String sub = readText(new java.io.File(Clash.workDir(c0), "sub.yaml"));
-                        if (sub.length() > 0) {
-                            String err = Clash.start(c0, Clash.buildConfig(sub));
-                            BalanceFetcher.diag(c0, "自动启动加速：" + (err == null ? "成功" : err));
-                        }
-                    } catch (Throwable t) {
-                        BalanceFetcher.diag(c0, "自动启动加速异常 " + t);
+        /* 整段判断都放后台：Clash.isRunning() 现在会做一次端口探测
+           （内核没跑时要等满 250ms 超时），放主线程就是实打实的启动卡顿。
+           这段逻辑本身也不需要在 UI 线程上跑。 */
+        final Context c0 = this;
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    boolean en = Clash.enabled(c0);
+                    boolean running = Clash.isRunning();
+                    BalanceFetcher.diag(c0, "[自动启动] enabled=" + en
+                            + " running=" + running + " mode=" + Clash.mode(c0));
+                    if (!en || running) return;
+                    if (!Clash.autoStartAllowed(c0)) {
+                        BalanceFetcher.diag(c0, "全局代理模式，等待用户手动开启");
+                        return;
                     }
+                    String sub = readText(new java.io.File(Clash.workDir(c0), "sub.yaml"));
+                    if (sub.length() > 0) {
+                        String err = Clash.start(c0, Clash.buildConfig(sub));
+                        BalanceFetcher.diag(c0, "自动启动加速：" + (err == null ? "成功" : err));
+                    }
+                } catch (Throwable t) {
+                    BalanceFetcher.diag(c0, "自动启动加速异常 " + t);
                 }
-            }).start();
             }
-        }
+        }, "clash-autostart").start();
 
         /* 进 App 就先保活一次：会话多半在后台已经过期了，
            先续上再刷新，比让用户看到"登录过期"再手动登要顺得多。 */

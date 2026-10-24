@@ -117,7 +117,7 @@ public final class CrashGuard {
                     String stack = sw.toString();
 
                     /* ① 诊断日志照写（自家用） */
-                    BalanceFetcher.diag(app, "💥 崩溃 [" + t.getName() + "]\n" + stack);
+                    BalanceFetcher.diagNow(app, "💥 崩溃 [" + t.getName() + "]\n" + stack);
 
                     /* ② 用户可取的日志文件 + ③ 通知（要带上文件名 ——
                        MediaStore 路径拿不到真实 File，通知里至少得知道叫什么） */
@@ -145,7 +145,7 @@ public final class CrashGuard {
                 if (prev != null) prev.uncaughtException(t, e);
             }
         });
-        BalanceFetcher.diag(app, "崩溃捕获已安装（日志目录："
+        BalanceFetcher.diagNow(app, "崩溃捕获已安装（日志目录："
                 + logDir(app).getAbsolutePath() + "）");
     }
 
