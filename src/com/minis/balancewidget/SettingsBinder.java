@@ -739,14 +739,23 @@ public class SettingsBinder {
         return row;
     }
 
+    /**
+     * 设置页的小胶囊按钮。
+     *
+     * 上一版的问题：11.5sp + 底 #F1F3F7（与白卡只差 4%）+ 白色描边（白底不可见）
+     * —— 三者叠加的结果是「按钮和正文几乎分不出来」，用户根本不知道哪块能点。
+     * 现在：12.5sp、底色加深、1.2dp 深色描边、内边距加大，手指也更好按。
+     */
     private TextView mkBtn(String s, int c) {
         TextView b = new TextView(act);
         b.setText(s);
         b.setTextColor(c);
-        b.setTextSize(11.5f);
+        b.setTextSize(12.5f);
         b.setGravity(Gravity.CENTER);
         b.setBackgroundResource(R.drawable.mini_btn_border);
-        b.setPadding(dp(10), dp(5), dp(10), dp(5));
+        b.setPadding(dp(13), dp(7), dp(13), dp(7));
+        b.setClickable(true);
+        b.setFocusable(true);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.leftMargin = dp(6);

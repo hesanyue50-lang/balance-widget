@@ -11,19 +11,23 @@
     <color name="neu_dark">#E5E9EF</color>
     <color name="neu_sunken">#EEF0F4</color>
 
-    <color name="line">#13FFFFFF</color>
+    <color name="line">#14090C14</color>
     <color name="card_c">#FFFFFF</color>
-    <color name="btn_c">#F1F3F7</color>
+    <color name="btn_c">#E3EAF9</color>
     <color name="input_c">#EEF0F4</color>
     <color name="total_start">#EDF1FB</color>
     <color name="total_end">#E4EAF8</color>
 
     <color name="tx">#0B0E14</color>
-    <color name="tx2">#5A6272</color>
-    <color name="tx3">#656F7F</color>
+    <color name="tx2">#414A5C</color>
+    <color name="tx3">#55606F</color>
     <color name="tx_conv">#687283</color>
     <color name="tx_detail">#39424F</color>
     <color name="hint_c">#7C8698</color>
+
+    <!-- 按钮描边：比通用 line 稍重一点。按钮是"可点"的强信号，
+         边框必须比卡片分隔线更明确，否则用户分不清"这是按钮还是标签"。 -->
+    <color name="btn_border">#AEBEDF</color>
 
     <color name="accent">#4166F5</color>
     <color name="accent_tx">#FFFFFF</color>

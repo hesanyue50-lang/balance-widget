@@ -3,5 +3,8 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners android:radius="16dp" />
-    <solid android:color="@color/neu_surface" />
+    <!-- 纯白底 + 无描边 = 放在白色卡片上完全看不见。
+         补 1.2dp 描边，让它成为一个"能看出边界"的按钮。 -->
+    <solid android:color="@color/btn_c" />
+    <stroke android:width="1.2dp" android:color="@color/btn_border" />
 </shape>

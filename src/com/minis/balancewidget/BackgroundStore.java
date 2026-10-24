@@ -105,9 +105,15 @@ public final class BackgroundStore {
             in2.close();
             if (src == null) return false;
 
+            /* 必须 finally 关流：compress 抛异常时外层 catch(Throwable) 会吞掉错误，
+               但已经打开的 FileOutputStream 就再也关不掉了 —— 反复导入失败会攒句柄。 */
             FileOutputStream fo = new FileOutputStream(rawFile(c));
-            src.compress(Bitmap.CompressFormat.PNG, 100, fo);
-            fo.close();
+            try {
+                src.compress(Bitmap.CompressFormat.PNG, 100, fo);
+                fo.flush();
+            } finally {
+                try { fo.close(); } catch (Throwable ignored) { }
+            }
             src.recycle();
 
             setEnabled(c, true);

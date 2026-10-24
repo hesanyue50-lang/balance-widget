@@ -17,7 +17,8 @@
     <color name="line">#14FFFFFF</color>
     <!-- 卡片：半透明白叠加（≈ .035-.05 alpha），半透明描边由 card_bg drawable 负责 -->
     <color name="card_c">#0DFFFFFF</color>
-    <color name="btn_c">#14FFFFFF</color>
+    <color name="btn_c">#1FFFFFFF</color>
+    <color name="btn_border">#3DFFFFFF</color>
     <color name="input_c">#08FFFFFF</color>
     <color name="total_start">#141A2E</color>
     <color name="total_end">#0E1220</color>
