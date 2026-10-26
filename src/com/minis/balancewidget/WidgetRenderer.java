@@ -260,22 +260,26 @@ public final class WidgetRenderer {
         it.putExtra("widgetId", widgetId);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (android.os.Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
-        int req = code * 1000 + (widgetId % 1000);
+        /* 不能写成 code*1000 + (widgetId % 1000)：两个 appWidgetId 相差 1000 的倍数时
+           requestCode 会相撞，系统把它们的 PendingIntent 当成同一个
+           （FLAG_UPDATE_CURRENT 互相覆盖 extras）。code 只有 1/2/10/11，用 ×100 就够。 */
+        int req = widgetId * 100 + code;
         return PendingIntent.getBroadcast(ctx, req, it, flags);
     }
 
     private static void push(Context ctx, AppWidgetManager mgr, int id, RemoteViews v) {
-        boolean a = false, b = false;
+        boolean a = false;
         try {
             mgr.updateAppWidget(id, v);
             a = true;
         } catch (Throwable ignored) { }
-        try {
-            /* 再补一发按组件名的全量更新 —— 实测桌面有时会忽略按 id 的单发 */
-            mgr.updateAppWidget(new android.content.ComponentName(ctx,
-                    BalanceWidgetProvider.class), v);
-            b = true;
-        } catch (Throwable ignored) { }
-        BalanceFetcher.diag(ctx, "推送 id=" + id + " 单发=" + a + " 全量=" + b);
+        /* ⚠️ 这里原来还有一发 updateAppWidget(ComponentName, v) 做"兜底"，
+           但那个接口的语义是「把**这一份** RemoteViews 写给该 provider 的**所有实例**」。
+           而这份内容绑定的是当前 id 的 perPage、以及 PendingIntent 里的 widgetId ——
+           循环里每渲染一个实例就全量推一次，后一个把前一个盖掉，
+           最终所有组件都显示"最后一个被渲染的实例"的内容和 widgetId：
+           大小不同的两个组件会显示错误行数/页数，点击连击也串到别的实例上。
+           等于把已经修好的"多个小组件串号"从另一条路又引了回来。 */
+        BalanceFetcher.diag(ctx, "推送 id=" + id + (a ? " 成功" : " 失败"));
     }
 }

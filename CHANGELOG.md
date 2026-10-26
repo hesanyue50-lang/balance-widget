@@ -1,3 +1,41 @@
+## 26.10.573 · 2026-10-18
+
+### 逐行审查收尾：主界面 + 小组件又修 7 个
+
+**小组件（3 个高优先级）**
+
+- **多个小组件互相覆盖内容** —— `push()` 在按 id 单发之后又调了一次
+  `updateAppWidget(ComponentName, v)` 做"兜底"。但那个接口的语义是
+  「把**这一份** RemoteViews 写给该 provider 的**所有实例**」，而这份内容绑着当前 id 的
+  perPage 和 PendingIntent 里的 widgetId —— 循环里每渲染一个实例就全量推一次，
+  后一个把前一个盖掉。最终所有组件都显示"最后一个被渲染的实例"的内容和 widgetId，
+  大小不同的两个组件会显示错误行数/页数，点击连击也串到别的实例上。
+- **最后几页永远翻不到** —— `clampPage` 用 `r.items.size()` 算页数，
+  而渲染器按 `computeSlots` 补行后的**槽位数**算（槽位 ≥ 条目数）。
+  页数算小了，刷新/后台闹钟一回就把页码夹到少一页以上。
+- **窄组件上「下一页」只刷新不翻页** —— 渲染器硬编码 `cols = 2`，
+  Provider 却按 `colsFor()`（宽度 <260dp 返回 1）算槽位。两边页数不等，
+  点下一页被 `Math.min(pages-1, …)` 夹回。现在 `colsFor` 恒返回 2，与固定两列布局一致。
+- 顺带：requestCode 从 `code*1000 + widgetId%1000` 改成 `widgetId*100 + code`
+  （前者在 appWidgetId 相差 1000 的倍数时会撞，两个实例的 PendingIntent 被当成同一个）
+
+**主界面（1 个高 + 3 个中）**
+
+- **点「刷新这一项」会让其它卡片回退到几小时前** —— `refreshOne` 拿 `WidgetCache.read()`
+  （磁盘缓存）当基底重算。但那个缓存只有小组件刷新和这个方法本身会写，
+  平时可能是几小时前的快照：其它卡片全部回退、本次隐藏的卡片复活、`totalEstimated` 丢失。
+  改成以内存里的 `lastResult` 为基底。
+- **切到统计页会崩** —— `UsageChartView` 未判空就 `setData`（同函数其它 6 处控件都判了）
+- **刷新线程无 try/catch** —— `fetch`/`sampleIfDue`/`Alert.check`/`maybeAutoBackup`
+  任何一个抛异常，后台线程未捕获异常在 Android 上**直接杀进程**
+- **`loading` 可能永久卡住** —— UI 回调里 `if (isFinishing()) return;` 在 `loading = false`
+  **之前**，用户在刷新过程中退出，此后所有刷新都被 `if (loading) return` 挡掉，
+  下拉指示器也不消失，只能杀进程重开
+- 单卡刷新的总额改走 `recomputeTotals()`（统一 `countsInTotal` 口径），
+  不再把小组件页码写死成 0
+
+---
+
 ## 26.10.571 · 2026-10-18
 
 ### 再修 3 个（数据安全 + 泄漏）

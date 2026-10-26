@@ -30,15 +30,17 @@ public final class WidgetStyle {
     private WidgetStyle() { }
 
     /** 按实际宽度决定列数，窄于门槛就退化成单列 */
+    /**
+     * 列数恒为 2。
+     *
+     * 布局（widget_balance2.xml）就是固定两列，窄屏靠缩小字号自适应。
+     * 以前这里按宽度返回 1 或 2，导致两处算法打架：
+     * Provider 翻页时按 colsFor 算槽位数，渲染器却硬编码 cols=2 ——
+     * 窄组件（<260dp）上两边算出的页数不相等，
+     * 点「下一页」被 Math.min(pages-1, …) 夹回，表现为"点了只刷新、不翻页"。
+     */
     public static int colsFor(AppWidgetManager mgr, int id) {
-        try {
-            int wDp = mgr.getAppWidgetOptions(id)
-                        .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH);
-            if (wDp <= 0) return 2;
-            return wDp >= TWO_COL_MIN_WIDTH_DP ? 2 : 1;
-        } catch (Throwable t) {
-            return 2;
-        }
+        return 2;
     }
 
     public static float densityOf(AppWidgetManager mgr) {

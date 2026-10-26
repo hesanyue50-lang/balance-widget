@@ -408,7 +408,14 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     private static int clampPage(Context ctx, AppWidgetManager mgr,
                                  BalanceFetcher.Result r, int widgetId) {
         int perPage = WidgetStyle.capacityFor(mgr, widgetId);
-        int pages = Math.max(1, (r.items.size() + perPage - 1) / perPage);
+        /* 必须和渲染器用同一套算法（groupByKind + computeSlots 补行后的槽位数）。
+           以前这里用 r.items.size()，而槽位数 ≥ 条目数 —— 算出的页数偏小，
+           刷新/后台闹钟一回就把页码夹到少一页以上，最后几页永远到不了。
+           （注释里自己记着实测 items=6 但槽位=9。） */
+        int cols = WidgetStyle.colsFor(mgr, widgetId);
+        java.util.List<BalanceFetcher.Item> grouped = BalanceFetcher.groupByKind(r.items);
+        int slots = WidgetRenderer.computeSlots(grouped, cols, null, null);
+        int pages = Math.max(1, (slots + perPage - 1) / perPage);
         return Math.min(WidgetCache.page(ctx), pages - 1);
     }
 }

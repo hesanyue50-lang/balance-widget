@@ -1066,7 +1066,12 @@ public class MainActivity extends Activity {
         BalanceFetcher.diag(this, "stats 构建: 平台组=" + groups.size() + " 折线=" + series.size()
                 + " 明细长=" + detail.length() + " aks=" + aks.size());
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
-        chart.setData(series, showBars ? consDay : null, labels, showBars, showGrid, showLegend);
+        /* 必须判空：这个函数里其它 6 处控件全都判了，唯独这里没判 ——
+           某些设备/重打包后 findViewById 会返回 null，一切到统计页就 NPE 崩。
+           文件开头注释本身就记录过这个现象。 */
+        if (chart != null) {
+            chart.setData(series, showBars ? consDay : null, labels, showBars, showGrid, showLegend);
+        }
         statsSeries = series;
         statsLabels = labels;
         // 范围标签 / 下拉按钮文字
@@ -1581,6 +1586,10 @@ public class MainActivity extends Activity {
         final Context ctx = this;
         new Thread(new Runnable() {
             public void run() {
+                /* 整个线程体必须包 try/catch：fetch/sampleIfDue/Alert.check/maybeAutoBackup
+                   任何一个抛异常，后台线程未捕获异常在 Android 上会**直接杀进程**。
+                   而且没有 finally 复位 loading 的话，刷新会永久卡在"进行中"。 */
+                try {
                 final BalanceFetcher.Result r = BalanceFetcher.fetch(ctx, 12000);
                 // 到点在账本里落一条快照：这样即使桌面没摆小组件，统计页也有曲线
                 BalanceFetcher.sampleIfDue(ctx, r);
@@ -1594,8 +1603,12 @@ public class MainActivity extends Activity {
                         /* Activity 可能已经 finish/销毁（用户退出、转屏重建）——
                            这时再碰 UI 轻则无效、重则崩。老代码缺这道检查，
                            而抓取要跑好几秒，退出得刚好就会撞上。 */
-                        if (isFinishing() || isDestroyed()) return;
+                        /* loading 必须先复位再判销毁：反过来（先 return 再复位）的话，
+                           用户在刷新过程中退出，loading 永远留在 true ——
+                           此后所有自动/手动刷新都被 if (loading) return 挡掉，
+                           下拉指示器也不再消失，只能杀进程重开。 */
                         loading = false;
+                        if (isFinishing() || isDestroyed()) return;
                         render(r);
                         if (statsRebuildAfterRefresh && PageStore.K_STATS.equals(curKey)) {
                             statsRebuildAfterRefresh = false;
@@ -1607,6 +1620,15 @@ public class MainActivity extends Activity {
                         if (!silent) Anim.pulse(tTotal);
                     }
                 });
+                } catch (Throwable t) {
+                    BalanceFetcher.diag(ctx, "刷新线程异常 " + t);
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            loading = false;
+                            hidePullRefresh();
+                        }
+                    });
+                }
             }
         }).start();
     }
@@ -1842,26 +1864,35 @@ public class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     public void run() {
                         if (isFinishing() || isDestroyed()) return;
-                        BalanceFetcher.Result r = WidgetCache.read(MainActivity.this);
-                        if (r != null) {
-                            for (int i = 0; i < r.items.size(); i++) {
-                                if (r.items.get(i).id.equals(fresh.id)) {
-                                    fresh.low = r.items.get(i).low;   // 预警判定保持不变
-                                    r.items.set(i, fresh);
+                        /* ⚠️ 基底必须是内存里的 lastResult，不是磁盘缓存：
+                           WidgetCache 只有小组件刷新和本方法会写，平时可能是几小时前的快照。
+                           拿它当基底，点一次「刷新这一项」会把其它卡片全部回退到旧值、
+                           用户本次隐藏掉的卡片也会复活、totalEstimated 丢失。
+                           只有内存结果不存在（刚进 App 还没全量刷过）才回退到缓存。 */
+                        BalanceFetcher.Result base = (lastResult != null)
+                                ? lastResult : WidgetCache.read(MainActivity.this);
+                        if (base != null) {
+                            for (int i = 0; i < base.items.size(); i++) {
+                                if (base.items.get(i).id.equals(fresh.id)) {
+                                    fresh.low = base.items.get(i).low;   // 预警判定保持不变
+                                    base.items.set(i, fresh);
                                     break;
                                 }
                             }
-                            // 重算总额与失败数
-                            double sum = 0;
                             int failed = 0;
-                            for (int i = 0; i < r.items.size(); i++) {
-                                BalanceFetcher.Item x = r.items.get(i);
-                                if (x.ok) sum += x.cny; else failed++;
+                            for (int i = 0; i < base.items.size(); i++) {
+                                if (!base.items.get(i).ok) failed++;
                             }
-                            r.totalCny = sum;
-                            r.failed = failed;
-                            WidgetCache.save(MainActivity.this, r, 0);
-                            render(r);
+                            base.failed = failed;
+                            /* 总额走统一口径（countsInTotal + 积分类按当前折算率补算）：
+                               以前这里用 if (x.ok) sum += x.cny，用户关掉某个积分平台
+                               「计入余额汇总」后，点一次单卡刷新总额就被算大。 */
+                            lastResult = base;
+                            recomputeTotals();
+                            /* 页码别写死 0：那是「小组件当前显示第几页」的共享状态，
+                               写 0 会让用户翻到第 2/3 页的小组件被重置回第 1 页。 */
+                            WidgetCache.save(MainActivity.this, base, WidgetCache.page(MainActivity.this));
+                            render(base);
                         }
                         android.widget.Toast.makeText(MainActivity.this,
                                 fresh.ok ? (fresh.label + "  " + fresh.amount)
