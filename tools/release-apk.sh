@@ -11,7 +11,9 @@
 # 前置：先 sh build.sh 编译出 APK；环境变量 GITHUB_TOKEN 必须可用。
 set -e
 
-SRC=/var/minis/mounts/AIWord/projects/balance-widget
+# 脚本自己所在的仓库根目录（不要再写死外部绝对路径 —— 曾经写死 AIWord 下的副本，
+# 结果源码改在 shared 里、脚本却去传旧副本的 APK，版本对不上）。
+SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SLUG=hesanyue50-lang/balance-widget
 APK=$SRC/com.minis.balancewidget.apk
 ASSET=BalanceWidget.apk
