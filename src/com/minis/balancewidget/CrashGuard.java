@@ -281,8 +281,13 @@ public final class CrashGuard {
                         + "（系统设置里给本应用开通知后，下次崩溃就能收到）");
                 return;
             }
-            nm.createNotificationChannel(new NotificationChannel(CHANNEL,
-                    "崩溃报告", NotificationManager.IMPORTANCE_HIGH));
+            /* 必须判版本：NotificationChannel 是 API 26 才有的类，
+               本项目 minSdk=24 —— Android 7.x 上直接 NoClassDefFoundError，
+               被外层 catch(Throwable) 吞掉，整条崩溃通知都发不出去。 */
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(new NotificationChannel(CHANNEL,
+                        "崩溃报告", NotificationManager.IMPORTANCE_HIGH));
+            }
 
             String where;
             if (f != null) {

@@ -162,6 +162,10 @@ public final class Anim {
      */
     public static void fade(View v) {
         if (v == null) return;
+        /* 必须先置 VISIBLE：布局里很多遮罩/浮层默认是 visibility="gone"
+           （busy_overlay 就是），对 GONE 的 View 做 alpha 动画毫无效果 ——
+           之前 Busy.show() 调这个，16 处调用全部白调，遮罩一次都没出现过。 */
+        v.setVisibility(View.VISIBLE);
         v.animate().cancel();
         v.setAlpha(0f);
         v.animate().alpha(1f).setDuration(180).start();

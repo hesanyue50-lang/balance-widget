@@ -422,6 +422,10 @@ public class WebCustom {
                 cur = ja.opt(idx);
                 continue;
             }
+            /* 必须先判类型：路径中途经过字符串/数字节点时，(JSONObject) 强转会抛
+               ClassCastException，而多候选路径（a|b）的第一个候选一抛异常就整段中断，
+               后面的候选根本没机会试。 */
+            if (!(cur instanceof JSONObject)) return null;
             JSONObject jo = (JSONObject) cur;
             if (!jo.has(seg)) return null;
             cur = jo.opt(seg);
@@ -525,7 +529,9 @@ public class WebCustom {
         String t = s.trim().replace(",", "").replace("，", "").replace(" ", "");
         if (t.length() == 0) return null;
         try { return Double.parseDouble(t); } catch (Exception e) { }
-        Matcher mm = Pattern.compile("-?\\d+(?:\\.\\d+)?").matcher(s);
+        /* 必须匹配 t（已去掉逗号/空格）而不是原文 s：
+           页面写 "1,234.56" 时，用原文只会匹配到开头的 "1" —— 余额差 1000 倍。 */
+        Matcher mm = Pattern.compile("-?\\d+(?:\\.\\d+)?").matcher(t);
         if (mm.find()) {
             try { return Double.parseDouble(mm.group()); } catch (Exception e) { }
         }
@@ -583,10 +589,16 @@ public class WebCustom {
                 c.setRequestProperty("Content-Type", "application/json");
             }
             c.setFixedLengthStreamingMode(b.length);
+            /* 必须 finally 关流：write/flush 抛异常时 os 不关，
+               连接会一直挂着（disconnect 在 getResponseCode 之后的 finally 里，
+               走不到那儿）—— 失败的 POST 请求会漏连接。 */
             OutputStream os = c.getOutputStream();
-            if (b.length > 0) os.write(b);
-            os.flush();
-            os.close();
+            try {
+                if (b.length > 0) os.write(b);
+                os.flush();
+            } finally {
+                try { os.close(); } catch (Throwable ig) { }
+            }
         }
         int code = c.getResponseCode();
         InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();

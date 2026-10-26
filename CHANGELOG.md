@@ -1,3 +1,23 @@
+## 26.10.569 · 2026-10-18
+
+### 逐行审查（续）：工具类又修 6 个
+
+- **Busy 遮罩从来没显示过**（高）—— `Anim.fade()` 只做 alpha 动画、从不 `setVisibility`，
+  而 `busy_overlay` 在布局里是 `visibility="gone"`。对 GONE 的 View 做 alpha 动画毫无效果，
+  **16 处 `Busy.*` 调用全部白调**：加载遮罩、按钮防重复点击的视觉反馈一次都没出现过。
+- **网页抓取的数字提取差 1000 倍** —— `toNumber` 兜底正则匹配的是**未去逗号**的原文，
+  页面写 "1,234.56" 时只匹配到开头的 "1"，余额显示成 1.0
+- **JSON 路径提取抛 ClassCastException** —— 路径中途经过字符串/数字节点时强转崩溃，
+  且多候选路径（`a|b`）第一个候选一抛异常就整段中断，后面的候选没机会试
+- **POST/PUT 请求流泄漏** —— `write`/`flush` 抛异常时 `OutputStream` 不关闭，
+  连接一直挂着（`disconnect` 在 `getResponseCode` 之后，走不到）
+- **崩溃通知在 Android 7 上完全发不出** —— `NotificationChannel` 是 API 26 才有的类，
+  本项目 minSdk=24，7.x 上直接 `NoClassDefFoundError` 被外层 catch 吞掉
+- **WebView 登录页退出后泄漏 Activity** —— 静态字段 `pending` 从不清空（`takePending()` 全工程无调用者），
+  一直持有宿主 Activity 及其整棵 View 树
+
+---
+
 ## 26.10.568 · 2026-10-18
 
 ### 🔬 逐行审查（6 组并行）—— 已修 30 个真 bug
