@@ -1,3 +1,14 @@
+## 26.10.589 · 2026-10-18
+
+### 文档与仓库整理
+
+- README 支持平台从 16 家更新到 **19 家**（补 PPIO 派欧云 / OpenAI / Google Gemini）
+- 新增「OpenAI：要填浏览器 Cookie，不是 API Key」说明节
+- 新增「代码质量」章节：记录这次逐行审查的范围与结果（46 个文件 / 91 个问题 / 修 90 个）
+- 审查方法论沉淀进 skill：`android-dev/reference/balance-widget/references/code-audit-method.md`
+
+---
+
 ## 26.10.588 · 2026-10-18
 
 ### 收尾：最后 20 个
