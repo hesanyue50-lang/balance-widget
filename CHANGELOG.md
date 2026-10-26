@@ -1,3 +1,15 @@
+## 26.10.590 · 2026-10-27
+
+### 修复：内置代理端口与 FlClash 冲突，导致 FlClash 连上后整机断网
+
+- **现象**：手机 FlClash 显示「已连接」，但所有网页打不开，连 `http://223.5.5.5` 这种纯 IP 也不通；同一订阅换其他 VPN 客户端正常。
+- **根因**（实测坐实）：本应用的内置 mihomo 常驻监听 `127.0.0.1:7890` —— 那正是 FlClash / Clash for Android 的默认 mixed-port。该内核还卡死了，`ss -lnt` 里 Recv-Q 长期积压不去 accept。FlClash 启动时内核 bind 7890 失败直接卡死，但它的 VPNService 已把 tun0 建好、默认路由全指向 tun0 → 整机流量进黑洞。
+- **修复**：`PROXY_PORT 7890 → 17890`、`API_PORT 9090 → 19090`，与主流客户端彻底错开。所有调用点都走 `Clash.PROXY_PORT` / `Clash.API_PORT` 常量，无其他硬编码残留。
+- **顺带**：同批排查中发现 sandbox 工具链的 clash DNS 端口 1053 也撞 FlClash，已挪到 1054。
+- 排障要点沉淀：判断 TUN 类 VPN 是否「假连接」，看 `ip -o link | grep tun` 与 `ip route get 8.8.8.8`；判断端口占用者看 `ss -lnte` 的 uid；Recv-Q 持续非 0 = 进程在 listen 却不 accept。Go 内核卡死不写 `logcat -b crash`。
+
+---
+
 ## 26.10.589 · 2026-10-18
 
 ### 文档与仓库整理

@@ -49,10 +49,17 @@ import java.net.Socket;
  */
 public final class Clash {
 
-    /** 本地混合代理端口（HTTP + SOCKS 共用一个口，mihomo 的 mixed-port） */
-    public static final int PROXY_PORT = 7890;
-    /** 控制 API 端口：查状态、看节点、触发订阅重载 */
-    public static final int API_PORT = 9090;
+    /**
+     * 本地混合代理端口（HTTP + SOCKS 共用一个口，mihomo 的 mixed-port）。
+     *
+     * ⚠️ 不能用 7890：那是 FlClash / Clash for Android 等客户端的默认端口。
+     * 本内核常驻监听 7890 时，FlClash 启动会发现端口被占，它的 mihomo 内核
+     * 直接卡死（bind 失败但 VPNService 的 tun0 已经建好）→ 整机流量进 tun 黑洞，
+     * 表现为「能 ping 通 IP、所有网页打不开」。2026-10-27 实测踩过。
+     */
+    public static final int PROXY_PORT = 17890;
+    /** 控制 API 端口：查状态、看节点、触发订阅重载（同样避开 FlClash 的 9090） */
+    public static final int API_PORT = 19090;
 
     private static final String K_SUB_URL = "clash_sub_url";
     private static final String K_ENABLED = "clash_enabled";
