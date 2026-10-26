@@ -275,6 +275,10 @@ public class WebLoginActivity extends Activity {
                 web = null;
             }
         } catch (Throwable ignored) { }
+        /* 静态回调必须清：takePending() 全工程没有调用者，
+           不清的话这个字段会一直持有宿主 Activity 及其整棵 View 树 ——
+           用户按返回键退出登录页就漏一个 Activity。 */
+        pending = null;
         super.onDestroy();
     }
 

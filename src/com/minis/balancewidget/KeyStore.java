@@ -69,6 +69,18 @@ public final class KeyStore {
         public String platform = "";     // 所属平台：deepseek / qiniu / custom:xxx
         public String label = "";        // 显示名：主力 / 备用 / 项目A
         public String key = "";          // 密钥（KeyVault 加密后存）
+        /**
+         * 原始密文（只在内存里，不参与序列化）。
+         *
+         * 用途：KeyVault.dec 失败时（换机、Keystore 被清、系统升级后密钥失效）
+         * 只能返回空串，和"从未配置"无法区分。此时如果照常 save，
+         * enc("")="" 会把磁盘上的原密文写没 —— 用户进设置页改任意一把 Key，
+         * 所有解不开的 Key 就被永久销毁，连换回原机的机会都没了。
+         * 保存时若 key 为空而 rawKey 非空，原样写回密文，不动它。
+         */
+        public String rawKey = "";
+        public String rawAccessKeyId = "";
+        public String rawAccessKeySecret = "";
         public String note = "";         // 用户备注
         public double budget = 0;        // 预算（消费制用；0 = 不设）
         public double threshold = 0;     // 低余额预警阈值（0 = 不预警）
@@ -234,14 +246,17 @@ public final class KeyStore {
                 k.id = o.optString("id", "");
                 k.platform = o.optString("platform", "");
                 k.label = o.optString("label", "");
-                k.key = KeyVault.dec(o.optString("key", ""));
+                k.rawKey = o.optString("key", "");
+                k.key = KeyVault.dec(k.rawKey);
                 k.note = o.optString("note", "");
                 k.budget = o.optDouble("budget", 0);
                 k.threshold = o.optDouble("threshold", 0);
                 k.draw = o.optBoolean("draw", true);
                 // 阿里云 AccessKey（新增字段）
-                k.accessKeyId = KeyVault.dec(o.optString("accessKeyId", ""));
-                k.accessKeySecret = KeyVault.dec(o.optString("accessKeySecret", ""));
+                k.rawAccessKeyId = o.optString("accessKeyId", "");
+                k.rawAccessKeySecret = o.optString("accessKeySecret", "");
+                k.accessKeyId = KeyVault.dec(k.rawAccessKeyId);
+                k.accessKeySecret = KeyVault.dec(k.rawAccessKeySecret);
                 k.planMode = o.optString("planMode", "balance");
                 k.hideCard = o.optBoolean("hideCard", false);
                 k.baseUrl = o.optString("baseUrl", "");
@@ -264,14 +279,21 @@ public final class KeyStore {
                 o.put("id", k.id);
                 o.put("platform", k.platform);
                 o.put("label", k.label);
-                o.put("key", KeyVault.enc(k.key));
+                /* 解不开（key 空但原来有密文）→ 原样写回，绝不覆盖 */
+                o.put("key", (k.key == null || k.key.length() == 0)
+                        && k.rawKey != null && k.rawKey.length() > 0
+                        ? k.rawKey : KeyVault.enc(k.key));
                 o.put("note", k.note);
                 o.put("budget", k.budget);
                 o.put("threshold", k.threshold);
                 o.put("draw", k.draw);
                 // 阿里云 AccessKey（新增字段）
-                o.put("accessKeyId", KeyVault.enc(k.accessKeyId));
-                o.put("accessKeySecret", KeyVault.enc(k.accessKeySecret));
+                o.put("accessKeyId", (k.accessKeyId == null || k.accessKeyId.length() == 0)
+                        && k.rawAccessKeyId != null && k.rawAccessKeyId.length() > 0
+                        ? k.rawAccessKeyId : KeyVault.enc(k.accessKeyId));
+                o.put("accessKeySecret", (k.accessKeySecret == null || k.accessKeySecret.length() == 0)
+                        && k.rawAccessKeySecret != null && k.rawAccessKeySecret.length() > 0
+                        ? k.rawAccessKeySecret : KeyVault.enc(k.accessKeySecret));
                 o.put("hideCard", k.hideCard);
                 o.put("baseUrl", k.baseUrl == null ? "" : k.baseUrl);
                 o.put("planMode", (k.planMode == null || k.planMode.length() == 0)

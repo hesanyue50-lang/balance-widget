@@ -270,9 +270,13 @@ public final class PlatformPack {
                     String m;
                     try {
                         OutputStream os = act.getContentResolver().openOutputStream(u);
-                        os.write(json.getBytes("UTF-8"));
-                        os.flush();
-                        os.close();
+                        if (os == null) throw new java.io.IOException("无法打开输出流（URI 无效或权限被收回）");
+                        try {
+                            os.write(json.getBytes("UTF-8"));
+                            os.flush();
+                        } finally {
+                            try { os.close(); } catch (Throwable ig) { }
+                        }
                         m = "已导出";
                     } catch (Throwable t) {
                         m = "写入失败：" + t.getMessage();
