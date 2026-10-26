@@ -96,6 +96,17 @@ public class UsageChartView extends View {
 
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /* ---- onDraw 缓存（拖动/揭示动画期间每帧都会跑 onDraw） ----
+       原来每帧都做 5 次 String.format（Y 轴刻度）和每条线一次 new LinearGradient，
+       650ms 揭示动画 + 手指拖动时持续产生垃圾对象，表现为掉帧。 */
+    private android.animation.ValueAnimator revealAnim;
+    private final String[] yLabels = new String[5];
+    private double yLabelMax = Double.NaN;
+    private int yLabelH = -1;
+    private LinearGradient fillGrad;
+    private int fillGradColor = 0;
+    private int fillGradH = -1;
     private final Paint pLine = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pDot = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pDotIn = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -144,7 +155,14 @@ public class UsageChartView extends View {
         maxLine *= 1.18;
         // 渐进揭示动画：从左到右画出数据层
         progress = 0f;
+        /* 先取消上一个：连续两次 setData（刷新/切日期范围）会有两个动画
+           同时往 progress 里写，图表来回跳。 */
+        if (revealAnim != null) {
+            try { revealAnim.cancel(); } catch (Throwable ignored) { }
+            revealAnim = null;
+        }
         android.animation.ValueAnimator va = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        revealAnim = va;
         va.setDuration(650);
         va.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
             public void onAnimationUpdate(android.animation.ValueAnimator a) {
@@ -175,11 +193,17 @@ public class UsageChartView extends View {
         pGrid.setColor(0x2E8A94A3);
         pAxis.setTextSize(24f);
         pAxis.setColor(0xFF6E7887);
+        if (yLabelMax != maxLine || yLabelH != (int) ch) {
+            for (int g = 0; g <= 4; g++) {
+                yLabels[g] = "¥" + fmt(maxLine * (4 - g) / 4f);
+            }
+            yLabelMax = maxLine;
+            yLabelH = (int) ch;
+        }
         for (int g = 0; g <= 4; g++) {
             float y = padT + ch * g / 4f;
             if (showGrid) cv.drawLine(padL, y, w - padR, y, pGrid);
-            double val = maxLine * (4 - g) / 4f;
-            cv.drawText("¥" + fmt(val), getPaddingLeft() + 4, y + 8, pAxis);
+            cv.drawText(yLabels[g], getPaddingLeft() + 4, y + 8, pAxis);
         }
 
         float slot = cw / n;
@@ -221,10 +245,18 @@ public class UsageChartView extends View {
                         fillPath.lineTo(lx2, padT + ch);
                         fillPath.lineTo(fx, padT + ch);
                         fillPath.close();
-                        pFill.setShader(new LinearGradient(0, padT, 0, padT + ch,
-                                (s.color & 0x00FFFFFF) | 0x4D000000,
-                                (s.color & 0x00FFFFFF) | 0x00000000,
-                                Shader.TileMode.CLAMP));
+                        /* 渐变按（颜色, 高度）缓存：同一张图里每条线的渐变只和这两个量有关，
+                           原来每帧每条线都 new 一个。 */
+                        if (fillGrad == null || fillGradColor != s.color
+                                || fillGradH != (int) (padT + ch)) {
+                            fillGrad = new LinearGradient(0, padT, 0, padT + ch,
+                                    (s.color & 0x00FFFFFF) | 0x4D000000,
+                                    (s.color & 0x00FFFFFF) | 0x00000000,
+                                    Shader.TileMode.CLAMP);
+                            fillGradColor = s.color;
+                            fillGradH = (int) (padT + ch);
+                        }
+                        pFill.setShader(fillGrad);
                         cv.drawPath(fillPath, pFill);
                         pFill.setShader(null);
                     }

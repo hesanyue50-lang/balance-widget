@@ -153,7 +153,16 @@ public final class BackupStore {
                     if (mf.exists()) {
                         byte[] buf = new byte[(int) mf.length()];
                         FileInputStream in = new FileInputStream(mf);
-                        try { in.read(buf); } finally { in.close(); }
+                        try {
+                            /* 必须循环读：单次 read 允许短读，少几个字节就会让
+                               JSON 解析失败（异常被吞），该条记录的 uri/文件名丢失，
+                               删记录时留下删不掉的外部文件。 */
+                            int off = 0, n;
+                            while (off < buf.length
+                                    && (n = in.read(buf, off, buf.length - off)) > 0) {
+                                off += n;
+                            }
+                        } finally { in.close(); }
                         JSONObject m = new JSONObject(new String(buf, "UTF-8"));
                         uri = m.optString("uri", null);
                         disp = m.optString("name", null);

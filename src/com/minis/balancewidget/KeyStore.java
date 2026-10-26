@@ -25,7 +25,9 @@ import java.util.UUID;
 public final class KeyStore {
 
     /** 数据版本号：add/update/remove/save 时递增，供 UI 判断缓存是否失效 */
-    public static long dataVersion = 0;
+    public static volatile long dataVersion = 0;
+    /** 保护 cache/cacheVer 的锁（后台刷新线程与 UI 线程会并发访问） */
+    private static final Object CACHE_LOCK = new Object();
 
     /**
      * 内存缓存（关键性能修复）。
@@ -219,10 +221,21 @@ public final class KeyStore {
     // ---------- 内部 ----------
 
     private static List<ApiKey> load(Context c) {
-        if (cache != null && cacheVer == dataVersion) return cache;
+        synchronized (CACHE_LOCK) {
+            if (cache != null && cacheVer == dataVersion) return cache;
+        }
+        /* parseAll 要逐个过 TEE 解密，窗口有上百毫秒 —— 这期间完全可能
+           后台刷新线程在读、而 UI 线程刚 add/update 完。以前无条件写回 cache，
+           就会把别人刚写的新列表盖成自己这份旧的，还把 cacheVer 记成新版本号
+           → 新 Key 在内存和磁盘上双双"消失"。 */
+        final long ver = dataVersion;
         List<ApiKey> out = parseAll(c);
-        cache = out;
-        cacheVer = dataVersion;
+        synchronized (CACHE_LOCK) {
+            if (ver == dataVersion) {      // 期间没人改过，这份结果才可信
+                cache = out;
+                cacheVer = ver;
+            }
+        }
         return out;
     }
 

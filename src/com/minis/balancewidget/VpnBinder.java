@@ -1257,7 +1257,15 @@ public class VpnBinder {
                             if (isActive && Clash.isRunning()) {
                                 restartCore();
                             } else if (thenStart && isActive) {
-                                toggleRun();
+                                /* 不能复用 toggleRun（开关语义）：
+                                   系统模式下若当前已经开着，toggleRun 会把它关掉 ——
+                                   而这里意图明确是"下载完就启动"。
+                                   而且刚下载完的订阅正要用上，被关掉还得手动再开一次。 */
+                                if (Clash.MODE_SYSTEM.equals(Clash.mode(act))) {
+                                    pickSystemMode();
+                                } else {
+                                    startCore();
+                                }
                             }
                         }
                     }
@@ -1301,8 +1309,17 @@ public class VpnBinder {
     }
 
     private void toggleRun() {
-        /* 系统全局模式下，「停止」要连系统 VPN 一起撤掉 */
+        /* 系统全局模式下，「停止」要连系统 VPN 一起撤掉 ——
+           但必须先分清当前是开还是关：以前这里无条件执行关闭，
+           于是系统 VPN 因为任何原因没起来时（内核启动失败/服务被回收/
+           重启后 enabled 还是 true），按钮显示「启动加速」，点它却执行关闭，
+           用户再也开不了。 */
         if (Clash.MODE_SYSTEM.equals(Clash.mode(act))) {
+            boolean on = ClashVpnService.isRunning() || Clash.enabled(act);
+            if (!on) {
+                pickSystemMode();        // 当前没开 → 走启动
+                return;
+            }
             ClashVpnService.stop(act);
             Clash.setEnabled(act, false);
             groups.clear();

@@ -264,7 +264,13 @@ public final class PlatformPack {
         if (req == REQ_EXPORT) {
             final String json = pendingJson;
             pendingJson = null;
-            if (json == null) return true;
+            if (json == null) {
+                /* 载荷存在静态字段里，SAF 选择器打开期间进程被回收/Activity 被重建
+                   就会丢掉。以前这里静默 return true —— 文件没写成、也没有任何提示，
+                   用户以为导出成功了。至少要说清楚。 */
+                toast(act, "导出失败：应用在选文件时被系统回收了，请再点一次导出");
+                return true;
+            }
             new Thread(new Runnable() {
                 public void run() {
                     String m;

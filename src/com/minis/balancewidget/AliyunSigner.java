@@ -74,7 +74,10 @@ public class AliyunSigner {
      * 获取 ISO8601 格式的时间戳（UTC）
      */
     private static String getIso8601Timestamp() {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        /* 必须指定 Locale.US：默认 Locale 在阿拉伯语等环境下会生成
+           "٢٠٢٦-…" 这种非 ASCII 数字，阿里云验签直接失败。 */
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'",
+                java.util.Locale.US);
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
         return sdf.format(new Date());
     }

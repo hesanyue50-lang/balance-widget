@@ -258,6 +258,11 @@ public class PanelPager extends HorizontalScrollView {
         });
         anim.addListener(new android.animation.AnimatorListenerAdapter() {
             public void onAnimationEnd(android.animation.Animator a) {
+                /* cancel() 也会同步回调 onAnimationEnd。不判这一句的话，
+                   取消上一次动画时会瞬移到旧终点、并按旧页回调 onPageSettled ——
+                   表现是"动画途中按下去，画面先跳一下才开始跟手"，
+                   而且会把 curKey/下拉开关按错误的页重建一遍。 */
+                if (a != anim) return;
                 scrollTo(animTo, 0);
                 settle(page);
             }
@@ -267,8 +272,12 @@ public class PanelPager extends HorizontalScrollView {
 
     private void cancelAnim() {
         if (anim != null) {
-            anim.cancel();
+            /* 顺序很重要：先置空再 cancel，这样 onAnimationEnd 里 a != anim 成立、
+               旧动画的回调被忽略；反过来先 cancel 的话，回调时 anim 还是它自己，
+               判定通过，照样会瞬移到旧终点。 */
+            android.animation.ValueAnimator old = anim;
             anim = null;
+            try { old.cancel(); } catch (Throwable ignored) { }
         }
     }
 

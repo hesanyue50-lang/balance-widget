@@ -75,7 +75,7 @@ public final class BackgroundStore {
     }
 
     public static void setEnabled(Context c, boolean on) {
-        sp(c).edit().putBoolean(K_ENABLED, on).apply();
+        sp(c).edit().putBoolean(K_ENABLED, on).commit();
     }
 
     public static boolean hasImage(Context c) {
@@ -90,8 +90,11 @@ public final class BackgroundStore {
             o.inJustDecodeBounds = true;
             InputStream in = c.getContentResolver().openInputStream(uri);
             if (in == null) return false;
-            BitmapFactory.decodeStream(in, null, o);
-            in.close();
+            try {
+                BitmapFactory.decodeStream(in, null, o);
+            } finally {
+                try { in.close(); } catch (Throwable ig) { }
+            }
             if (o.outWidth <= 0 || o.outHeight <= 0) return false;
 
             int scale = 1;
@@ -101,8 +104,12 @@ public final class BackgroundStore {
             o2.inSampleSize = scale;
             InputStream in2 = c.getContentResolver().openInputStream(uri);
             if (in2 == null) return false;
-            Bitmap src = BitmapFactory.decodeStream(in2, null, o2);
-            in2.close();
+            Bitmap src;
+            try {
+                src = BitmapFactory.decodeStream(in2, null, o2);
+            } finally {
+                try { in2.close(); } catch (Throwable ig) { }
+            }
             if (src == null) return false;
 
             /* 必须 finally 关流：compress 抛异常时外层 catch(Throwable) 会吞掉错误，

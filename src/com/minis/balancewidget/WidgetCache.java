@@ -48,8 +48,13 @@ public final class WidgetCache {
 
     public static void save(Context c, BalanceFetcher.Result r, int page) {
         try {
+            /* toJson 异常时返回空串，以前照样写盘 —— 把原本可用的缓存覆盖成空，
+               此后 read 返回 null，小组件一直停在"正在刷新"，
+               "全失败保留上次数据"的逻辑也随之失效。 */
+            String json = toJson(r);
+            if (json == null || json.length() == 0) return;
             sp(c).edit()
-                 .putString(K_JSON, toJson(r))
+                 .putString(K_JSON, json)
                  .putString("last_total", String.format("%.2f", r.totalCny))
                  .putLong(K_LAST_AT, System.currentTimeMillis())
                  .putInt(K_PAGE, page)

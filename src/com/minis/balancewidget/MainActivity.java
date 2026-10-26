@@ -209,9 +209,17 @@ public class MainActivity extends Activity {
         // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
         View sc0 = findViewById(R.id.settings_container);
         if (sc0 != null) {
-            sc0.postDelayed(new Runnable() {
-                public void run() { buildSettingsPanel(); }
-            }, 900);
+            /* 存成字段，onDestroy 才能移除：用户在 900ms 内退出时，
+               回调会在 Activity 销毁之后才跑，SettingsBinder.bind() 会把已销毁的
+               Activity 写进静态 active —— 而清它的 onDestroy 早就跑过了，再没人清。 */
+            settingsWarmup = new Runnable() {
+                public void run() {
+                    settingsWarmup = null;
+                    if (isFinishing() || isDestroyed()) return;
+                    buildSettingsPanel();
+                }
+            };
+            sc0.postDelayed(settingsWarmup, 900);
         } else {
             BalanceFetcher.diag(this, "⚠️ 找不到 settings_container，跳过设置面板预热");
         }
@@ -1434,6 +1442,9 @@ public class MainActivity extends Activity {
         ClashImport.handle(this, it, null);
     }
 
+    /** 设置面板预热任务（onDestroy 要能移除它） */
+    private Runnable settingsWarmup;
+
     @Override
     protected void onDestroy() {
         /* ⚠️ 必须停掉前台自动刷新的定时器：
@@ -1445,6 +1456,17 @@ public class MainActivity extends Activity {
         try { if (vpnBinder != null) vpnBinder.release(); } catch (Throwable ignored) { }
         /* 主界面销毁时把这个引用让出来，避免静态字段拖住已结束的实例 */
         if (settingsBinder != null) settingsBinder.detach();
+        /* 预热任务可能还挂在 settings_container 上 */
+        if (settingsWarmup != null) {
+            try {
+                View sc = findViewById(R.id.settings_container);
+                if (sc != null) sc.removeCallbacks(settingsWarmup);
+            } catch (Throwable ignored) { }
+            settingsWarmup = null;
+        }
+        /* ClashImport.onPending 捕获了本 Activity（onPanelSettled 每次都写一份），
+           不清的话静态字段会一直拖着已销毁的界面，下载回调还会往死界面上跑。 */
+        try { ClashImport.onPending = null; } catch (Throwable ignored) { }
         super.onDestroy();
     }
 

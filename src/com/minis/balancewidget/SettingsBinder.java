@@ -2016,11 +2016,21 @@ public class SettingsBinder {
                         + "填 0 或留空 = 不预警。",
                 eThreshold);
 
-        new AlertDialog.Builder(act)
+        final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle(isEdit ? "编辑高级平台" : "添加高级平台")
                 .setView(scroll)
-                .setPositiveButton("保存", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int wi) {
+                .setPositiveButton("保存", null)
+                .setNeutralButton("测试", null)
+                .setNegativeButton("取消", null)
+                .create();
+        dlg.show();
+        /* 必须 show() 之后自己挂按钮监听。
+           用 setPositiveButton/setNeutralButton 传监听的话，点**任何**按钮对话框都会
+           被系统立刻关掉 —— 校验失败时用户填的 8 个字段全丢，点「测试」也一样。
+           自挂之后：只有校验全过才 dlg.dismiss()，「测试」完全不关窗。 */
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(
+                new View.OnClickListener() {
+                    public void onClick(View v) {
                         WebCustom w = new WebCustom();
                         w.name = eName.getText().toString().trim();
                         w.url = eUrl.getText().toString().trim();
@@ -2072,10 +2082,12 @@ public class SettingsBinder {
                         Busy.run(act, "正在更新…", new Runnable() {
                             public void run() { renderWebs(); kick(); }
                         });
+                        dlg.dismiss();      // 走到这里说明校验全过
                     }
-                })
-                .setNeutralButton("测试", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int wi) {
+                });
+        dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(
+                new View.OnClickListener() {
+                    public void onClick(View v) {
                         /* 用当前表单里的值试抓（不落库）—— 边填边试 */
                         WebCustom w = new WebCustom();
                         w.name = "test";
@@ -2126,9 +2138,7 @@ public class SettingsBinder {
                             }
                         }).start();
                     }
-                })
-                .setNegativeButton("取消", null)
-                .show();
+                });
     }
 
     private static int idxOf(String v, String[] arr) {

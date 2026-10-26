@@ -456,8 +456,13 @@ public final class Ledger extends SQLiteOpenHelper {
         try {
             Cursor cur = getReadableDatabase().rawQuery(
                     "SELECT IFNULL(MIN(ts),0) FROM " + T_SNAP, null);
-            if (cur.moveToFirst()) return cur.getLong(0);
-            cur.close();
+            try {
+                /* 不能 moveToFirst 后直接 return —— 那样 cur.close() 永远执行不到，
+                   每调一次漏一个 CursorWindow。 */
+                if (cur.moveToFirst()) return cur.getLong(0);
+            } finally {
+                try { cur.close(); } catch (Throwable ig) { }
+            }
         } catch (Throwable ignored) { }
         return 0;
     }

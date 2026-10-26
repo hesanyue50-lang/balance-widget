@@ -77,7 +77,7 @@ public final class RefreshScheduler {
     }
 
     public static void setPowerSave(Context c, boolean on) {
-        try { prefs(c).edit().putBoolean(KEY_PS, on).apply(); } catch (Throwable ignored) { }
+        try { prefs(c).edit().putBoolean(KEY_PS, on).commit(); } catch (Throwable ignored) { }
     }
 
     public static int clampFg(int v) {
@@ -96,7 +96,7 @@ public final class RefreshScheduler {
         prefs(c).edit()
                 .putInt(KEY_FG, clampFg(fgMin))
                 .putInt(KEY_BG, clampBg(bgMin))
-                .apply();
+                .commit();
     }
 
     public static long fgMillis(Context c) { return fgMinutes(c) * 60 * 1000L; }

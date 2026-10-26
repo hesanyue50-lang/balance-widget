@@ -106,7 +106,10 @@ public final class PageStore {
         Set<String> h = hidden(c);
         if (hide) h.add(key); else h.remove(key);
         // 至少要留一页，否则应用打开就是空白
-        if (h.size() >= KEYS.length) return;
+        /* 原写的是 KEYS.length，而 hidden() 已过滤掉不可隐藏的设置页 ——
+           最多 3 项 < 4，"至少要留一页"的守卫永远不成立（死代码）。
+           改成 KEYS.length - 1 才真正生效。 */
+        if (h.size() >= KEYS.length - 1) return;
         writeArray(c, P_HIDDEN, new ArrayList<String>(h));
         /* 主页面被藏起来了：自动把主页面改成第一个可见页，否则打开应用找不到落点 */
         if (hide && key.equals(home(c))) {

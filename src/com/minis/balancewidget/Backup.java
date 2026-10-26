@@ -56,6 +56,14 @@ public final class Backup {
                     JSONArray arr = new JSONArray();
                     for (Object o : (Set<?>) v) arr.put(String.valueOf(o));
                     prefs.put(e.getKey(), arr);
+                } else if (v instanceof Float) {
+                    /* Float 必须打类型标记：org.json 序列化时会把 7.0 压成 "7"，
+                       再解析回来是 Integer → 恢复后 putInt，而读取方 getFloat 会抛
+                       ClassCastException（折算率设成 1 元/积分、恢复后统计页直接崩）。 */
+                    JSONObject fo = new JSONObject();
+                    fo.put("__type", "float");
+                    fo.put("value", ((Float) v).doubleValue());
+                    prefs.put(e.getKey(), fo);
                 } else {
                     prefs.put(e.getKey(), v);
                 }
@@ -89,9 +97,25 @@ public final class Backup {
                 while (it.hasNext()) {
                     String k = it.next();
                     Object v = prefs.get(k);
-                    if (v instanceof String) ed.putString(k, (String) v);
+                    if (v instanceof JSONObject && ((JSONObject) v).has("__type")) {
+                        JSONObject t = (JSONObject) v;
+                        String ty = t.optString("__type");
+                        if ("float".equals(ty)) ed.putFloat(k, (float) t.optDouble("value", 0));
+                        else if ("long".equals(ty)) ed.putLong(k, t.optLong("value", 0));
+                        else if ("int".equals(ty)) ed.putInt(k, t.optInt("value", 0));
+                        else ed.putString(k, t.optString("value", ""));
+                    }
+                    else if (v instanceof String) ed.putString(k, (String) v);
                     else if (v instanceof Boolean) ed.putBoolean(k, (Boolean) v);
-                    else if (v instanceof Integer) ed.putInt(k, (Integer) v);
+                    else if (v instanceof Integer) {
+                        /* 旧备份没有类型标记：Float 被压成了 Integer。
+                           已知的"率"类键按 float 还原，否则读取方 getFloat 会崩。 */
+                        if (k.startsWith("rate_") || "last_rate".equals(k)) {
+                            ed.putFloat(k, ((Integer) v).floatValue());
+                        } else {
+                            ed.putInt(k, (Integer) v);
+                        }
+                    }
                     else if (v instanceof Long) ed.putLong(k, (Long) v);
                     else if (v instanceof Double) ed.putFloat(k, ((Double) v).floatValue());
                     else if (v instanceof JSONArray) {
@@ -162,7 +186,7 @@ public final class Backup {
         sp(c).edit()
                 .putBoolean(K_AUTO_ON, on)
                 .putInt(K_AUTO_HOURS, hours)
-                .apply();
+                .commit();
     }
 
     /** 上次自动备份的时间戳（0 = 还没备份过） */
@@ -189,7 +213,7 @@ public final class Backup {
             /* uri 传 null：自动备份只落本机，用户导出到哪是他自己的事 */
             String name = BackupStore.save(c, json, null, "自动备份");
             if (name == null) return false;
-            sp(c).edit().putLong(K_AUTO_LAST, now).apply();
+            sp(c).edit().putLong(K_AUTO_LAST, now).commit();
             return true;
         } catch (Throwable t) {
             BalanceFetcher.diag(c, "自动备份失败：" + t);

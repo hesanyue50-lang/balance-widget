@@ -1,3 +1,60 @@
+## 26.10.581 · 2026-10-18
+
+### 中低优先级清扫：又 25 个
+
+**崩溃与数据一致性**
+
+- **恢复备份后统计页崩** —— `Float` 值经 org.json 序列化被压成 `Integer`（7.0 → 7），
+  恢复时 `putInt`，而读取方 `getFloat` 抛 `ClassCastException`。现在导出时给 Float 打类型标记，
+  旧备份文件按「率类键」启发式兜底还原
+- **KeyStore 并发丢 Key** —— `parseAll` 要逐个过 TEE 解密（上百毫秒窗口），
+  期间后台刷新线程读、UI 线程刚 add 完，旧实现无条件写回 cache 并把 `cacheVer`
+  记成新版本号 → 新 Key 在内存和磁盘上双双"消失"。改为版本快照 + 只有没人改过才写缓存
+- **系统模式「启动加速」实际是关闭** —— `toggleRun` 的系统分支无条件执行 stop，
+  系统 VPN 因任何原因没起来时，按钮显示「启动加速」点下去却执行关闭，用户再也开不了
+- **下载订阅后自动启动会把已开的 VPN 关掉** —— `thenStart` 复用了 `toggleRun`（开关语义）
+
+**资源泄漏**
+
+- `Ledger.earliest` 的 Cursor 永不关闭（`moveToFirst` 后直接 return，每调一次漏一个 CursorWindow）
+- `BackgroundStore` 两个 InputStream 的 close 不在 finally
+- `BackupStore` 读 .meta 只读一次（允许短读，少几个字节就丢 uri/文件名）
+- `MainActivity` 的设置面板预热任务（900ms 后执行）没在 `onDestroy` 移除 → 会往已销毁的界面写
+- `ClashImport.onPending` 静态持有已销毁的 Activity
+- `WebLoginActivity` 的静态 `pending` 在 onDestroy 没清（`takePending()` 全工程无调用者）
+
+**设置必须同步落盘**
+
+- 自动备份开关+间隔、刷新间隔、省电模式、背景开关共 **5 处 `apply()` → `commit()`**
+  （异步写盘，进程被回收就恢复默认值 —— 表现为"设置没生效"）
+
+**功能**
+
+- **高级平台编辑框点「测试」会关掉整个表单** —— 8 个字段全丢。改成 `create()` +
+  `getButton()` 自挂监听，校验失败和点测试都不关窗
+- `PlatformPack` 导出时载荷存在静态字段，进程被回收后静默失败（用户以为导出成功）
+- `PanelPager` 取消动画时 `cancel()` 会同步回调 `onAnimationEnd`，
+  无条件 `scrollTo(旧终点); settle(旧页)` → 动画途中按下会"先跳一下再跟手"，
+  且按错误的页重建内容
+
+**性能**
+
+- `UsageChartView.onDraw` 每帧做 5 次 `String.format`（Y 轴刻度）+ 每条线 `new LinearGradient`
+  → 刻度文案和渐变按（数值/颜色/高度）缓存
+- `setData` 不取消上一个揭示动画 → 连续刷新时两个动画同时写 progress，图表来回跳
+
+**小组件**
+
+- `WidgetCache` 在 `toJson` 失败时把原本可用的缓存覆盖成空串 → 小组件永久停在"正在刷新"
+- `hideAll` 不含翻页箭头 → 多页渲染后切到"正在刷新"时残留两个可点的箭头
+
+**其它**
+
+- `AliyunSigner` 的 `SimpleDateFormat` 未指定 Locale（阿拉伯语环境生成非 ASCII 数字，验签必失败）
+- `PageStore` 的"至少留一页"守卫条件写错（`KEYS.length` 永不成立，是死代码）
+
+---
+
 ## 26.10.573 · 2026-10-18
 
 ### 逐行审查收尾：主界面 + 小组件又修 7 个

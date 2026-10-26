@@ -226,6 +226,13 @@ public final class WidgetRenderer {
         for (int i = 0; i < SLOT.length; i++) v.setViewVisibility(SLOT[i], View.GONE);
         for (int i = 0; i < ROW.length; i++) v.setViewVisibility(ROW[i], View.GONE);
         for (int i = 0; i < DIV.length; i++) v.setViewVisibility(DIV[i], View.GONE);
+        /* 翻页箭头也必须一起藏：RemoteViews 是"reapply 到现有 View 树"，
+           没被提到的控件会保留上次状态 —— 多页渲染后切到"正在刷新"或
+           "还没填过 Key"状态时，会残留两个还能点的箭头。 */
+        try {
+            v.setViewVisibility(R.id.w2_prev, View.GONE);
+            v.setViewVisibility(R.id.w2_next, View.GONE);
+        } catch (Throwable ignored) { }
     }
 
     private static void bind(Context ctx, RemoteViews v, int widgetId) {
