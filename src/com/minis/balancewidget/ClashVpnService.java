@@ -83,11 +83,26 @@ public class ClashVpnService extends VpnService {
 
     // ---------------- 启动 ----------------
 
+    /**
+     * 「正在启动」占位。
+     *
+     * running 要到后台线程末尾才置 true，而 establish() + Clash.start() 最长要 8 秒 ——
+     * 这中间整个窗口是敞开的：连点两下、UI 和 Autostart 同时触发、或 STOP 与 START 交错，
+     * 都会再走一遍 establish。第二个 tun 会覆盖 tunPfd/tunFd，
+     * 第一个 fd 永久泄漏（下次 establish 失败），最终出现两个 tun 一个内核。
+     */
+    private static volatile boolean starting = false;
+
     private void startVpn() {
-        if (running) {
-            BalanceFetcher.diag(this, "VPN 已在运行");
-            return;
+        synchronized (ClashVpnService.class) {
+            if (running || starting) {
+                BalanceFetcher.diag(this, "VPN 已在运行/正在启动，忽略重复请求");
+                return;
+            }
+            starting = true;
         }
+        boolean handedOff = false;
+        try {
         if (PrepareNotDone()) {
             BalanceFetcher.diag(this, "VPN 未获授权，放弃启动");
             stopSelf();
@@ -117,6 +132,10 @@ public class ClashVpnService extends VpnService {
         new Thread(new Runnable() {
             public void run() { establishAndStart(); }
         }, "clash-vpn-start").start();
+        handedOff = true;      // 已交给后台线程，由它负责清 starting
+        } finally {
+            if (!handedOff) starting = false;   // 半路退出（没授权/没订阅）要放开占位
+        }
     }
 
     /** 真正耗时的部分：建 tun + 拉起内核。全程在后台线程。 */
@@ -170,6 +189,8 @@ public class ClashVpnService extends VpnService {
             BalanceFetcher.diag(this, "VPN 启动异常 " + t);
             stopVpn();
             stopSelf();
+        } finally {
+            starting = false;   // 无论成功失败都要放开，否则再也启动不了
         }
     }
 

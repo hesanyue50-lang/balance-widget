@@ -102,7 +102,11 @@ public class BalanceFetcher {
             sessionCache = "";
             SUB_USERINFO.remove();
             SUB_UA.remove();
-            diag(c, "备份恢复：内存缓存已清理");
+            /* KeyStore 也必须作废：恢复是把 keys_json_v2 直接写盘的，不走 add/update，
+               dataVersion 不变 → 它认为缓存有效，返回恢复前的旧 Key。
+               后果不只是"看不到新 Key"，而是下一次 save() 会用旧列表把恢复的内容覆盖掉。 */
+            KeyStore.invalidateAll();
+            diag(c, "备份恢复：内存缓存已清理（含 KeyStore）");
         } catch (Throwable ignored) { }
     }
 
@@ -626,7 +630,11 @@ public class BalanceFetcher {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
-                Custom c = customFromJson(o, false);   // false = 存储态，key 是密文，要解
+                /* stored=true 才是「来自落盘、key 是密文要解密」。
+                   以前传的 false，注释却写着"要解" —— 于是 loadCustom 拿到的
+                   c.key 一直是 "v1:…" 密文，fillCustom 在没有 KeyStore 记录时
+                   直接把它当 Bearer 发出去，必然 401。 */
+                Custom c = customFromJson(o, true);
                 /* ⚠️ 早先这里是「有 Key 才算配置好」，结果只填了接口地址、
                    不带 Key 的 OpenAI 兼容平台会被静默丢掉 ——
                    表现是"添加成功，但设置页和主界面都没有它"。
@@ -878,6 +886,11 @@ public class BalanceFetcher {
                 diag(null, "代理失败，回退直连 " + host + "：" + e);
                 try {
                     return get(url, bearer, cookie, timeoutMs, true);
+                } catch (StatusException se2) {
+                    /* 直连拿到的是**服务器真实应答**（401 Key 无效 / 429 限流…），
+                       原样抛出 —— 包装成普通 Exception 会让上层依赖类型的分支失效：
+                       OpenAI Cookie 过期、MiMo 登录过期都靠 catch (StatusException) 识别。 */
+                    throw se2;
                 } catch (Exception e2) {
                     throw new Exception("代理与直连均失败（代理：" + e.getMessage()
                             + " / 直连：" + e2.getMessage() + "）");
@@ -944,8 +957,6 @@ public class BalanceFetcher {
            （移动数据下常见）—— 那就用 DoH 重新解析一轮再试。
            注意沿用同一个 deadline：不给第二轮额外预算，避免总耗时翻倍。 */
         boolean dohRetried = false;
-        while (true) {
-        StringBuilder tried = new StringBuilder();
         /* 首选地址要吃满大部分预算：OpenRouter/七牛云实测稳定要 4~6s，
            按 timeoutMs/2 分（8000 → 4000）会让它们次次超时。
            地址已按本机出口协议排好，首选通常一次就通，所以给它 3/4 预算。 */
@@ -953,8 +964,12 @@ public class BalanceFetcher {
         /* ★ 总预算（deadline）：timeoutMs 是**整个请求**的预算，不是每个地址的额度。
            原实现里每个地址能吃 per，超时后同地址还会再吃一次 per ——
            8 个地址理论上最多 48 秒，实测汇率请求把 3 秒预算拖成了 22.5 秒。
-           结果就是"调用方以为 3 秒放弃，实际卡了 20 多秒"，刷新被整体拖慢。 */
+           ⚠️ deadline 必须放在 while 外面：DoH 重解析后会 continue 重跑一轮，
+           写在循环里等于每轮重新计时 —— 上面注释说"沿用同一个 deadline"，
+           实际却给了第二轮完整的 timeoutMs，最坏耗时翻倍。 */
         final long deadline = System.currentTimeMillis() + Math.max(2500, timeoutMs);
+        while (true) {
+        StringBuilder tried = new StringBuilder();
         for (int i = 0; i < ordered.size(); i++) {
             long left = deadline - System.currentTimeMillis();
             if (left <= 400) { tried.append("总预算耗尽; "); break; }
@@ -1041,6 +1056,17 @@ public class BalanceFetcher {
             } catch (Throwable ig) { /* 代理也不通 —— 往下抛直连的原始错误 */ }
         }
         throw new Exception("所有地址均失败 [" + (tried.length() == 0 ? "无" : tried.toString().trim()) + "]");
+        }
+    }
+
+    /** 从 "web:N" 取对应的 WebCustom（下标即 webs 列表里的序号） */
+    private static WebCustom webOf(String platform, List<WebCustom> webs) {
+        if (platform == null || !platform.startsWith("web:")) return null;
+        try {
+            int idx = Integer.parseInt(platform.substring(4));
+            return idx >= 0 && idx < webs.size() ? webs.get(idx) : null;
+        } catch (Throwable t) {
+            return null;
         }
     }
 
@@ -1441,7 +1467,12 @@ public class BalanceFetcher {
                 java.io.BufferedInputStream in = new java.io.BufferedInputStream(sock.getInputStream());
                 String status = readLine(in);
                 if (status == null || status.indexOf(" 200") < 0) {
-                    throw new StatusException("代理未能建立隧道 (" + status + ")");
+                    /* 必须抛普通异常，不能抛 StatusException：
+                       后者在 get() 里被当成「目标服务器已应答，换地址没意义」直接 rethrow，
+                       于是「代理失败 → 回退直连」那条路在最常见的场景
+                       （机场节点挂了，代理回 502/503/407）下完全不会执行。
+                       隧道建不起来是**代理自己的问题**，直连完全可能通。 */
+                    throw new java.io.IOException("代理未能建立隧道 (" + status + ")");
                 }
                 while (true) {                       // 吃掉 CONNECT 的响应头
                     String l = readLine(in);
@@ -2246,6 +2277,11 @@ public class BalanceFetcher {
             res.configured++;
             Item it = new Item();
             it.id = "custom" + i;
+            /* ⚠️ 必须补 platform：漏掉就是空串，后果是
+               · 所有「没有 KeyStore 记录」的自定义平台在合并阶段被并成同一张卡
+               · Clash.shouldProxy / KeyStore.get / countsInTotal / StatsOpt.inChart
+                 全都拿到空平台串，分流、统计开关、预警幂等、控制台跳转一起失效 */
+            it.platform = "custom:" + i;
             it.threshold = c.threshold;
             it.alertKey = "custom:" + (c.name.length() > 0 ? c.name : String.valueOf(i));
             it.label = c.name.length() > 0 ? c.name : "自定义";
@@ -2299,9 +2335,12 @@ public class BalanceFetcher {
             final Custom c = custs.get(i);
             final String k = keys.get(i);
             final KeyStore.ApiKey ak = apiKeys.get(i);  // 新增：获取 ApiKey 对象
-            /* web 项按 platform 前缀精确识别（"web:" 开头，不会误伤 workbuddy） */
-            final WebCustom w = it.platform != null && it.platform.startsWith("web:")
-                    && i < webs2.size() ? webs2.get(i) : null;
+            /* web 项按 platform 前缀识别，**并按它自己的序号取** ——
+               以前这里用循环变量 i 去索引紧凑的 webs2，而 web 项总是排在
+               所有 Key/自定义项之后：前面只要有 1 个 Key，整体就错位。
+               错位后 w 可能是 null（落到 fill 里报「未知平台」），
+               也可能是**另一个平台**的配置 —— 于是 A 的卡片上显示 B 的余额。 */
+            final WebCustom w = webOf(it.platform, webs2);
             ts[i] = new Thread(new Runnable() {
                 public void run() {
                     long ts0 = System.currentTimeMillis();
@@ -2317,7 +2356,13 @@ public class BalanceFetcher {
                         if (w != null)            fillWeb(it, w, rate, budget, viaProxy);
                         else if (c == null)       fill(ctx, it, ak, rate, budget);
                         else                      fillCustom(ctx, it, c, rate, per);
-                        it.ok = true;
+                        /* 不能无条件置 true：fill() 内部有些分支已经明确判定失败
+                           （网关地址没填、网关没运行、百炼查询失败），它们置 ok=false 后 return。
+                           这里一覆盖，界面就走成功分支 —— 卡片只剩一个「—」，
+                           「网关未运行·点这里拉起」那段提示和按钮永远出不来，
+                           而且 Alert 还会拿 bal=0 去比阈值误报低余额。
+                           noData 表示「这一项 fill 已经自己表态了」，此时尊重它的结论。 */
+                        if (!it.noData) it.ok = true;
                         Log.i(TAG, "平台 " + it.id + " 成功: " + it.amount);
                         diag(ctx, "  OK  " + it.id + " = " + it.amount
                                 + ("dashscope".equals(it.platform) && it.rows != null && it.rows.length() > 0
@@ -2465,6 +2510,46 @@ public class BalanceFetcher {
             }
         }
         if (ak == null) {
+            /* 自定义平台（custom:N）同样可能没有 KeyStore 记录（没填 Key 的自建网关、
+               模板加的静态卡）。以前这里只处理 web 和 dashscope/modelscope，
+               这类平台点「刷新这一项」会落到末尾的「已删除 / 这条 Key 记录已经不在了」。
+               而且此时 it.platform 还是空的（主流程构造时漏了），必须在这里补上，
+               否则分流判断、统计开关、预警幂等全都拿不到平台标识。 */
+            if (it.id.startsWith("custom")) {
+                int cidx = -1;
+                try {
+                    String n = it.id.startsWith("custom:")
+                            ? it.id.substring(7) : it.id.substring(6);
+                    cidx = Integer.parseInt(n);
+                } catch (Exception ig) { }
+                List<Custom> cs = loadCustom(ctx);
+                if (cidx < 0 || cidx >= cs.size()) {
+                    it.label = "自定义平台";
+                    it.error = "这个自定义平台已经被删掉了";
+                    it.amount = "\u2014";
+                    return it;
+                }
+                Custom c = cs.get(cidx);
+                it.platform = "custom:" + cidx;
+                it.threshold = c.threshold;
+                it.label = c.name.length() > 0 ? c.name : "自定义";
+                it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
+                it.kind = c.kind;
+                double rateC = 7.1;
+                try {
+                    rateC = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                            .getFloat("last_rate", 7.1f);
+                } catch (Throwable ig) { }
+                try {
+                    fillCustom(ctx, it, c, rateC, timeoutMs);
+                    if (!it.noData) it.ok = true;
+                } catch (Exception e) {
+                    it.ok = false;
+                    it.error = friendlyError(e);
+                    it.amount = "\u2014";
+                }
+                return it;
+            }
             /* 高级自定义平台（web:N）没有 KeyStore 记录，按 platform 前缀分流 */
             if (it.id.startsWith("web")) {
                 int widx = -1;
@@ -2781,6 +2866,7 @@ public class BalanceFetcher {
             it.amount = "见控制台";
             it.kind = "balance";
             it.low = false;          // 不是"余额低"，别标红
+            it.noData = true;        // 没有真实数值 → 不进账本/统计，别落 0 基线点
             it.rows = "Google 没有公开余额接口\n点卡片 → 控制台 查看用量";
             return;
         }
@@ -2870,6 +2956,7 @@ public class BalanceFetcher {
                 it.ok = false;
                 it.gatewayDown = true;          // 地址没填，同样按"服务不可用"引导
                 it.gatewayUrl = "";
+                it.noData = true;               // 已表态：别让线程覆盖成 ok
                 it.error = "还没填网关地址";
                 it.amount = "\u2014";
                 return;
@@ -3274,7 +3361,7 @@ public class BalanceFetcher {
                     String cur = b.optString("currency", "");
                     double tv = num(b, "total_balance");
                     if (Double.isNaN(tv)) continue;
-                    total += ("CNY".equals(cur) || arr.length() == 1) ? tv : tv * rate;
+                    total += "CNY".equals(cur) ? tv : tv * rate;
                     got = true;
                 }
             }

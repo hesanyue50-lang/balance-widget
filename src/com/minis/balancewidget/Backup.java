@@ -102,7 +102,10 @@ public final class Backup {
                     }
                 }
             }
-            ed.apply();
+            /* 必须 commit：恢复是"整库设置"操作，用 apply 异步写盘时
+               进程一被杀就全丢 —— 而账本紧接着在 SQLite 事务里已提交，
+               会留下"历史恢复了、设置没恢复"的半截状态。 */
+            ed.commit();
 
             Ledger lg = Ledger.get(c);
             int n = lg.importAll(root.optJSONArray("snapshots"),

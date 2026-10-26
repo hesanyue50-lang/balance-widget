@@ -41,6 +41,19 @@ public final class KeyStore {
     private static long cacheVer = -1L;
 
     /** 失效缓存：任何写操作前调用 */
+    /**
+     * 整库作废缓存（外部改了底层存储时用）。
+     *
+     * 备份恢复就是这种情形：它直接把 keys_json_v2 写进 SharedPreferences，
+     * 不经过 add/update/remove，所以 dataVersion 没变 ——
+     * KeyStore.load 认为缓存还是新的，返回的仍是**恢复前**的旧列表。
+     * 紧接着设置页任何一次 save() 都会用这份旧列表把刚恢复的 Key 整段覆盖掉。
+     */
+    public static void invalidateAll() {
+        dataVersion++;
+        invalidate();
+    }
+
     private static void invalidate() {
         cache = null;
         cacheVer = -1L;

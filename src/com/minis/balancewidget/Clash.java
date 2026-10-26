@@ -129,7 +129,14 @@ public final class Clash {
            ⚠️ 但 tun 不是永远在：换网、用户手动断开 VPN、系统回收服务都会让它消失，
            而模式值还留在配置里。这时如果继续「当直连处理」，境外平台就是**裸奔直连**，
            表现就是"怎么刷都不通"。所以这里要问一句 VPN 到底还在不在。 */
-        if (MODE_SYSTEM.equals(m)) return !ClashVpnService.isRunning();
+        if (MODE_SYSTEM.equals(m)) {
+            /* 系统全局模式下，本应用被 addDisallowedApplication 明确**排除在 tun 之外**
+               （见 ClashVpnService，注释原话就是"本应用仍旧走本地 HTTP 代理那条通路"）。
+               所以这里必须让它走 127.0.0.1:7890 —— 否则请求既不过 tun、也不走代理，
+               就是裸奔直连，境外平台必然全部失败。
+               回环流量本身不进 tun，不会形成"先连 7890 再被自己的 tun 抓一次"的回环。 */
+            return Clash.isRunning();
+        }
         return platformViaProxy(c, platform, foreign);
     }
 
@@ -273,7 +280,14 @@ public final class Clash {
     }
 
     public static long uptimeMs() {
-        return isRunning() ? System.currentTimeMillis() - startAt : 0;
+        if (!isRunning()) return 0;
+        /* startAt 只在"本次进程启动内核成功"时赋值。内核是上一会话的孤儿时
+           （isRunning() 靠端口探测返回 true、proc==null、startAt==0），
+           减出来是约 5×10^5 小时 —— 界面会显示一个荒谬的运行时长。
+           返回 -1 让调用方显示「--」。 */
+        if (startAt <= 0) return -1L;
+        long d = System.currentTimeMillis() - startAt;
+        return d > 0 ? d : 0L;
     }
 
     // ---------- 启动 / 停止 ----------
@@ -348,8 +362,20 @@ public final class Clash {
                 proc.destroy();
                 proc = null;
                 BalanceFetcher.diag(c, "clash 已停止");
+            } else if (portAlive()) {
+                /* proc 为 null 但 7890 有人在听 = 上一会话遗留的孤儿内核。
+                   不杀掉的话「停止加速」是假的：enabled 置 false、toast 说已停止，
+                   而内核还在跑，界面下一秒又显示「运行中」，用户会以为开关坏了。 */
+                killStaleCore(c);
+                BalanceFetcher.diag(c, "clash 已停止（清理了孤儿内核）");
             }
         } catch (Throwable ignored) { }
+        /* 必须失效端口探测缓存。restartCore 是 stop → 400ms → start，
+           而 runTick 每秒探测一次让缓存常热 —— 不清的话 start 里
+           isRunning() 命中 1.5 秒内的旧 true，直接当"已在跑"返回 null，
+           界面报「加速已启动」但端口其实是死的。 */
+        lastProbeAt = 0L;
+        lastProbeOk = false;
     }
 
     /** 控制 API 是否活着 */
@@ -426,8 +452,7 @@ public final class Clash {
     private static final String[] OWNED_TOP_KEYS = {
         "mixed-port:", "port:", "socks-port:", "external-controller:",
         "allow-lan:", "bind-address:", "mode:", "log-level:",
-        "ipv6:", "unified-delay:", "tcp-concurrent:",
-    };
+        "ipv6:", "unified-delay:", "tcp-concurrent:", "tun:", "tun-file-descriptor", };
 
     private static boolean isOwnedTopKey(String trimmedLine) {
         for (int i = 0; i < OWNED_TOP_KEYS.length; i++) {
@@ -471,6 +496,19 @@ public final class Clash {
      * 两条都写上最稳。
      */
     public static synchronized String startWithFd(Context c, String cfgText, int fd) {
+        /* tun fd 只对"为它而起的那个进程"有效，绝不可复用已有内核。
+           不清掉的话：startInternal 开头 isRunning() 返回 true → 直接返回 null（成功），
+           而 VpnService 那边已经把 running 置 true 并通知「已接管全部应用流量」——
+           整机流量进了 tun，却没有任何进程在读这个 fd，结果是**全面断网**。
+           常见触发：先在「应用内全局」开过内核，再切「系统全局」；
+           或服务被 START_STICKY 重启时上个内核还活着。 */
+        killStaleCore(c);
+        if (proc != null) {
+            try { proc.destroy(); } catch (Throwable ig) { }
+            proc = null;
+        }
+        lastProbeAt = 0L;
+        lastProbeOk = false;
         return startInternal(c, cfgText, fd);
     }
 
@@ -743,6 +781,15 @@ public final class Clash {
                 if (procUid(ps[i]) != me) continue;          // 只动自己的进程
                 android.os.Process.killProcess(pid);
                 killed++;
+                /* 等它真的从 /proc 消失再继续：SIGKILL 只是发出信号，
+                   紧接着 startInternal 的 isRunning() 可能还读到未回收的 proc，
+                   误判「已在跑」而返回成功 —— 内核却在被杀的半路上。
+                   200ms 是实测够用的窗口，别等太久（stop 可能在 UI 线程调）。 */
+                long t0 = System.currentTimeMillis();
+                while (System.currentTimeMillis() - t0 < 200) {
+                    if (!ps[i].exists()) break;
+                    try { Thread.sleep(30); } catch (Exception ig) { }
+                }
             }
         } catch (Throwable ignored) { }
         if (killed > 0) BalanceFetcher.diag(c, "清理残留内核进程 " + killed + " 个");

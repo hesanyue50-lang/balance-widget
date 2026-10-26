@@ -118,11 +118,15 @@ public class Alert {
             if (thr <= 0) continue;
             ed.putBoolean(ALERTED_PREFIX + alertKey(it), it.low);
         }
+        /* 顺序很关键：**先判断能不能通知，再落标记**。
+           反过来（先 commit 再判断）的话，用户没开通知权限时标记照样写进去了，
+           事后他去开启通知也收不到这次低余额预警 —— 只能等余额回弹再跌一次。 */
+        if (fresh.isEmpty() || !canNotify(c)) return;
+
         /* 必须 commit：这是"已经提醒过"的幂等标记，丢了就会对同一批平台重复推送 ——
            而且推送往往发生在后台刷新刚结束时，正是进程容易被回收的时机。 */
         ed.commit();
 
-        if (fresh.isEmpty() || !canNotify(c)) return;
         notifyLow(c, fresh);
     }
 

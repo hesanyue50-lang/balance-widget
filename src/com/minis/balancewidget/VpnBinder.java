@@ -1278,6 +1278,21 @@ public class VpnBinder {
 
     /** 用当前启用的订阅重启内核 */
     private void restartCore() {
+        /* 系统全局模式必须走 VPN 重建，不能起裸内核：
+           startCore() 用的是 buildConfig（**没有 tun 段**），
+           而 VpnService 手里的 tun fd 只有带 tun 配置的进程才会读。
+           拿裸内核替换掉带 tun 的，结果是 tun fd 无人读取、
+           running 仍为 true、通知还写着「已接管全部应用流量」—— 整机断网。
+           触发点：系统模式下点「更新」订阅、或切换启用订阅。 */
+        if (Clash.MODE_SYSTEM.equals(Clash.mode(act))) {
+            ClashVpnService.stop(act);
+            Clash.stop(act);
+            groups.clear();
+            h.postDelayed(new Runnable() {
+                public void run() { pickSystemMode(); }
+            }, 600);
+            return;
+        }
         Clash.stop(act);
         groups.clear();
         h.postDelayed(new Runnable() {

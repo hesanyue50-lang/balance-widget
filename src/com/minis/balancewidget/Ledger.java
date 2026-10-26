@@ -528,8 +528,15 @@ public final class Ledger extends SQLiteOpenHelper {
             SQLiteDatabase db = getWritableDatabase();
             db.beginTransaction();
             try {
-                db.delete(T_SNAP, null, null);
-                db.delete(T_RECH, null, null);
+                /* 先判断再删！备份里缺 snapshots 字段时（旧格式/手工改过/
+                   optJSONArray 返回 null），无条件 delete 会把整本余额历史清空，
+                   界面还提示「已恢复 0 条余额记录」—— 用户以为恢复成功，其实全没了。 */
+                if (snaps == null && rechs == null) {
+                    db.setTransactionSuccessful();
+                    return 0;
+                }
+                if (snaps != null) db.delete(T_SNAP, null, null);
+                if (rechs != null) db.delete(T_RECH, null, null);
                 if (snaps != null) {
                     for (int i = 0; i < snaps.length(); i++) {
                         org.json.JSONArray r = snaps.optJSONArray(i);

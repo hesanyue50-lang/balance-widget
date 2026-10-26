@@ -898,6 +898,13 @@ public class SettingsBinder {
             android.widget.RadioButton rbSubscription = new android.widget.RadioButton(act);
             rbSubscription.setText("订阅制");
             rbSubscription.setTextSize(13);
+            /* 必须显式 setId：不设的话两个按钮的 getId() 都是 NO_ID(-1)，
+               于是 rg.check(-1) 一个都不选中，而保存时
+               「getCheckedRadioButtonId() == rbSub.getId()」变成 -1 == -1 **恒真** ——
+               无论用户在界面上选什么，planMode 永远被写成 subscription，
+               百炼就一直去查 Token Plan 实例而不是账户余额。 */
+            rbBal.setId(1001);
+            rbSubscription.setId(1002);
             rg.addView(rbBal);
             rg.addView(rbSubscription);
             rg.check("subscription".equals(src.planMode)
@@ -993,7 +1000,9 @@ public class SettingsBinder {
                 } catch (Exception ig) { k.threshold = 0; }
                 if (k.threshold < 0) k.threshold = 0;
                 k.budget = src.budget;
-                k.draw = true;
+                /* 不能无条件 true：用户在「隐藏 API → 统计」里关掉的开关
+                   会在每次编辑 Key 时被悄悄打开（src.draw 被丢弃）。 */
+                k.draw = src.draw;
                 /* 百炼：有输入框就读框里的值；其他平台没有这两个框，沿用原值 */
                 k.accessKeyId = (eAkId[0] != null)
                         ? eAkId[0].getText().toString().trim() : src.accessKeyId;
@@ -1622,6 +1631,12 @@ public class SettingsBinder {
                         + "抓到的 Cookie 只存在本机，可以在下面查看或清除。",
                 loginBtn);
         final String[] cookieRef = { w0.headers };
+        /* eHeaders 输入框在本函数后面（「⑧ 附加请求头」那一栏）才创建，
+           匿名内部类不能前向引用局部变量，所以用这个槽位桥接。
+           不桥接的话：登录拿到的 Cookie 只写进 w0.headers，
+           而保存时是从 eHeaders 输入框重新读的 —— Cookie 被静默丢弃，
+           抓取仍然匿名，用户还以为登录成功了。 */
+        final EditText[] eHeadersRef = new EditText[1];
         final TextView cookieInfo = mkLabel("");
         panel.addView(cookieInfo);
 
@@ -1639,6 +1654,8 @@ public class SettingsBinder {
                         String merged = WebCustom.mergeHeader(cookieRef[0], "Cookie", cookie);
                         cookieRef[0] = merged;
                         w0.headers = merged;
+                        /* 关键：同步到输入框，保存时读的才是它 */
+                        if (eHeadersRef[0] != null) eHeadersRef[0].setText(merged);
                         String has = "";
                         try {
                             String[] ps0 = merged.split("\n");
@@ -1878,6 +1895,7 @@ public class SettingsBinder {
         final EditText eHeaders = new EditText(act);
         eHeaders.setHint("Authorization: Bearer sk-xxx\nX-Token: abc");
         eHeaders.setText(w0.headers);
+        eHeadersRef[0] = eHeaders;      // 让上面的「网页登录」回调能把 Cookie 写进来
         eHeaders.setMinLines(2);
         eHeaders.setTextSize(12);
         addField(advBox, "⑧ 附加请求头",
@@ -2371,7 +2389,12 @@ public class SettingsBinder {
     /** 恢复完成后：配置全变了，把界面与余额重新拉一遍 */
     private void afterRestore() {
         Busy.run(act, "正在刷新…", new Runnable() {
-            public void run() { renderCustoms(); renderKeys(); kick(); renderBackups(); }
+            public void run() {
+                /* 必须连高级平台一起重画：恢复备份后 custom/web 的下标都变了，
+                   而 renderWebs 里每个「删除」按钮捕获的是**旧**下标 ——
+                   不重画的话，点删除会删掉新列表里同下标的另一个平台。 */
+                renderCustoms(); renderKeys(); renderWebs(); kick(); renderBackups();
+            }
         });
     }
 
@@ -2431,7 +2454,10 @@ public class SettingsBinder {
                             if (pf.startsWith("custom:")) {
                                 try {
                                     int pi = Integer.parseInt(pf.substring(7));
-                                    if (pi >= idx) continue;   // 删掉被删平台及其后的旧映射
+                                    if (pi == idx) continue;      // 被删平台的 Key，一起丢
+                                    if (pi > idx) {               // 后面的平台前移一位
+                                        kk.platform = "custom:" + (pi - 1);
+                                    }
                                 } catch (Throwable ig) { continue; }
                             }
                             keep.add(kk);
@@ -2674,11 +2700,19 @@ public class SettingsBinder {
         final android.widget.ScrollView scroll = new android.widget.ScrollView(act);
         scroll.addView(panel);
 
-        new AlertDialog.Builder(act)
+        final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle(isEdit ? "编辑自定义平台" : "添加自定义平台")
                 .setView(scroll)
-                .setPositiveButton("保存", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
+                .setPositiveButton("保存", null)
+                .setNegativeButton("取消", null)
+                .create();
+        dlg.show();
+        /* 校验失败不能关窗：以前用 setPositiveButton 的监听，点「保存」时
+           对话框已经被系统关掉了，Toast 报完用户填的东西全丢。
+           改成 show() 之后自己挂按钮监听，只有全部校验通过才 dismiss。 */
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(
+                new View.OnClickListener() {
+                    public void onClick(View v) {
                         BalanceFetcher.Custom c = new BalanceFetcher.Custom();
                         c.name = eName.getText().toString().trim();
                         c.url = eUrl.getText().toString().trim();
@@ -2699,7 +2733,11 @@ public class SettingsBinder {
                             Toast.makeText(act, "名称不能为空", Toast.LENGTH_SHORT).show();
                             return;
                         }
-                        if (c.url.length() == 0) {
+                        /* 静态卡（模板加的「余额见控制台」）本来就没有接口地址 ——
+                           它的判定标准是 text 非空，和 Custom.ready() 保持一致。
+                           以前这里强制 url 非空，导致静态卡连改个名字都存不了。 */
+                        boolean hasText = c.text != null && c.text.length() > 0;
+                        if (c.url.length() == 0 && !hasText) {
                             Toast.makeText(act, "接口地址不能为空", Toast.LENGTH_SHORT).show();
                             return;
                         }
@@ -2710,10 +2748,9 @@ public class SettingsBinder {
                         Busy.run(act, "正在保存…", new Runnable() {
                             public void run() { renderCustoms(); renderKeys(); kick(); }
                         });
+                        dlg.dismiss();      // 走到这里说明校验全过
                     }
-                })
-                .setNegativeButton("取消", null)
-                .show();
+                });
     }
 
     /** 安全与密码区块（与设置页原实现等价，内联在密钥区同层之后） */

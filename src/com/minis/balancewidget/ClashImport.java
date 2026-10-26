@@ -54,10 +54,13 @@ public final class ClashImport {
         }
         if (raw == null) return "";
         raw = raw.trim();
-        /* 解码两次：外层一次是 URL 编码，而 url 参数的值本身通常又被编码了一次 */
-        String once = dec(raw);
+        /* ⚠️ 不能无条件 dec：Uri.getQueryParameter 返回的**已经是解码后的值**。
+           再解一次会把 URL 里合法的 '+' 转成空格、'%2B' 转成 '+'，
+           带 base64 / 加号 token 的订阅链接就被改坏了。
+           只在"看起来还不是 URL"时才再解一次（说明它确实还被编码着）。 */
+        String once = raw;
         if (looksLikeUrl(once)) return once;
-        String twice = dec(once);
+        String twice = dec(raw);
         if (looksLikeUrl(twice)) return twice;
         return once;
     }
