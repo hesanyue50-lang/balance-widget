@@ -139,6 +139,13 @@ public final class PlatformPack {
     public static Info parse(String text) throws Exception {
         if (text == null || text.trim().length() == 0) throw new Exception("内容为空");
         JSONObject root = new JSONObject(text.trim());
+        /* 版本校验：文件里写了 version 但一直没校验过。
+           将来格式升级后，旧版应用会按 v1 静默错误解析 —— 至少要说清楚。 */
+        int fileVer = root.optInt("version", 1);
+        if (fileVer > VERSION) {
+            throw new Exception("这个文件来自更新版本的应用（v" + fileVer
+                    + "），请先升级本应用再导入");
+        }
         if (!MAGIC.equals(root.optString("app"))) {
             throw new Exception("这不是平台配置文件（缺少标识）。\n"
                     + "请确认选的是本应用导出的 .bwp 文件。");

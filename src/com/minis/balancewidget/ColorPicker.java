@@ -90,23 +90,32 @@ public class ColorPicker {
         /* ---------------- HSV 调色盘 ---------------- */
         /* 色相条（横向） */
         final View hueBar = new View(act) {
+            /* 渐变和画笔提为字段：onDraw 每帧 new 一个 LinearGradient + 两个 Paint，
+               拖动色相条时每个 MOVE 都重绘，持续产生垃圾。 */
+            private LinearGradient grad;
+            private int gradW = -1, gradH = -1;
+            private final Paint pBar = new Paint();
+            private final Paint pCur = new Paint(Paint.ANTI_ALIAS_FLAG);
+
             @Override
             protected void onDraw(Canvas c) {
-                LinearGradient lg = new LinearGradient(0, 0, getWidth(), getHeight(),
-                        new int[] { Color.RED, Color.YELLOW, Color.GREEN,
-                                Color.CYAN, Color.BLUE, Color.MAGENTA, Color.RED },
-                        null, Shader.TileMode.CLAMP);
-                Paint p = new Paint();
-                p.setShader(lg);
-                c.drawRect(0, 0, getWidth(), getHeight(), p);
+                int w = getWidth(), h = getHeight();
+                if (grad == null || gradW != w || gradH != h) {
+                    grad = new LinearGradient(0, 0, w, h,
+                            new int[] { Color.RED, Color.YELLOW, Color.GREEN,
+                                    Color.CYAN, Color.BLUE, Color.MAGENTA, Color.RED },
+                            null, Shader.TileMode.CLAMP);
+                    gradW = w;
+                    gradH = h;
+                }
+                pBar.setShader(grad);
+                c.drawRect(0, 0, w, h, pBar);
                 /* 当前色相位置画个小游标（用保存的色相，纯黑/纯白时也准） */
-                float x = hsvRef[0] / 360f * getWidth();
-                p = new Paint();
-                p.setColor(0xFFFFFFFF);
-                p.setStyle(Paint.Style.STROKE);
-                p.setStrokeWidth(dp(getContext(), 2));
-                c.drawRect(x - dp(getContext(), 7), 0,
-                        x + dp(getContext(), 7), getHeight(), p);
+                float x = hsvRef[0] / 360f * w;
+                pCur.setColor(0xFFFFFFFF);
+                pCur.setStyle(Paint.Style.STROKE);
+                pCur.setStrokeWidth(dp(getContext(), 2));
+                c.drawRect(x - dp(getContext(), 7), 0, x + dp(getContext(), 7), h, pCur);
             }
         };
 

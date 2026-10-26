@@ -1,3 +1,57 @@
+## 26.10.588 · 2026-10-18
+
+### 收尾：最后 20 个
+
+**死代码 SettingsActivity（6 个，虽没人启动它，一并清掉）**
+- 百炼 RadioButton 未 setId（同活代码的 `-1 == -1` 恒真问题）
+- 编辑 Key 时丢了 `baseUrl`（KeyStore.update 是整对象替换，网关地址会被清空）
+- 自定义平台强制 Key 非空（Key 本就可选）
+- 编辑自定义平台时丢掉 `console`（模板填的控制台地址被清空）
+- 删平台不清 Key（留下孤儿 `custom:N`）
+- `onDestroy` 只移除一个 task（分片构建的 buildChunk 仍在跑）
+
+**网页抓取**
+- **数字带千分位时差 1000 倍** —— 兜底正则匹配的是未去逗号的原文，"1,234.56" 只抓到 "1"
+- **负数丢符号** —— auto 模式的正则没有 `-?`，页面写 "-12.34" 会得到 12.34
+- **可选捕获组导致整次提取失败** —— `(a)|(b)` 匹配到 b 时 `group(1)` 是 null
+
+**登录页**
+- **「清除」会清掉整个 App 的 cookie jar** —— 把其它高级平台的网页登录会话一起清了。
+  改成按当前域名逐个过期
+- 点「完成」但没取到 cookie 时静默退出，用户和宿主都不知道发生了什么
+
+**主界面**
+- **`goto_tab` 在 `onNewIntent` 不生效** —— MainActivity 是 singleTask，应用在前台时
+  再进来只走 onNewIntent，以前那里只处理备份恢复和 Clash 导入
+- **导航标签与页面错位** —— 某页 view 取不到时 `continue` 跳过，但标签仍按 `visibleOrder`
+  全量创建，点第 i 个标签会落到相邻页。改成以「实际加入容器的页」为基准
+- **清理记录的 Toast 弹在删除之前** —— `Busy.run` 把重活推到下一帧，Toast 在外面先弹了，
+  删失败也说"已删除"
+- `cards`/`tTotal`/`tSub` 未判空就直接用（与相邻代码的防御风格不一致）
+
+**崩溃日志**
+- **MediaStore 分支从不清理** —— `MAX_FILES=10` 只在自定义目录分支生效，
+  默认走 Download 的那条写完就 return，用户每崩一次就多一个文件，无限累积
+- SAF 分支 `openOutputStream` 返回 null 时 NPE，且失败会留下 0 字节的空文件
+
+**其它**
+- **MiMo 保活误判会话有效** —— 只按 URL 里有没有 `/login` 判断，而小米 SSO 跳的是
+  `account.xiaomi.com`（路径不含 `/login`），会被当成"仍在控制台"并清掉过期标记
+- `ColorPicker` 色相条每帧 new 渐变 + 两个 Paint（拖动时每个 MOVE 都重绘）
+- `UsageChartView` 按住时的提示框每帧 new Paint
+- `PlatformPack` 导入不校验 `version`（文件里写了但一直没用）
+
+**明确跳过的两个**
+
+- `ClashImport` 在下载**前**就 `setActive`，下载失败会顶掉原订阅。
+  修它要跨 ClashImport / VpnBinder 两处传状态，风险大于收益 ——
+  用户手动重选一次订阅即可，先不动
+- 系统全局模式只 `addRoute` IPv4（IPv6 绕过 tun）。
+  这是**有意的保守设计**：tun 加 IPv6 路由在部分机型/内核上会直接不通，
+  且绝大多数网络 IPv4 可用。已确认是设计取舍，不是 bug
+
+---
+
 ## 26.10.581 · 2026-10-18
 
 ### 中低优先级清扫：又 25 个

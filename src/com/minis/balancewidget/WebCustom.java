@@ -340,8 +340,10 @@ public class WebCustom {
         /* 用户没填正则时的兜底：HTML 页面里第一串像金额的数字
            （带小数或千分位逗号优先，避免抓到时间戳/ID 这类长整数） */
         if (pattern == null || pattern.trim().length() == 0) {
+            /* 必须带负号：页面写 "-12.34"（欠费/透支）时，
+               原来只抓到 12.34，符号丢掉。 */
             Matcher mm = Pattern.compile(
-                    "\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+").matcher(raw);
+                    "-?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|-?\\d+\\.\\d+").matcher(raw);
             if (mm.find()) {
                 Double v = toNumber(mm.group());
                 if (v != null) {
@@ -448,7 +450,16 @@ public class WebCustom {
             throw new Exception("正则表达式有误：" + e.getMessage());
         }
         if (!mm.find()) return null;
-        String s = mm.groupCount() > 0 ? mm.group(1) : mm.group(0);
+        /* 有捕获组不一定就用 group(1)：含可选组的正则（如 "(a)|(b)"）
+           匹配到 b 时 group(1) 是 null，直接用它会让整次提取失败 ——
+           这时退回 group(0)（或第一个非 null 的组）。 */
+        String s = mm.group(0);
+        if (mm.groupCount() > 0) {
+            for (int gi = 1; gi <= mm.groupCount(); gi++) {
+                String g = mm.group(gi);
+                if (g != null && g.length() > 0) { s = g; break; }
+            }
+        }
         Double v = toNumber(s);
         if (v == null) return null;
         Result r = new Result();

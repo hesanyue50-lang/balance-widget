@@ -173,8 +173,19 @@ public final class CrashGuard {
                         c.getContentResolver(), doc, "text/plain", name);
                 if (file != null) {
                     java.io.OutputStream os = c.getContentResolver().openOutputStream(file);
-                    os.write(content.getBytes("UTF-8"));
-                    os.close();
+                    if (os == null) {
+                        /* 打开失败：把刚 createDocument 出来的空文件删掉，
+                           否则用户目录里会留一堆 0 字节的垃圾。 */
+                        try { android.provider.DocumentsContract.deleteDocument(
+                                c.getContentResolver(), file); } catch (Throwable ig2) { }
+                        return null;
+                    }
+                    try {
+                        os.write(content.getBytes("UTF-8"));
+                        os.flush();
+                    } finally {
+                        try { os.close(); } catch (Throwable ig2) { }
+                    }
                     return null;    // 无真实路径，通知只报目录
                 }
             }
@@ -205,8 +216,15 @@ public final class CrashGuard {
                     android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
             if (uri == null) return null;
             java.io.OutputStream os = c.getContentResolver().openOutputStream(uri);
-            os.write(content.getBytes("UTF-8"));
-            os.close();
+            if (os != null) {
+                try {
+                    os.write(content.getBytes("UTF-8"));
+                    os.flush();
+                } finally {
+                    try { os.close(); } catch (Throwable ig3) { }
+                }
+            }
+            pruneMediaStore(c);
             BalanceFetcher.diag(c, "崩溃日志已写入 Download（MediaStore）");
             return null;    // MediaStore 没有真实路径；通知里只报目录
         } catch (Throwable ig2) {
@@ -243,6 +261,38 @@ public final class CrashGuard {
                     .getPackageInfo(c.getPackageName(), 0).versionName;
         } catch (Throwable t) {
             return "?";
+        }
+    }
+
+    /**
+     * 清理 Download 里的旧崩溃日志（MediaStore 分支）。
+     *
+     * 之前 MAX_FILES=10 只在「自定义明文目录」分支经 prune() 生效，
+     * 默认走 MediaStore 写 Download 的那条写完就 return，从不清理 ——
+     * 用户每崩一次 Download 就多一个文件，无限累积。
+     */
+    private static void pruneMediaStore(Context c) {
+        android.database.Cursor cur = null;
+        try {
+            cur = c.getContentResolver().query(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    new String[] { android.provider.MediaStore.Downloads._ID },
+                    android.provider.MediaStore.Downloads.DISPLAY_NAME + " LIKE ?",
+                    new String[] { "BW崩溃-%" },
+                    android.provider.MediaStore.Downloads.DATE_ADDED + " DESC");
+            if (cur == null) return;
+            int n = 0;
+            while (cur.moveToNext()) {
+                n++;
+                if (n <= MAX_FILES) continue;
+                long id = cur.getLong(0);
+                android.net.Uri u = android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id);
+                try { c.getContentResolver().delete(u, null, null); } catch (Throwable ig) { }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            try { if (cur != null) cur.close(); } catch (Throwable ig) { }
         }
     }
 

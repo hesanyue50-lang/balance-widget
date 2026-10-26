@@ -278,7 +278,9 @@ public class SettingsActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        searchHandler.removeCallbacks(searchFilterTask);   // 退出后不再重建列表
+        /* 清全部而不是只清一个：分片构建的 buildChunk 也挂在同一个 Handler 上，
+           只移除 searchFilterTask 的话它仍会继续跑并操作已分离的 View。 */
+        searchHandler.removeCallbacksAndMessages(null);
         if (binder != null) binder.detach();
         super.onDestroy();
     }
@@ -703,6 +705,12 @@ public class SettingsActivity extends Activity {
             rbSub.setTextSize(13);
             rgMode.addView(rbBal);
             rgMode.addView(rbSub);
+            /* 必须显式 setId：不设的话两个按钮 getId() 都是 -1，
+               check(-1) 一个都不选中，而保存时
+               "getCheckedRadioButtonId() == rbSub.getId()" 变成 -1 == -1 恒真 ——
+               选什么都会被存成 subscription。 */
+            rbBal.setId(1001);
+            rbSub.setId(1002);
             rgMode.check("subscription".equals(src.planMode)
                     ? rbSub.getId() : rbBal.getId());
             card.addView(rgMode);
@@ -799,6 +807,9 @@ public class SettingsActivity extends Activity {
                 /* ⚠️ 漏了这行会导致「隐藏 API」里设的隐藏状态在编辑一次后被重置回显示。
                    这里原先只跟了 draw，没跟 hideCard —— SettingsBinder:744 的同类保存是补齐的 */
                 k.hideCard = src.hideCard;
+                /* 必须沿用 baseUrl：KeyStore.update 是整对象替换，
+                   不带上就会被清空 —— workbuddy 网关地址就是这么丢的。 */
+                k.baseUrl = src.baseUrl;
                 
                 // 保存阿里云 AccessKey（如果是百炼平台）
                 if ("dashscope".equals(platform) && accessKeyInputs[0] != null) {
@@ -916,6 +927,24 @@ public class SettingsActivity extends Activity {
                 List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(SettingsActivity.this);
                 if (index < list.size()) list.remove(index);
                 BalanceFetcher.saveCustom(SettingsActivity.this, list);
+                /* 同步清理该平台的 Key，并把后面平台前移一位 ——
+                   只 remove 不清 Key 会留下孤儿 custom:N，
+                   统计页会冒出根本不存在的平台。 */
+                List<KeyStore.ApiKey> all = KeyStore.all(SettingsActivity.this);
+                List<KeyStore.ApiKey> keep = new java.util.ArrayList<KeyStore.ApiKey>();
+                for (int ki = 0; ki < all.size(); ki++) {
+                    KeyStore.ApiKey kk = all.get(ki);
+                    String pf = kk.platform == null ? "" : kk.platform;
+                    if (pf.startsWith("custom:")) {
+                        try {
+                            int pi = Integer.parseInt(pf.substring(7));
+                            if (pi == index) continue;
+                            if (pi > index) kk.platform = "custom:" + (pi - 1);
+                        } catch (Throwable ig) { continue; }
+                    }
+                    keep.add(kk);
+                }
+                KeyStore.save(SettingsActivity.this, keep);
                 renderCustomList();
                 refreshWidget();
             }
@@ -1122,7 +1151,9 @@ public class SettingsActivity extends Activity {
                 String url = eUrl.getText().toString().trim();
                 String key = eKey.getText().toString().trim();
                 String txt = eText.getText().toString().trim();
-                if (key.length() == 0) {
+                /* Key 是可选的（很多自建网关不需要），判定标准与 Custom.ready() 一致：
+                   有接口地址或有静态文本就算配置好。 */
+                if (url.length() == 0 && txt.length() == 0) {
                     Toast.makeText(SettingsActivity.this, R.string.custom_need_url_key,
                             Toast.LENGTH_SHORT).show();
                     return;
@@ -1141,6 +1172,11 @@ public class SettingsActivity extends Activity {
                 } catch (Exception ignored) { c.threshold = 0; }
 
                 List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(SettingsActivity.this);
+                /* 本界面没有控制台输入框，但编辑时必须把原值带过来 ——
+                   否则模板填好的「控制台」地址被清空，卡片点进去跳不了。 */
+                if (editing && index < list.size()) {
+                    c.console = list.get(index).console;
+                }
                 if (editing && index < list.size()) list.set(index, c);
                 else list.add(c);
                 BalanceFetcher.saveCustom(SettingsActivity.this, list);

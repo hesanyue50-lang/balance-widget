@@ -101,6 +101,8 @@ public class UsageChartView extends View {
        原来每帧都做 5 次 String.format（Y 轴刻度）和每条线一次 new LinearGradient，
        650ms 揭示动画 + 手指拖动时持续产生垃圾对象，表现为掉帧。 */
     private android.animation.ValueAnimator revealAnim;
+    /** 按住时的提示框画笔（原来每帧 new 一个，按住拖动时持续产生垃圾） */
+    private final Paint pTip = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final String[] yLabels = new String[5];
     private double yLabelMax = Double.NaN;
     private int yLabelH = -1;
@@ -334,7 +336,7 @@ public class UsageChartView extends View {
                 float cx = mPadL + slot2 * touchIdx + slot2 / 2f;
                 float bx = Math.min(Math.max(cx - boxW / 2, padL), w - padR - boxW);
                 float by = padT + 4;
-                Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG);
+                Paint bp = pTip;
                 bp.setStyle(Paint.Style.FILL); bp.setColor(0xF5FFFFFF);
                 cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, bp);
                 bp.setStyle(Paint.Style.STROKE); bp.setStrokeWidth(1.5f); bp.setColor(0x2A000000);

@@ -101,7 +101,12 @@ public final class MimoKeepAlive {
             /* onPageFinished 收尾；loaded 标志保证只收尾一次 */
             w.setWebViewClient(new WebViewClient() {
                 public void onPageFinished(WebView v, String url) {
-                    boolean toLogin = url != null && url.indexOf("/login") >= 0;
+                    /* 不能只看路径里有没有 "/login"：小米 SSO 会跳到
+                       account.xiaomi.com（路径不含 /login），加载失败页也没有。
+                       判据改成"是否还在控制台域名下" —— 离开就是会话失效。 */
+                    String host = BalanceFetcher.MIMO_HOST;
+                    boolean toLogin = url == null
+                            || !url.startsWith(host);
                     BalanceFetcher.diag(appCtx, "MiMo 保活：页面加载完成"
                             + (toLogin ? "（被弹回登录页 → 会话已失效）" : "（仍在控制台）")
                             + " " + (System.currentTimeMillis() - t0) + "ms");

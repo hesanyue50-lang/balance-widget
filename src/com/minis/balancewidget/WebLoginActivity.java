@@ -235,6 +235,11 @@ public class WebLoginActivity extends Activity {
         } catch (Throwable ignored) { }
         if (ck != null && ck.length() > 0) {
             deliver(host, ck);
+        } else {
+            /* 以前这里静默 finish：没登成功、或者还停在登录页时，
+               用户和宿主都得不到任何结果，只能反复重试猜原因。 */
+            android.widget.Toast.makeText(this, "没有取到登录态 —— 请先在页面里完成登录",
+                    android.widget.Toast.LENGTH_LONG).show();
         }
         finish();
     }
@@ -242,7 +247,24 @@ public class WebLoginActivity extends Activity {
     private void clearCookie() {
         try {
             CookieManager cm = CookieManager.getInstance();
-            cm.removeAllCookies(null);
+            /* 不能 removeAllCookies(null)：那是**整个 App** 的 cookie jar，
+               会把其它高级自定义平台的网页登录会话一起清掉。
+               只按当前目标域名逐个过期。 */
+            String host = targetUrl;
+            if (host != null && host.length() > 0) {
+                String ck = cm.getCookie(host);
+                if (ck != null && ck.length() > 0) {
+                    String[] parts = ck.split(";");
+                    for (int i = 0; i < parts.length; i++) {
+                        int eq = parts[i].indexOf('=');
+                        if (eq <= 0) continue;
+                        String name = parts[i].substring(0, eq).trim();
+                        if (name.length() > 0) {
+                            cm.setCookie(host, name + "=; Max-Age=0; Path=/");
+                        }
+                    }
+                }
+            }
             cm.flush();
         } catch (Throwable ignored) { }
         setStatus("已清除本机的登录态");

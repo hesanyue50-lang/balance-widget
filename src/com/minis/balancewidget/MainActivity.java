@@ -155,6 +155,12 @@ public class MainActivity extends Activity {
         cards = (LinearLayout) findViewById(R.id.cards);
         tTotal = (TextView) findViewById(R.id.t_total);
         tSub = (TextView) findViewById(R.id.t_sub);
+        /* 这几个是渲染链的根控件，后面 render()/refresh() 直接用。
+           与相邻的 click()/hide() 防御风格保持一致：缺了就记一笔，别再往下崩。 */
+        if (cards == null || tTotal == null || tSub == null) {
+            BalanceFetcher.diag(this, "⚠️ 主界面控件缺失 cards=" + (cards != null)
+                    + " tTotal=" + (tTotal != null) + " tSub=" + (tSub != null));
+        }
         // 刷新按钮已移除：点总余额栏或任意卡片刷新
         click(R.id.total_card, refreshClick);
 
@@ -182,17 +188,7 @@ public class MainActivity extends Activity {
             refresh(true);
         }
         // 从设置页同级导航滑回：切到指定 Tab
-        String gt0 = getIntent().getStringExtra("goto_tab");
-        int gi0 = getIntent().getIntExtra("goto_tab", -1);
-        if (gt0 != null || gi0 >= 0) {
-            /* 显式指定了目标页（通知、快捷方式等）：按 key 找它在当前可见页里的位置 */
-            /* 只认 key，不认旧版数字下标 —— 页面可隐藏/重排，下标早不可靠了
-               （旧版存档里的 1/2/3 对今天的可见列表完全是另一个页面） */
-            if ("stats".equals(gt0)) showPanel(indexOfPage(PageStore.K_STATS));
-            else if ("vpn".equals(gt0)) showPanel(indexOfPage(PageStore.K_VPN));
-            else if ("settings".equals(gt0)) showPanel(indexOfPage(PageStore.K_SETTINGS));
-            else showPanel(indexOfPage(PageStore.K_API));
-        } else {
+        if (!handlePageIntent(getIntent())) {
             /* 没指定就落到「主页面」（用户自己设的，可能是任意一页） */
             showPanel(PageStore.homeIndex(this));
         }
@@ -239,14 +235,24 @@ public class MainActivity extends Activity {
                                         d.dismiss();
                                         Busy.run(MainActivity.this, "正在清理并重算…", new Runnable() {
                                             public void run() {
-                                                Ledger.get(MainActivity.this)
-                                                        .prune(MainActivity.this, dd);
+                                                /* Toast 必须在 prune 真正执行之后弹：
+                                                   Busy.run 是把重活推到下一帧的，
+                                                   放外面会在删除发生前就提示"已删除"，
+                                                   删失败也一样说成功。 */
+                                                boolean ok = true;
+                                                try {
+                                                    Ledger.get(MainActivity.this)
+                                                            .prune(MainActivity.this, dd);
+                                                } catch (Throwable t) {
+                                                    ok = false;
+                                                }
                                                 buildStats();
+                                                android.widget.Toast.makeText(MainActivity.this,
+                                                        ok ? ("已删除 " + dd + " 天前的记录")
+                                                           : "清理失败，请稍后重试",
+                                                        android.widget.Toast.LENGTH_SHORT).show();
                                             }
                                         });
-                                        android.widget.Toast.makeText(MainActivity.this,
-                                                "已删除 " + days + " 天前的记录",
-                                                android.widget.Toast.LENGTH_SHORT).show();
                                     }
                                 })
                         .setNegativeButton("取消", null)
@@ -475,11 +481,13 @@ public class MainActivity extends Activity {
         if (pager != null && pager.getChildCount() > 0) {
             LinearLayout row = (LinearLayout) pager.getChildAt(0);
             row.removeAllViews();
+            navKeys.clear();
             for (int i = 0; i < vis.size(); i++) {
                 PullScrollView v = pageScrolls.get(vis.get(i));
-                if (v == null) continue;
+                if (v == null) continue;      // 该页 view 取不到，下面也不给它建标签
                 v.setVisibility(View.VISIBLE);
                 row.addView(v);
+                navKeys.add(vis.get(i));
             }
             /* 被隐藏的页面从容器里摘出去（不是只置 GONE）——
                  摘掉之后 PanelPager 的宽度计算天然就是对的。 */
@@ -492,9 +500,13 @@ public class MainActivity extends Activity {
         }
 
         // 2) 滚动区数组（顺序已按可见页）
+        /* 以 navKeys（实际加入容器的页）为准，而不是 vis：
+           某页 view 取不到时 vis 里还有它，标签照 vis 建就会多出一个，
+           点第 i 个标签落到相邻页。 */
+        if (navKeys.isEmpty()) navKeys.addAll(vis);
         List<PullScrollView> scs = new ArrayList<PullScrollView>();
-        for (int i = 0; i < vis.size(); i++) {
-            PullScrollView v = pageScrolls.get(vis.get(i));
+        for (int i = 0; i < navKeys.size(); i++) {
+            PullScrollView v = pageScrolls.get(navKeys.get(i));
             if (v != null) scs.add(v);
         }
         scrolls = scs.toArray(new PullScrollView[0]);
@@ -504,8 +516,8 @@ public class MainActivity extends Activity {
         navTabs.clear();
         if (tabs != null) {
             tabs.removeAllViews();
-            for (int i = 0; i < vis.size(); i++) {
-                final String key = vis.get(i);
+            for (int i = 0; i < navKeys.size(); i++) {
+                final String key = navKeys.get(i);
                 TextView t = new TextView(this);
                 t.setText(PageStore.nameOf(key));
                 t.setTextSize(12);
@@ -529,6 +541,12 @@ public class MainActivity extends Activity {
 
     /** 某个 key 在当前可见页里的下标（找不到返回 -1） */
     private int indexOfPage(String key) {
+        /* 优先用「当前导航实际对应的页列表」：某页 view 缺失时它比 visibleOrder 少一项，
+           用 visibleOrder 的下标去 showPanel 会落到相邻页。 */
+        if (!navKeys.isEmpty()) {
+            int i = navKeys.indexOf(key);
+            if (i >= 0) return i;
+        }
         List<String> vis = PageStore.visibleOrder(this);
         return vis.indexOf(key);
     }
@@ -1424,6 +1442,28 @@ public class MainActivity extends Activity {
         return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    /**
+     * 处理「切到指定页」的启动参数。
+     *
+     * @return true = 参数里确实指定了目标页
+     *
+     * 单独抽出来是因为 MainActivity 是 singleTask：应用已在前台时再次进入
+     * 只走 onNewIntent，不会重新 onCreate —— 以前这里只处理备份恢复和 Clash 导入，
+     * 带 goto_tab 的启动在主界面存活时完全不生效。
+     */
+    private boolean handlePageIntent(Intent intent) {
+        if (intent == null) return false;
+        String gt = intent.getStringExtra("goto_tab");
+        int gi = intent.getIntExtra("goto_tab", -1);
+        if (gt == null && gi < 0) return false;
+        /* 只认 key，不认旧版数字下标 —— 页面可隐藏/重排，下标早不可靠了 */
+        if ("stats".equals(gt)) showPanel(indexOfPage(PageStore.K_STATS));
+        else if ("vpn".equals(gt)) showPanel(indexOfPage(PageStore.K_VPN));
+        else if ("settings".equals(gt)) showPanel(indexOfPage(PageStore.K_SETTINGS));
+        else showPanel(indexOfPage(PageStore.K_API));
+        return true;
+    }
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -1432,6 +1472,7 @@ public class MainActivity extends Activity {
         /* 用户在文件管理器里点开 .apibak 备份 → 直接恢复 */
         if (BackupUi.handleViewIntent(this, intent)) return;
         handleImportIntent(intent);
+        handlePageIntent(intent);   // 应用在前台时也要能按 goto_tab 切页
     }
 
     /** 处理 clash://install-config 导入请求 */
@@ -1441,6 +1482,9 @@ public class MainActivity extends Activity {
         showPanel(indexOfPage(PageStore.K_VPN));
         ClashImport.handle(this, it, null);
     }
+
+    /** 当前导航实际对应的页 key（顺序与 pager 里一致） */
+    private final List<String> navKeys = new ArrayList<String>();
 
     /** 设置面板预热任务（onDestroy 要能移除它） */
     private Runnable settingsWarmup;
@@ -1600,7 +1644,7 @@ public class MainActivity extends Activity {
     private void refresh(final boolean silent) {
         if (loading) return;
         loading = true;
-        if (!silent) {
+        if (!silent && tSub != null) {
             tSub.setText(R.string.refreshing);
             tSub.setTextColor(getColor(R.color.tx3));
         }
@@ -2020,6 +2064,9 @@ public class MainActivity extends Activity {
 
     private void render(BalanceFetcher.Result r) {
         lastResult = r;
+        /* 控件缺失（某些设备/重打包）时不要崩在渲染链上 —— 数据照样记进 lastResult，
+           统计页和小组件仍可用。 */
+        if (cards == null || tTotal == null) return;
         /* 首次渲染（列表本来是空的）才播入场动画 ——
            自动刷新时也播的话，每几分钟整页闪一次，反而烦 */
         final boolean firstFill = cards.getChildCount() == 0;
