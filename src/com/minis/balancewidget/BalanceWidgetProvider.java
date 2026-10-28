@@ -353,10 +353,13 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                        后台走精简模式，并且不做失败重试 ——
                        Doze 下网络本来就常不通，重试既拿不到数据又白白耗电。 */
                     BalanceFetcher.Result r = BalanceFetcher.fetch(ctx, FETCH_TIMEOUT_MS, bg);
-                    // Doze/idle 下网络栈可能未就绪导致全 DNS 失败：等 2s 自愈重试一次
+                    /* ★ 这里原来有「全失败 → sleep 2 秒 → 整轮重跑一次」。
+                       问题是整轮重跑不是只重试失败项：单轮最坏 18 秒，两轮 40 秒+，
+                       而 goAsync() 的 PendingResult 只有 10 秒窗口 —— 必然超时，
+                       而且对同一批 URL 全量重复请求。缓存兜底已经在下面了，
+                       弱网时让用户看到旧数据，比卡 40 秒后被系统掐掉好。 */
                     if (!bg && r.configured > 0 && r.failed == r.configured) {
-                        try { Thread.sleep(2000); } catch (Exception ig) { }
-                        r = BalanceFetcher.fetch(ctx, FETCH_TIMEOUT_MS);
+                        BalanceFetcher.diag(ctx, "本轮全失败（" + r.failed + " 项），不重试，走缓存兜底");
                     }
 
                     /* 本轮全军覆没就别覆盖缓存了 —— 弱网、Doze 掐断都是常事 */

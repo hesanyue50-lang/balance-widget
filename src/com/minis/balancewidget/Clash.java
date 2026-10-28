@@ -321,6 +321,16 @@ public final class Clash {
             writeText(new File(dir, "config.yaml"), cfgText);
             // 日志写到私有目录，出问题能看
             File log = new File(dir, "core.log");
+            /* 内核 stdout 是 appendTo 追加写，而全工程没有任何轮转 ——
+               长期挂着加速，这个文件会无界增长（内核每次请求都会打日志）。
+               启动前超过 512KB 就轮转一份，和 diag.log 的做法保持一致。 */
+            try {
+                if (log.length() > 512 * 1024) {
+                    File old = new File(dir, "core.log.old");
+                    if (old.exists()) old.delete();
+                    log.renameTo(old);
+                }
+            } catch (Throwable ignored) { }
 
             ProcessBuilder pb = new ProcessBuilder(
                     binPath(c),
@@ -396,7 +406,27 @@ public final class Clash {
     }
 
     /** 经代理访问一个轻量地址，验证代理链路真的通 */
+    /* 代理链路探活的结果缓存 + 单飞。
+       这个方法会真发一次 HTTPS 请求（最长 6 秒），而它在**每个"直连全灭"的平台
+       线程里**都会被调用 —— 20 个平台同时失败就是 20 个并发请求打到同一台服务器，
+       每个还要再吃 6 秒。加锁 + 5 秒缓存后：只有第一个线程真探，其余等它的结果。 */
+    private static volatile long lastAliveAt = 0L;
+    private static volatile boolean lastAliveOk = false;
+
     public static boolean proxyAlive() {
+        long now = System.currentTimeMillis();
+        if (now - lastAliveAt < 5000L) return lastAliveOk;
+        synchronized (Clash.class) {
+            now = System.currentTimeMillis();
+            if (now - lastAliveAt < 5000L) return lastAliveOk;   // 等锁期间别人已经探完了
+            boolean ok = proxyAliveReal();
+            lastAliveAt = System.currentTimeMillis();
+            lastAliveOk = ok;
+            return ok;
+        }
+    }
+
+    private static boolean proxyAliveReal() {
         try {
             String r = BalanceFetcher.getViaProxy(
                     "https://api.deepseek.com/user/balance", null, "", 6000);

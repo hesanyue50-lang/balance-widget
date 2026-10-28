@@ -116,6 +116,8 @@ public class UsageChartView extends View {
     private final Paint pAxis = new Paint(Paint.ANTI_ALIAS_FLAG);   // Y/X 刻度（大）
     private final Paint pMark = new Paint(Paint.ANTI_ALIAS_FLAG);   // 峰值标注（最大最亮）
     private final Paint pLegend = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** 按住图表时的高亮竖线：拖动时每帧都要画，Paint 必须复用（每帧 new 会持续产生垃圾） */
+    private final Paint pHl = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final Path linePath = new Path();
     private final Path fillPath = new Path();
@@ -355,9 +357,10 @@ public class UsageChartView extends View {
                             bx + 40, ry + 11, pLegend);
                     ry += rowH;
                 }
-                Paint hl = new Paint(Paint.ANTI_ALIAS_FLAG);
-                hl.setStyle(Paint.Style.STROKE); hl.setStrokeWidth(2f); hl.setColor(0x3339424F);
-                cv.drawLine(cx, padT, cx, padT + ch, hl);
+                pHl.setStyle(Paint.Style.STROKE);
+                pHl.setStrokeWidth(2f);
+                pHl.setColor(0x3339424F);
+                cv.drawLine(cx, padT, cx, padT + ch, pHl);
             }
         }
     }

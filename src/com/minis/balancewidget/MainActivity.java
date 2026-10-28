@@ -149,8 +149,17 @@ public class MainActivity extends Activity {
         }, "clash-autostart").start();
 
         /* 进 App 就先保活一次：会话多半在后台已经过期了，
-           先续上再刷新，比让用户看到"登录过期"再手动登要顺得多。 */
-        MimoKeepAlive.tick(this);
+           先续上再刷新，比让用户看到"登录过期"再手动登要顺得多。
+
+           ⚠️ 但不能在 onCreate 里同步调：tick() 会 new WebView(act)，
+           而这个进程的**首次 WebView 初始化**要 100~400ms（要加载 chromium 内核），
+           压在首帧前就是肉眼可见的启动卡顿。延到界面画出来之后再建。 */
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+            public void run() {
+                if (isFinishing() || isDestroyed()) return;
+                MimoKeepAlive.tick(MainActivity.this);
+            }
+        }, 2500);
 
         cards = (LinearLayout) findViewById(R.id.cards);
         tTotal = (TextView) findViewById(R.id.t_total);
@@ -689,6 +698,12 @@ public class MainActivity extends Activity {
             boolean firstSet = !settingsPanelBuilt;
             buildSettingsPanel();
             if (firstSet) Anim.enterPage(findViewById(R.id.scroll_settings));
+            else if (settingsBinder != null) {
+                /* 补一次 Key 列表刷新：onResume 现在只在设置页**可见**时才刷，
+                   而「从登录页回来 → 先看余额页 → 再切设置」这条路径下那次是被跳过的，
+                   不补的话登录状态还显示成"未登录"。 */
+                try { settingsBinder.refreshKeys(); } catch (Throwable ignored) { }
+            }
             dropEditFocus();     // 设置页里有输入框，别让它一进来就抢焦点弹键盘
         }
         // 回到该页顶部：沿用上一页的滚动位置会让人以为内容没加载
@@ -1088,7 +1103,9 @@ public class MainActivity extends Activity {
             balIdx++;
         }
         /* 账本明细：排查"少点/没线"时一眼看出数据记在哪个 id 下 */
-        BalanceFetcher.diag(this, "账本明细 " + lg.dumpKeys(this));
+        /* dumpKeys 要对 snapshots 全表做 GROUP BY，只为打一行日志 ——
+           而 diag 本身是异步的，参数求值却仍在主线程上。只在首轮（诊断开关打开）跑。 */
+        if (diagThisRound) BalanceFetcher.diag(this, "账本明细 " + lg.dumpKeys(this));
         BalanceFetcher.diag(this, "stats 构建: 平台组=" + groups.size() + " 折线=" + series.size()
                 + " 明细长=" + detail.length() + " aks=" + aks.size());
         UsageChartView chart = (UsageChartView) findViewById(R.id.usage_chart);
@@ -1511,6 +1528,9 @@ public class MainActivity extends Activity {
         /* ClashImport.onPending 捕获了本 Activity（onPanelSettled 每次都写一份），
            不清的话静态字段会一直拖着已销毁的界面，下载回调还会往死界面上跑。 */
         try { ClashImport.onPending = null; } catch (Throwable ignored) { }
+        /* 保活用的 WebView 是静态字段（还挂在 DecorView 上）——
+           这里不收的话，30 秒保活窗口内退出就会连整个 Activity 一起被拖住。 */
+        try { MimoKeepAlive.release(); } catch (Throwable ignored) { }
         super.onDestroy();
     }
 
@@ -1519,11 +1539,23 @@ public class MainActivity extends Activity {
         // 放在 onResume：界面已可见，避免弹窗盖在未初始化的界面上，
         // 也避免用户从后台返回时错过提示。内部有"问过就不再弹"的闸门。
         NotifyPermission.ensure(this, null, false);
-        // 从 MiMo 登录页回来时，把「登录状态」重画一遍（面板已构建才需要）
-        if (settingsBinder != null && settingsPanelBuilt) {
+        // 从 MiMo 登录页回来时，把「登录状态」重画一遍 —— 但只在设置页**确实可见**时。
+        // renderKeys() 要 removeAllViews 后重建约 250 个 View，而用户从浏览器/登录页
+        // 返回时设置页多半在屏幕外，白做一次纯浪费（还占主线程）。
+        // 真正切到设置页时 onPanelSettled 会补一次，不会漏更新。
+        if (settingsBinder != null && settingsPanelBuilt
+                && PageStore.K_SETTINGS.equals(curKey)) {
             try { settingsBinder.refreshKeys(); } catch (Throwable ignored) { }
         }
-        refresh();
+        /* 回到前台就全量重抓 19 家平台，以前是无条件的 —— 频繁切前后台
+           （看一眼通知再回来）就是反复 19 轮请求 + 一轮汇率。
+           60 秒内直接用内存里的上一轮结果重绘，不动网络。 */
+        long sinceRefresh = System.currentTimeMillis() - lastRefreshAt;
+        if (lastResult != null && sinceRefresh >= 0 && sinceRefresh < 60000L) {
+            render(lastResult);
+        } else {
+            refresh();
+        }
         /* 开了「自动更新」的订阅，趁打开应用时顺带刷一下（内部有 6 小时闸门） */
         try { Clash.autoUpdateSubs(this); } catch (Throwable ignored) { }
         // 前台：按设置的间隔自动刷新（页面可见时才跑，省电省流量）
@@ -1674,6 +1706,7 @@ public class MainActivity extends Activity {
                            此后所有自动/手动刷新都被 if (loading) return 挡掉，
                            下拉指示器也不再消失，只能杀进程重开。 */
                         loading = false;
+                        lastRefreshAt = System.currentTimeMillis();
                         if (isFinishing() || isDestroyed()) return;
                         render(r);
                         if (statsRebuildAfterRefresh && PageStore.K_STATS.equals(curKey)) {
@@ -2017,6 +2050,8 @@ public class MainActivity extends Activity {
     }
 
     private BalanceFetcher.Result lastResult;
+    /** 上一轮刷新成功的时间：onResume 靠它做 60 秒节流，避免切前后台就全量重抓 */
+    private long lastRefreshAt = 0L;
 
     /** 隐藏开关改动后：先按本地 KeyStore 立即过滤已显示卡片，再后台刷新（即时反馈） */
     private void applyHideLocally() {

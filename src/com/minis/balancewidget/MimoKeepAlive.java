@@ -181,4 +181,27 @@ public final class MimoKeepAlive {
         busy = false;
         appCtx = null;
     }
+
+    /**
+     * Activity 销毁时立刻收掉 WebView。
+     *
+     * 不调的话：用户在 30 秒保活窗口内退出，`web` 这个静态字段会一直拖着
+     * 已销毁的 Activity + 整棵视图树 + 一个 WebView（几十 MB），
+     * 直到下一次 tick 或进程结束。
+     *
+     * 保活没跑完就算了 —— 会话过期比泄漏一整个界面划算。
+     */
+    public static void release() {
+        WebView w = web;
+        web = null;
+        busy = false;
+        appCtx = null;
+        if (w == null) return;
+        try {
+            ViewGroup p = (ViewGroup) w.getParent();
+            if (p != null) p.removeView(w);
+            w.stopLoading();
+            w.destroy();
+        } catch (Throwable ignored) { }
+    }
 }

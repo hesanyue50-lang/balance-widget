@@ -129,20 +129,32 @@ public class ColorPicker {
         final View svPad = new View(act) {
             private final Paint fill = new Paint();
             private final Paint cursor = new Paint();
+            /* 两个渐变按「色相 / 尺寸」失效重建。拖动面板时 onDraw 每个 MOVE 都跑，
+               每帧 new 两个 LinearGradient 是实打实的垃圾（色相条那边早就缓存了，这里漏了）。 */
+            private LinearGradient shadeH, shadeV;
+            private int shadeHue = -1, shadeW = -1, shadeH2 = -1;
+            private final float[] hsvTmp = new float[3];
             @Override
             protected void onDraw(Canvas c) {
                 /* 明度=0（纯黑）时 colorToHSV 给的饱和/色相不可靠，
                    底色和游标都以 hsvRef 为准 */
-                int pure = Color.HSVToColor(new float[]{hsvRef[0], 1f, 1f});
+                hsvTmp[0] = hsvRef[0]; hsvTmp[1] = 1f; hsvTmp[2] = 1f;
+                int pure = Color.HSVToColor(hsvTmp);
+                int w = getWidth(), h = getHeight();
                 fill.setStyle(Paint.Style.FILL);
-                /* 第一遍：左白右纯色 */
-                fill.setShader(new LinearGradient(0, 0, getWidth(), 0,
-                        Color.WHITE, pure, Shader.TileMode.CLAMP));
-                c.drawRect(0, 0, getWidth(), getHeight(), fill);
-                /* 第二遍：上透明下黑 */
-                fill.setShader(new LinearGradient(0, 0, 0, getHeight(),
-                        0x00FFFFFF, 0xFF000000, Shader.TileMode.CLAMP));
-                c.drawRect(0, 0, getWidth(), getHeight(), fill);
+                if (shadeH == null || shadeHue != pure || shadeW != w || shadeH2 != h) {
+                    /* 第一遍：左白右纯色 */
+                    shadeH = new LinearGradient(0, 0, w, 0,
+                            Color.WHITE, pure, Shader.TileMode.CLAMP);
+                    /* 第二遍：上透明下黑 */
+                    shadeV = new LinearGradient(0, 0, 0, h,
+                            0x00FFFFFF, 0xFF000000, Shader.TileMode.CLAMP);
+                    shadeHue = pure; shadeW = w; shadeH2 = h;
+                }
+                fill.setShader(shadeH);
+                c.drawRect(0, 0, w, h, fill);
+                fill.setShader(shadeV);
+                c.drawRect(0, 0, w, h, fill);
                 /* 游标：白圈标当前位置（独立 Paint，不污染填充） */
                 float cx = hsvRef[1] * getWidth();
                 float cy = (1f - hsvRef[2]) * getHeight();

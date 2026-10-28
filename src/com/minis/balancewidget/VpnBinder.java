@@ -45,6 +45,8 @@ public class VpnBinder {
     private final java.util.HashSet<String> timedOut = new java.util.HashSet<String>();
     /** 测速线程池：并行但限流，避免把机场打限速反而全测不准 */
     private ExecutorService pool;
+    /** 运行信息轮询专用单线程池（原来每次 new Thread） */
+    private ExecutorService infoPool;
     private boolean built;
     /** VPN 授权请求码（MainActivity 转发 onActivityResult 用） */
     public static final int REQ_VPN = 0x5670;
@@ -390,7 +392,13 @@ public class VpnBinder {
      * 结果数字定在那儿不动（用户反馈："不刷新都不动"）。所以配了个定时器。
      */
     private void refreshRunInfo(final LinearLayout box) {
-        new Thread(new Runnable() {
+        /* 每秒（现在 2 秒）一个新线程，线程创建/销毁本身就是开销，
+           而这个动作会持续整个页面停留期间。复用单线程池。 */
+        if (infoPool == null) {
+            infoPool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        }
+        try {
+            infoPool.execute(new Runnable() {
             public void run() {
                 /* 节点名带缓存；时长与流量每次都要新值 */
                 long now = System.currentTimeMillis();
@@ -419,11 +427,16 @@ public class VpnBinder {
                     }
                 });
             }
-        }).start();
+            });
+        } catch (Throwable t) {
+            /* 池已 shutdown（页面已销毁）→ 这次刷新直接放弃 */
+        }
     }
 
-    /** 刷新周期：1 秒（用户要求实时感） */
-    private static final long RUN_TICK_MS = 1000L;
+    /** 刷新周期：见 RUN_TICK_MS */
+    /* 2 秒一次：流量/时长是给人看的，1 秒刷新除了多打一半的 /connections
+       请求（每次一个 socket + 整段 JSON 解析）没有实际收益。 */
+    private static final long RUN_TICK_MS = 2000L;
 
     /**
      * 当前节点名的缓存时长。
@@ -1551,7 +1564,16 @@ public class VpnBinder {
         } catch (Throwable ignored) { }
         pool = null;
         try {
+            if (infoPool != null) infoPool.shutdownNow();
+        } catch (Throwable ignored) { }
+        infoPool = null;
+        try {
             if (runHandler != null) runHandler.removeCallbacksAndMessages(null);
+        } catch (Throwable ignored) { }
+        /* 主 Handler 上还有 6 处 postDelayed（模式/状态重绘、250ms 轮询、
+           300ms 连发），不清的话 Activity 销毁后它们仍持有已销毁的界面并继续跑。 */
+        try {
+            if (h != null) h.removeCallbacksAndMessages(null);
         } catch (Throwable ignored) { }
     }
 }

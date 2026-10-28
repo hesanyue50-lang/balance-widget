@@ -304,18 +304,22 @@ public final class PlatformPack {
             new Thread(new Runnable() {
                 public void run() {
                     String m;
+                    /* 流必须在 finally 关：读循环里抛异常（对方断开 / 解码错）
+                       原来的 is.close() 就跑不到，漏 fd。 */
+                    InputStream is = null;
                     try {
-                        InputStream is = act.getContentResolver().openInputStream(u);
+                        is = act.getContentResolver().openInputStream(u);
                         java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
                         byte[] buf = new byte[8192];
                         int n;
                         while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
-                        is.close();
                         String text = new String(bo.toByteArray(), "UTF-8");
                         Result r = importText(act, text);
                         m = r.describe();
                     } catch (Throwable t) {
                         m = "导入失败：" + t.getMessage();
+                    } finally {
+                        try { if (is != null) is.close(); } catch (Throwable ig2) { }
                     }
                     final String msg = m;
                     act.runOnUiThread(new Runnable() {

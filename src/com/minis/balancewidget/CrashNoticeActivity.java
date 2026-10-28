@@ -99,7 +99,7 @@ public class CrashNoticeActivity extends Activity {
         ok.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 /* 清掉"待提示"标记再走 —— 不清的话下次启动还会弹 */
-                getSharedPreferences(BalanceFetcher.PREFS, MODE_PRIVATE)
+                getSharedPreferences(App.PREFS_FLAGS, MODE_PRIVATE)
                         .edit().putBoolean("crash_pending", false).apply();
                 startActivity(new Intent(CrashNoticeActivity.this, MainActivity.class));
                 finish();
@@ -112,7 +112,7 @@ public class CrashNoticeActivity extends Activity {
         setContentView(sc);
 
         /* 兜底：按返回键也要清标记，否则用户按返回离开后下次还会弹 */
-        getSharedPreferences(BalanceFetcher.PREFS, MODE_PRIVATE)
+        getSharedPreferences(App.PREFS_FLAGS, MODE_PRIVATE)
                 .edit().putBoolean("crash_pending", false).apply();
     }
 

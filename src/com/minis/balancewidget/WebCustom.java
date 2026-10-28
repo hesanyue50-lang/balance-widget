@@ -294,10 +294,11 @@ public class WebCustom {
                至少补上「网络类异常立即重试一次」——
                换网后旧连接失效、VPN 分流瞬时抖动，都靠这一下救回来。
                服务器已应答（有响应码）的情况不重试：那是内容问题，重试没用。 */
-            if (e instanceof java.net.ConnectException
-                    || e instanceof java.net.SocketException
-                    || e instanceof java.net.SocketTimeoutException) {
-                raw = http(viaProxy, timeoutMs);
+            if (e instanceof java.net.SocketException) {
+                /* 只对「连接类」失败重试（ConnectException 是 SocketException 的子类，
+                   写一个就够）。**超时不重试** —— 超时说明预算已经花光，再用完整
+                   timeoutMs 来一次，总耗时翻倍到 24 秒，必然被外层判超时，纯浪费。 */
+                raw = http(viaProxy, Math.max(1500, timeoutMs / 3));
             } else {
                 throw e;
             }

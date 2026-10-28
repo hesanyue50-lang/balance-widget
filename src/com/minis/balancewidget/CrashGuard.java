@@ -136,8 +136,11 @@ public final class CrashGuard {
                                 .putString("last_crash_where", where)
                                 .putString("last_crash_stack",
                                         stack.length() > 900 ? stack.substring(0, 900) : stack)
-                                .putBoolean("crash_pending", true)
                                 .commit();        // 崩溃路径必须同步写，apply 可能没机会落盘
+                        /* "下次启动要提示"这个布尔单独写极小文件：
+                           启动路径读它就只解析这一个 XML，不用碰 keys_json 那份大文件 */
+                        app.getSharedPreferences(App.PREFS_FLAGS, Context.MODE_PRIVATE)
+                                .edit().putBoolean("crash_pending", true).commit();
                     } catch (Throwable ig) { }
 
                     notifyUser(app, f, fname);
@@ -198,9 +201,16 @@ public final class CrashGuard {
                 File dir = new File(cd);
                 if (dir.exists() || dir.mkdirs()) {
                     File out = new File(dir, name);
-                    FileWriter w = new FileWriter(out);
-                    w.write(content);
-                    w.close();
+                    /* close 必须在 finally：write 抛异常（磁盘满 / 权限变）
+                       时原来的写法会漏一个 fd，而外层 catch(Throwable) 把异常吞掉，
+                       根本看不出问题。 */
+                    FileWriter w = null;
+                    try {
+                        w = new FileWriter(out);
+                        w.write(content);
+                    } finally {
+                        try { if (w != null) w.close(); } catch (Throwable ig2) { }
+                    }
                     prune(dir);
                     return out;
                 }

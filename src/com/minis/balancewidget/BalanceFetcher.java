@@ -903,9 +903,11 @@ public class BalanceFetcher {
         resolve(host, v4, v6);
         if (v4.isEmpty() && v6.isEmpty()) {
             /* 解析失败通常是两种情形：进程刚被唤醒还没就绪，
-               或者短时间内并发太猛把系统 DNS 打爆。略等再试一次，成功率高很多。 */
-            try { Thread.sleep(700); } catch (Exception ig) { }
-            resolve(host, v4, v6);
+               或者短时间内并发太猛把系统 DNS 打爆。
+               原来在这里 Thread.sleep(700) 再重解析一次 —— 但 getAllByName 本身
+               没有超时约束，这一睡就把单请求直接拖出预算（20 个平台线程各睡 700ms）。
+               现在直接交给下面的 DoH 兜底，它有明确的超时。 */
+            diag(null, "系统 DNS 未解析出 " + host + "，转 DoH");
         }
 
         boolean localV4 = hasLocalIpv4();
@@ -1397,7 +1399,16 @@ public class BalanceFetcher {
         }
     }
 
+    /* 枚举全部网卡要走 Binder，一轮刷新 20 个平台线程各问一次纯属浪费。
+       缓存 10 秒 —— 换网后最多 10 秒内判断可能偏旧，而它的用途只是决定
+       "要不要合成 NAT64 地址"，偏旧最多多试一个地址，不影响正确性。 */
+    private static volatile long ipv4At = 0L;
+    private static volatile boolean ipv4Has = true;
+
     private static boolean hasLocalIpv4() {
+        long now = System.currentTimeMillis();
+        if (now - ipv4At < 10000L) return ipv4Has;
+        boolean found = false;
         try {
             java.util.Enumeration<java.net.NetworkInterface> nis =
                     java.net.NetworkInterface.getNetworkInterfaces();
@@ -1407,11 +1418,14 @@ public class BalanceFetcher {
                 java.util.Enumeration<InetAddress> as = ni.getInetAddresses();
                 while (as.hasMoreElements()) {
                     InetAddress a = as.nextElement();
-                    if (a instanceof Inet4Address && !a.isLoopbackAddress()) return true;
+                    if (a instanceof Inet4Address && !a.isLoopbackAddress()) { found = true; break; }
                 }
+                if (found) break;
             }
         } catch (Throwable ignored) { }
-        return false;
+        ipv4Has = found;
+        ipv4At = System.currentTimeMillis();
+        return found;
     }
 
     /**
@@ -1627,16 +1641,24 @@ public class BalanceFetcher {
         return new String(b.toByteArray(), "UTF-8");
     }
 
+    /** 单次响应体的硬上限。余额接口都是几 KB 的 JSON，
+        几 MB 只可能是错误页、登录墙或被劫持的页面 —— 整块读进内存没意义。 */
+    private static final int MAX_BODY = 1024 * 1024;
+
     private static String readRest(BufferedInputStream in) throws Exception {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         byte[] buf = new byte[4096];
         int n;
-        while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
+        while ((n = in.read(buf)) > 0) {
+            b.write(buf, 0, n);
+            if (b.size() > MAX_BODY) break;     // 截断：后面解析会失败，但不会把内存吃爆
+        }
         return new String(b.toByteArray(), "UTF-8");
     }
 
     private static String readChunked(BufferedInputStream in) throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] cbuf = new byte[4096];
         while (true) {
             String sz = readLine(in);
             if (sz == null) break;
@@ -1647,11 +1669,15 @@ public class BalanceFetcher {
             int len;
             try { len = Integer.parseInt(sz, 16); } catch (Exception e) { break; }
             if (len == 0) break;
-            for (int i = 0; i < len; i++) {
-                int c = in.read();
-                if (c == -1) break;
-                out.write(c);
+            /* 批量读：原来逐字节 in.read()，一个 200KB 的响应就是 20 万次方法调用 */
+            int left = len;
+            while (left > 0) {
+                int got = in.read(cbuf, 0, Math.min(left, cbuf.length));
+                if (got <= 0) break;
+                out.write(cbuf, 0, got);
+                left -= got;
             }
+            if (out.size() > MAX_BODY) break;
             readLine(in);
         }
         return new String(out.toByteArray(), "UTF-8");
@@ -1975,6 +2001,15 @@ public class BalanceFetcher {
             new java.util.concurrent.LinkedBlockingQueue<String>(512);
     private static volatile java.io.File diagDir = null;
     private static volatile Thread diagWorker = null;
+    /* 每行诊断日志都要一个时间串。SimpleDateFormat 不是线程安全的，
+       用 ThreadLocal 复用 —— 抓取时每个平台线程各打几条，一次刷新几十次 new，
+       纯属白造的垃圾。 */
+    private static final ThreadLocal<java.text.SimpleDateFormat> DIAG_FMT =
+            new ThreadLocal<java.text.SimpleDateFormat>() {
+                protected java.text.SimpleDateFormat initialValue() {
+                    return new java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US);
+                }
+            };
 
     public static void diag(Context ctx, String msg) {
         if (ctx == null) return;      // 少数深层调用点拿不到 Context，静默跳过即可
@@ -1984,8 +2019,7 @@ public class BalanceFetcher {
                 if (d == null) return;
                 diagDir = d;
             }
-            String line = new java.text.SimpleDateFormat("MM-dd HH:mm:ss",
-                    java.util.Locale.US).format(new java.util.Date()) + "  " + msg;
+            String line = DIAG_FMT.get().format(new java.util.Date()) + "  " + msg;
             if (!DIAG_Q.offer(line)) {      // 队列满（磁盘卡住）→ 丢最老的，别阻塞请求
                 DIAG_Q.poll();
                 DIAG_Q.offer(line);
@@ -2146,6 +2180,19 @@ public class BalanceFetcher {
         }
     }
 
+    /** 汇率缓存有效期：6 小时。汇率日内波动不到 0.5%，不值得每轮刷新都多等一跳网络。 */
+    private static final long RATE_TTL_MS = 6L * 3600 * 1000;
+
+    private static boolean rateFresh(Context ctx) {
+        try {
+            long at = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getLong("last_rate_ts", 0);
+            return at > 0 && System.currentTimeMillis() - at < RATE_TTL_MS;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     private static Result fetchInner(Context ctx, int timeoutMs, boolean background) {
         long t0 = System.currentTimeMillis();
         Result res = new Result();
@@ -2163,6 +2210,11 @@ public class BalanceFetcher {
                汇率一天波动通常不到 0.5%，对"余额折合人民币"的展示没有实际影响；
                而对 USD 平台之外的抓取完全无关 —— 白白多一跳网络，不如省掉。 */
             diag(ctx, "后台精简刷新：跳过汇率查询，用缓存 " + res.rate);
+        } else if (rateFresh(ctx)) {
+            /* 前台刷新也做节流：汇率请求在并发抓取**之前**串行跑，最坏 3 秒。
+               而汇率一天波动不到 0.5%，每 6 小时才值得问一次 ——
+               以前每轮刷新都白等这一跳，是打开 App 后"半天不出数"的固定开销之一。 */
+            diag(ctx, "汇率缓存仍新鲜，跳过请求 " + res.rate);
         } else
         try {
             /* 汇率源在境外（api.frankfurter.dev）。之前这里没设代理标志，
@@ -2184,7 +2236,9 @@ public class BalanceFetcher {
                     res.rate = v;
                     try {
                         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                                .edit().putFloat("last_rate", (float) v).apply();
+                                .edit().putFloat("last_rate", (float) v)
+                                .putLong("last_rate_ts", System.currentTimeMillis())
+                                .apply();
                     } catch (Throwable ig) { }
                 }
             }
@@ -2329,6 +2383,15 @@ public class BalanceFetcher {
         final double rate = res.rate;
         final int per = timeoutMs;
         int n = items.size();
+        /* ★ 一次性等待，而不是逐个 join。
+           原实现 for 循环里 `ts[i].join(per+1500)` 是**串行**等的：正常情况各线程
+           自己会在 per 内超时结束，后面的 join 立刻返回，看不出问题；但只要有一个
+           线程卡在 DNS 解析（不受 readTimeout 约束），它就会吃掉整个预算，后面每个
+           还活着的线程又各等一轮 —— 最坏 n × per（20 个平台 = 4 分钟），
+           而小组件/后台广播只给了十几秒。
+           改成 CountDownLatch + 单一总预算：总耗时 = max(单平台, 全局上限)。 */
+        final java.util.concurrent.CountDownLatch latch =
+                new java.util.concurrent.CountDownLatch(n);
         Thread[] ts = new Thread[n];
         for (int i = 0; i < n; i++) {
             final Item it = items.get(i);
@@ -2378,38 +2441,38 @@ public class BalanceFetcher {
                                 + "   (" + (System.currentTimeMillis() - ts0) + "ms)");
                     } finally {
                         if (viaProxy) VIA_PROXY.remove();   // 线程即将结束，顺手清掉
+                        latch.countDown();                  // 无论成败都算「这一项已结束」
                     }
                 }
             });
             ts[i].start();
         }
+        /* 全局总预算：最慢的一档（foreign 双倍）+ 收尾余量。所有线程共用这一个上限，
+           不再按项累加 —— 这就是「n 个平台最坏 n × timeout」的根治。 */
+        long budgetAll = (per * 2L) + 2000L;
+        try {
+            latch.await(budgetAll, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ignored) { }
+
+        /* 到点还没收尾的直接掐掉，并换成干净的失败项 ——
+           免得它稍后往正在被序列化/渲染的对象上写脏数据。 */
         for (int i = 0; i < n; i++) {
-            try {
-                /* foreign 项的预算是 per*2（并发段给的），join 也得跟着给足，
-                   否则那边还没跑完这边就中断了 —— 白抓 */
-                ts[i].join((items.get(i).foreign ? per * 2 : per) + 1500L);
-                if (ts[i].isAlive()) {
-                    /* ★ 预算内没收尾就直接中断：不掐的话它会继续占着 socket 和线程，
-                       多轮刷新叠加起来就是线程/内存堆积（闪退的来源之一）。 */
-                    ts[i].interrupt();
-                    /* 没在预算内收尾：换成一个干净的失败项，
-                       免得它稍后再往正在被序列化/渲染的对象上写脏数据 */
-                    Item src = items.get(i);
-                    Item dead = new Item();
-                    dead.id = src.id;
-                    dead.platform = src.platform;
-                    dead.label = src.label;
-                    dead.tag = src.tag;
-                    dead.kind = src.kind;
-                    dead.alertKey = src.alertKey;
-                    dead.threshold = src.threshold;
-                    dead.ok = false;
-                    dead.error = "请求超时";
-                    dead.amount = "—";
-                    items.set(i, dead);
-                    Log.w(TAG, "平台 " + dead.id + " 超过预算未返回");
-                }
-            } catch (InterruptedException ignored) { }
+            if (ts[i] == null || !ts[i].isAlive()) continue;
+            ts[i].interrupt();
+            Item src = items.get(i);
+            Item dead = new Item();
+            dead.id = src.id;
+            dead.platform = src.platform;
+            dead.label = src.label;
+            dead.tag = src.tag;
+            dead.kind = src.kind;
+            dead.alertKey = src.alertKey;
+            dead.threshold = src.threshold;
+            dead.ok = false;
+            dead.error = "请求超时";
+            dead.amount = "—";
+            items.set(i, dead);
+            Log.w(TAG, "平台 " + dead.id + " 超过总预算未返回");
         }
 
         /* 汇总（串行，避免多线程争用 totalCny） */
@@ -2963,17 +3026,28 @@ public class BalanceFetcher {
             }
             it.gatewayUrl = base;
 
-            /* ① 探活：/healthz 不需要 key，服务活着就能通 */
-            if (!probeGateway(base, Math.min(t, 4000))) {
-                it.ok = false;
-                it.gatewayDown = true;
-                it.error = "网关未运行";
-                it.amount = "\u2014";
-                return;
+            /* ① 直接取余额，不再先探活。
+               原来先 probeGateway（≤4 秒）再 POST（≥8 秒）串行，合计 12 秒已经超过
+               这个平台 8 秒的预算 —— 网关稍慢就必然被判"请求超时"，用户看到的是
+               "网关挂了"其实只是慢。探活本身也没带来额外信息：连不上 POST 一样会失败，
+               只要把错误类型映射成"网关未运行"就行。省一次 RTT + 最多 4 秒。 */
+            String json;
+            try {
+                json = postJson(base + "/panel/api/balance_all", key, "", Math.max(t, 8000));
+            } catch (Exception e) {
+                String m = String.valueOf(e.getMessage());
+                if (e instanceof java.net.ConnectException
+                        || m.indexOf("refused") >= 0 || m.indexOf("拒绝") >= 0
+                        || m.indexOf("Failed to connect") >= 0) {
+                    it.ok = false;
+                    it.gatewayDown = true;
+                    it.noData = true;           // 已表态，别让外层覆盖成 ok=true
+                    it.error = "网关未运行";
+                    it.amount = "\u2014";
+                    return;
+                }
+                throw e;
             }
-
-            /* ② 取余额 */
-            String json = postJson(base + "/panel/api/balance_all", key, "", Math.max(t, 8000));
             JSONObject root = new JSONObject(json);
             JSONArray accounts = root.optJSONArray("accounts");
             if (accounts == null) accounts = new JSONArray();
