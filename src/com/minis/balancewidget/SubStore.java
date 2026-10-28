@@ -76,7 +76,31 @@ public final class SubStore {
 
     // ---------- 读 ----------
 
+    /* 订阅存档里含每个订阅的 yaml **全文**（几十上百 KB），每次 all() 都要
+       完整 JSON 解析一遍。而进入加速页的一轮渲染里 all() 会被调好几次
+       （all + active→byId→all），纯属重复劳动。用写入版本号做失效判断。 */
+    /**
+     * 只看「有没有订阅存档」，不解析 JSON。
+     *
+     * onStartCommand 在**主线程**跑，而 all() 要把含 yaml 全文的存档完整解析一遍；
+     * 那里只是想知道"该不该继续启动"，用这个轻量判断就够，真正的解析交给后台线程。
+     */
+    public static boolean hasAny(Context c) {
+        try {
+            String s = sp(c).getString(K_SUBS, "");
+            return s != null && s.length() > 2;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static List<Sub> cacheList;
+    private static long cacheVer = -1;
+
     public static List<Sub> all(Context c) {
+        long ver = -1;
+        try { ver = sp(c).getLong("subs_ver", 0); } catch (Throwable ignored) { }
+        if (cacheList != null && ver == cacheVer) return new ArrayList<Sub>(cacheList);
         List<Sub> out = new ArrayList<Sub>();
         try {
             String s = sp(c).getString(K_SUBS, "");
@@ -103,7 +127,9 @@ public final class SubStore {
                 out.add(sub);
             }
         } catch (Throwable ignored) { }
-        return out;
+        cacheList = out;
+        cacheVer = ver;
+        return new ArrayList<Sub>(out);
     }
 
     public static Sub byId(Context c, String id) {
@@ -200,7 +226,10 @@ public final class SubStore {
                 j.put("autoUpdate", s.autoUpdate);
                 arr.put(j);
             }
-            sp(c).edit().putString(K_SUBS, arr.toString()).commit();
+            SharedPreferences.Editor ed = sp(c).edit();
+            ed.putString(K_SUBS, arr.toString());
+            ed.putLong("subs_ver", sp(c).getLong("subs_ver", 0) + 1);
+            ed.commit();
         } catch (Throwable ignored) { }
     }
 

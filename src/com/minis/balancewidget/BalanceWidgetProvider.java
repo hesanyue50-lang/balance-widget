@@ -195,10 +195,11 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         }
         BalanceFetcher.diag(ctx, "小组件点击 第 " + n + " 下");
 
-        /* 等连击窗口过去再动手；期间后续点击会继续累加 tapCount */
-        new Thread(new Runnable() {
+        /* 等连击窗口过去再动手；期间后续点击会继续累加 tapCount。
+           用主线程 postDelayed 而不是 new Thread + sleep：这只是个延时，
+           连点 5 下就是 5 个线程（每个 1MB 栈），完全没必要。 */
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
             public void run() {
-                try { Thread.sleep(MULTI_TAP_GAP_MS + 60); } catch (InterruptedException ig) { }
                 synchronized (TAP_LOCK) {
                     int[] cnt = TAPS.get(widgetId);
                     /* 窗口内又点了 → 说明是多击，交给那一次的处理去执行 */
@@ -216,15 +217,18 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                     ctx.sendBroadcast(it);
                 }
             }
-        }).start();
+        }, MULTI_TAP_GAP_MS + 60);
     }
 
-    /** 强制刷新撞上并发时，等 1.5 秒再试一次（最多 3 次） */
+    /** 强制刷新撞上并发时，退避重试（1.5s → 3s → 5s，最多 3 次） */
     private void retryForceLater(final Context ctx) {
         new Thread(new Runnable() {
             public void run() {
-                for (int i = 0; i < 3; i++) {
-                    try { Thread.sleep(1500); } catch (InterruptedException ig) { return; }
+                /* 退避而不是固定 1.5 秒：并发那一轮本身可能要跑 8~18 秒，
+                   固定间隔重试三次都在同一轮里，等于白试三次。 */
+                final long[] wait = { 1500L, 3000L, 5000L };
+                for (int i = 0; i < wait.length; i++) {
+                    try { Thread.sleep(wait[i]); } catch (InterruptedException ig) { return; }
                     if (!FETCHING.get()) {
                         FORCE_ONCE.set(true);
                         Intent it = new Intent(ctx, BalanceWidgetProvider.class);

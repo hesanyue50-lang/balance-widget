@@ -593,8 +593,20 @@ public final class Clash {
         String[] uas = custom.length() > 0 ? new String[]{ custom } : SUB_UAS;
         if (custom.length() > 0) BalanceFetcher.diag(c, "订阅使用自定义 UA：" + custom);
 
-        /* 依次换 UA 试：拿到内容但不像 Clash 配置时，很可能是这个机场认别的客户端 */
+        /* 依次换 UA 试：拿到内容但不像 Clash 配置时，很可能是这个机场认别的客户端。
+
+           ⚠️ 必须有**总预算**：每个 UA 是「直连 20 秒 + 代理 25 秒」，5 个 UA
+           串行最坏就是 225 秒 —— 用户点一下导入，进度条能转三分钟。
+           现在封顶 45 秒，剩余预算不够一轮就直接放弃，把最后的错误信息给出来。 */
+        final long deadline = System.currentTimeMillis() + 45000L;
         for (int attempt = 0; attempt < uas.length; attempt++) {
+            long left = deadline - System.currentTimeMillis();
+            if (left < 4000) {
+                BalanceFetcher.diag(c, "订阅下载已达总预算，停止尝试第 " + (attempt + 1) + " 个 UA");
+                break;
+            }
+            int directTimeout = (int) Math.min(20000L, left);
+            int proxyTimeout = (int) Math.min(25000L, Math.max(3000L, left - directTimeout));
             String ua = uas[attempt];
             BalanceFetcher.SUB_ACCEPT.set("*/*");     // 订阅要 YAML，不能用 application/json
             direct = null;
@@ -602,14 +614,14 @@ public final class Clash {
             BalanceFetcher.SUB_UA.set(ua);            // 只影响本次（本线程）的请求
             try {
                 try {
-                    direct = BalanceFetcher.httpGet(url, null, 20000);
+                    direct = BalanceFetcher.httpGet(url, null, directTimeout);
                     if (looksLikeClash(direct)) return direct;
                 } catch (Throwable t) {
                     BalanceFetcher.diag(c, "订阅直连失败：" + t);
                 }
                 if (apiAlive()) {
                     try {
-                        viaProxy = BalanceFetcher.getViaProxy(url, null, null, 25000);
+                        viaProxy = BalanceFetcher.getViaProxy(url, null, null, proxyTimeout);
                         if (looksLikeClash(viaProxy)) return viaProxy;
                     } catch (Throwable t) {
                         BalanceFetcher.diag(c, "订阅经代理失败：" + t);

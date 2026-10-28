@@ -61,13 +61,17 @@ public class RefreshReceiver extends BroadcastReceiver {
         RefreshScheduler.schedule(app);
     }
 
+    /**
+     * 有没有配置过任何余额来源。
+     *
+     * ⚠️ 这个判断跑在**主线程**（onReceive），所以不能调 KeyStore.all() ——
+     * 那要逐个过 TEE 解密，Key 多时上百毫秒，开机广播/闹钟唤醒都会付一次代价。
+     * 改成读存档里的密文是否非空，不碰 keymaster。
+     */
     private boolean hasKeys(Context ctx) {
         try {
-            java.util.List<KeyStore.ApiKey> all = KeyStore.all(ctx);
-            for (int i = 0; i < all.size(); i++) {
-                if (all.get(i).isConfigured()) return true;
-            }
-            if (BalanceFetcher.loadCustom(ctx).size() > 0) return true;
+            if (KeyStore.hasAnyConfigured(ctx)) return true;
+            if (BalanceFetcher.hasAnyCustom(ctx)) return true;
         } catch (Throwable ignored) { }
         return false;
     }

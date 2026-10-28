@@ -224,7 +224,10 @@ public class MainActivity extends Activity {
                     buildSettingsPanel();
                 }
             };
-            sc0.postDelayed(settingsWarmup, 900);
+            /* 2.5 秒而不是 0.9 秒：buildSettingsPanel() 要在主线程建约 250 个 View
+               （20 个平台块 + 折叠容器），0.9 秒时用户可能还在滑动首页，
+               那一下卡顿正好落在手感最敏感的位置。延到界面稳定之后。 */
+            sc0.postDelayed(settingsWarmup, 2500);
         } else {
             BalanceFetcher.diag(this, "⚠️ 找不到 settings_container，跳过设置面板预热");
         }

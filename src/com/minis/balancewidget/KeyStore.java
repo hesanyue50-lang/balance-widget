@@ -138,6 +138,29 @@ public final class KeyStore {
         return null;
     }
 
+    /**
+     * 只看「有没有配置过 Key」，**不解密**。
+     *
+     * 广播接收器（开机 / 后台闹钟）在**主线程**跑，而 all() 要逐个过
+     * AndroidKeyStore AES-GCM 解密（首次还要拉起 keymaster），Key 多时上百毫秒。
+     * 这里直接看存档里 key 字段（密文）是否非空 —— 密文非空就说明用户配过，
+     * 足够回答"要不要继续"这个问题。
+     */
+    public static boolean hasAnyConfigured(Context c) {
+        try {
+            String json = sp(c).getString(K_KEYS, "");
+            if (json == null || json.length() < 3) return false;
+            JSONArray arr = new JSONArray(json);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                if (o.optString("platform", "").length() == 0) continue;
+                if (o.optString("key", "").length() > 0) return true;
+            }
+        } catch (Throwable ignored) { }
+        return false;
+    }
+
     public static List<ApiKey> all(Context c) {
         /* 返回副本：缓存是共享的可变列表，外面拿到就改会污染全局 */
         return new ArrayList<ApiKey>(load(c));

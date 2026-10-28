@@ -622,6 +622,19 @@ public class BalanceFetcher {
         }
     }
 
+    /** 只看有没有自定义平台存档（**不解密** key）。广播接收器在主线程用。 */
+    public static boolean hasAnyCustom(Context ctx) {
+        try {
+            String s = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString("custom_json", "[]");
+            if (s == null) return false;
+            String t = s.trim();
+            return t.length() > 2 && !"[]".equals(t);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public static List<Custom> loadCustom(Context ctx) {
         List<Custom> list = new ArrayList<Custom>();
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -873,6 +886,7 @@ public class BalanceFetcher {
 
         /* 走代理的请求不解析 DNS、也不做多地址回退 —— 域名解析和目标连接
            都交给内核去办（它自己有 DNS 与节点选择逻辑），我们只管把请求丢给它。 */
+        final long fallbackT0 = System.currentTimeMillis();
         if (useProxyNow() && !forceDirect) {
             try {
                 return getThroughProxy(host, port, https, path, bearer, cookie, timeoutMs);
@@ -884,8 +898,13 @@ public class BalanceFetcher {
                    表现为 TLS 握手阶段 connection closed —— 而同一时刻直连反而是通的。
                    有这条回退，最坏情况退化成"代理没用上"，而不会变成"平台查不出来"。 */
                 diag(null, "代理失败，回退直连 " + host + "：" + e);
+                /* 回退直连必须用**剩余预算**，不能把完整 timeoutMs 再给一遍：
+                   代理那一路已经花掉一部分，再叠上 DoH 6 秒和末尾的代理探活 6 秒，
+                   单平台最坏会到预算的 2.5 倍 —— 外层早就判它超时了。 */
+                long left = timeoutMs - (System.currentTimeMillis() - fallbackT0);
+                if (left < 1000) left = 1000;
                 try {
-                    return get(url, bearer, cookie, timeoutMs, true);
+                    return get(url, bearer, cookie, (int) left, true);
                 } catch (StatusException se2) {
                     /* 直连拿到的是**服务器真实应答**（401 Key 无效 / 429 限流…），
                        原样抛出 —— 包装成普通 Exception 会让上层依赖类型的分支失效：
@@ -2687,12 +2706,24 @@ public class BalanceFetcher {
             rate = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .getFloat("last_rate", 7.1f);
         } catch (Throwable ig) { }
+        /* 汇率缓存还新鲜就别再问一次：单卡刷新本来就是"我只想看看这一张"，
+           白等最多 3 秒的汇率请求很突兀（和全量刷新共用同一个 6 小时窗口）。 */
         try {
-            String j2 = get(RATE_URL, null, Math.min(timeoutMs, 3000));
-            JSONObject r0 = new JSONObject(j2).optJSONObject("rates");
-            if (r0 != null) {
-                double v = num(r0, "CNY");
-                if (!Double.isNaN(v) && v > 0) rate = v;
+            if (!rateFresh(ctx)) {
+                String j2 = get(RATE_URL, null, Math.min(timeoutMs, 3000));
+                JSONObject r0 = new JSONObject(j2).optJSONObject("rates");
+                if (r0 != null) {
+                    double v = num(r0, "CNY");
+                    if (!Double.isNaN(v) && v > 0) {
+                        rate = v;
+                        try {
+                            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                                    .edit().putFloat("last_rate", (float) v)
+                                    .putLong("last_rate_ts", System.currentTimeMillis())
+                                    .apply();
+                        } catch (Throwable ig) { }
+                    }
+                }
             }
         } catch (Exception ignored) { }
 

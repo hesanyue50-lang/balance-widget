@@ -109,9 +109,11 @@ public class ClashVpnService extends VpnService {
             return;
         }
 
-        SubStore.Sub sub = SubStore.active(this);
-        if (sub == null || !sub.ready()) {
-            BalanceFetcher.diag(this, "没有可用的订阅配置，VPN 不启动");
+        /* 主线程只做轻量判断：SubStore.all() 要把含订阅 yaml 全文的存档完整解析一遍，
+           放在 onStartCommand 里就是实打实的主线程耗时。真正的解析在
+           establishAndStart()（后台线程）里做。 */
+        if (!SubStore.hasAny(this)) {
+            BalanceFetcher.diag(this, "没有订阅存档，VPN 不启动");
             stopSelf();
             return;
         }
