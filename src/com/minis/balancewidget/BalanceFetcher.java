@@ -821,6 +821,18 @@ public class BalanceFetcher {
     public static final ThreadLocal<String> SUB_USERINFO = new ThreadLocal<String>();
 
     /**
+    /**
+     * 余额查询的默认 User-Agent。
+     *
+     * ⚠️ 必须伪装成真实浏览器。原来的 "MinisWidget/1.2" 会被 Cloudflare
+     * 和一堆小平台的 WAF 在 TLS 阶段直接掐断 —— 不是回 403，而是**连 HTTP
+     * 响应都不给**，于是状态行读成 null → code=0 → 用户看到的就是"HTTP 0"。
+     */
+    static final String BROWSER_UA =
+            "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 "
+            + "(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36";
+
+    /**
      * 订阅请求专用的 User-Agent。
      *
      * **机场普遍按 UA 决定返回什么格式**：带 clash 字样 → 返回 Clash YAML；
@@ -1016,6 +1028,10 @@ public class BalanceFetcher {
                     Log.i(TAG, "  ✅(重试) " + ip + " " + (System.currentTimeMillis() - t0) + "ms");
                     return r2;
                 } catch (Exception e2) {
+                    /* 重试拿到的是服务器的明确答复（401/429/HTTP 0）→ 原样抛，
+                       别再当成网络故障去换地址，否则最终只剩一句
+                       "所有地址均失败"，"Key 无效"的语义彻底丢了。 */
+                    if (e2 instanceof StatusException) throw e2;
                     tried.append(ip).append('=').append(e2.getClass().getSimpleName()).append("+retry; ");
                 }
             } catch (java.net.ConnectException ce) {
@@ -1031,6 +1047,7 @@ public class BalanceFetcher {
                     Log.i(TAG, "  ✅(重试) " + ip);
                     return r2;
                 } catch (Exception e2) {
+                    if (e2 instanceof StatusException) throw e2;
                     tried.append(ip).append('=') .append(e2.getClass().getSimpleName()).append("+retry; ");
                 }
             } catch (Exception e) {
@@ -1520,10 +1537,12 @@ public class BalanceFetcher {
             sb.append("GET ").append(path).append(" HTTP/1.1\r\n");
             sb.append("Host: ").append(host).append("\r\n");
             String _acc = SUB_ACCEPT.get();
-            sb.append("Accept: ").append(_acc == null ? "application/json" : _acc).append("\r\n");
+            sb.append("Accept: ").append(_acc == null
+                    ? "application/json, text/plain, */*" : _acc).append("\r\n");
+            sb.append("Accept-Language: zh-CN,zh;q=0.9,en;q=0.8\r\n");
             sb.append("Accept-Encoding: identity\r\n");
             String _ua = SUB_UA.get();
-            sb.append("User-Agent: ").append(_ua == null ? "MinisWidget/1.2" : _ua).append("\r\n");
+            sb.append("User-Agent: ").append(_ua == null ? BROWSER_UA : _ua).append("\r\n");
             sb.append("Connection: close\r\n");
             if (bearer != null) sb.append("Authorization: Bearer ").append(bearer).append("\r\n");
             if (cookie != null && cookie.length() > 0) sb.append("Cookie: ").append(cookie).append("\r\n");
@@ -1551,6 +1570,14 @@ public class BalanceFetcher {
             String body = chunked ? readChunked(in2) : readRest(in2);
             LAST_BODY_INFO = "代理 chunked=" + chunked
                     + " len=" + body.length() + " nl=" + countNl(body);
+            if (code == 0) {
+                /* 拿不到状态行 = 对端在 HTTP 层之前就把连接关了（WAF 按指纹拦、
+                   节点失效、中间设备重置）。
+                   ⚠️ 这里必须抛**普通异常**，不能抛 StatusException：
+                   get() 对 StatusException 是直接 rethrow（那是"服务器明确答复"），
+                   只有普通异常才会触发「代理失败 → 回退直连」。 */
+                throw new java.io.IOException("代理连接被直接关闭（未收到 HTTP 响应）");
+            }
             if (code < 200 || code >= 300) {
                 /* 与直连路径一致：3xx 跟一次，别把"换地址"当成"失败" */
                 if (code >= 300 && code < 400 && loc2 != null && loc2.startsWith("http")) {
@@ -1591,10 +1618,12 @@ public class BalanceFetcher {
             sb.append("GET ").append(path).append(" HTTP/1.1\r\n");
             sb.append("Host: ").append(host).append("\r\n");
             String _acc = SUB_ACCEPT.get();
-            sb.append("Accept: ").append(_acc == null ? "application/json" : _acc).append("\r\n");
+            sb.append("Accept: ").append(_acc == null
+                    ? "application/json, text/plain, */*" : _acc).append("\r\n");
+            sb.append("Accept-Language: zh-CN,zh;q=0.9,en;q=0.8\r\n");
             sb.append("Accept-Encoding: identity\r\n");
             String _ua = SUB_UA.get();
-            sb.append("User-Agent: ").append(_ua == null ? "MinisWidget/1.2" : _ua).append("\r\n");
+            sb.append("User-Agent: ").append(_ua == null ? BROWSER_UA : _ua).append("\r\n");
             sb.append("Connection: close\r\n");
             if (bearer != null) sb.append("Authorization: Bearer ").append(bearer).append("\r\n");
             if (cookie != null && cookie.length() > 0) sb.append("Cookie: ").append(cookie).append("\r\n");
@@ -1622,6 +1651,12 @@ public class BalanceFetcher {
             String body = chunked ? readChunked(in) : readRest(in);
             LAST_BODY_INFO = "直连 chunked=" + chunked
                     + " len=" + body.length() + " nl=" + countNl(body);
+            if (code == 0) {
+                /* 直连也一样：没收到状态行就是连接被掐。抛普通异常而不是
+                   StatusException —— 后者会让上层跳过"换地址 → DoH 重解析 → 代理兜底"
+                   这三条退路，直接把 "HTTP 0" 摆到用户面前。 */
+                throw new java.io.IOException("连接被直接关闭（未收到 HTTP 响应）");
+            }
             if (code < 200 || code >= 300) {
                 /* 3xx 跟一次：平台换域名/换路径时会先回 301/308。
                    以前这里直接把 "HTTP 301" 当错误抛出去，用户看到的就是
@@ -1691,7 +1726,12 @@ public class BalanceFetcher {
             /* 批量读：原来逐字节 in.read()，一个 200KB 的响应就是 20 万次方法调用 */
             int left = len;
             while (left > 0) {
-                int got = in.read(cbuf, 0, Math.min(left, cbuf.length));
+                /* 同时受"本 chunk 剩余长度"和"总量上限"约束。
+                   只按 chunk 长度读的话，服务端给个 0x7fffffff 的 chunk 头
+                   就能把上 GB 读进内存 —— MAX_BODY 要等整块读完才检查，等于没用。 */
+                int room = MAX_BODY - out.size();
+                if (room <= 0) break;
+                int got = in.read(cbuf, 0, Math.min(Math.min(left, cbuf.length), room));
                 if (got <= 0) break;
                 out.write(cbuf, 0, got);
                 left -= got;
@@ -1819,21 +1859,31 @@ public class BalanceFetcher {
            余额查询是低频操作，多一次 TLS 握手的代价（约 100-300ms）完全可以接受。 */
         c.setRequestProperty("Connection", "close");
         String _acc2 = SUB_ACCEPT.get();
-        c.setRequestProperty("Accept", _acc2 == null ? "application/json" : _acc2);
+        c.setRequestProperty("Accept",
+                _acc2 == null ? "application/json, text/plain, */*" : _acc2);
+        c.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
         String _ua2 = SUB_UA.get();
-        c.setRequestProperty("User-Agent", _ua2 == null ? "MinisWidget/1.2" : _ua2);
+        c.setRequestProperty("User-Agent", _ua2 == null ? BROWSER_UA : _ua2);
         if (bearer != null) c.setRequestProperty("Authorization", "Bearer " + bearer);
         if (cookie != null && cookie.length() > 0) c.setRequestProperty("Cookie", cookie);
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
             c.setFixedLengthStreamingMode(body.getBytes("UTF-8").length);
-            java.io.OutputStream os = c.getOutputStream();
-            os.write(body.getBytes("UTF-8"));
-            os.flush();
-            os.close();
         }
         try {
+            /* 写请求体也要在 try 里：getOutputStream() 会建立连接，
+               网关提前关连接 / broken pipe 时这里会抛，
+               而 finally 的 c.disconnect() 只在 try 内生效 —— 原来它在外头，连接就漏了。 */
+            if (body != null) {
+                java.io.OutputStream os = c.getOutputStream();
+                try {
+                    os.write(body.getBytes("UTF-8"));
+                    os.flush();
+                } finally {
+                    try { os.close(); } catch (Throwable ig) { }
+                }
+            }
             int code = c.getResponseCode();
             InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
             StringBuilder sb = new StringBuilder();
@@ -2426,11 +2476,16 @@ public class BalanceFetcher {
             ts[i] = new Thread(new Runnable() {
                 public void run() {
                     long ts0 = System.currentTimeMillis();
-                    /* 按当前分流模式决定这次请求直连还是走本地代理。
-                       抓取是「一个平台一个线程」，所以线程局部变量天然就是平台级粒度。 */
-                    boolean viaProxy = Clash.enabled(ctx) && Clash.isRunning()
-                            && Clash.shouldProxy(ctx, it.platform, it.foreign);
-                    if (viaProxy) VIA_PROXY.set(Boolean.TRUE);
+                    /* viaProxy 的求值也可能抛（Clash.enabled 要读 prefs、
+                       shouldProxy 要解析配置）。它原来在 try 之外，一旦抛
+                       latch.countDown() 就永远不执行 —— 主线程白等满整个
+                       budgetAll（约 2×per+2s），这一项还什么都没写上，卡片空白。 */
+                    boolean viaProxy = false;
+                    try {
+                        viaProxy = Clash.enabled(ctx) && Clash.isRunning()
+                                && Clash.shouldProxy(ctx, it.platform, it.foreign);
+                        if (viaProxy) VIA_PROXY.set(Boolean.TRUE);
+                    } catch (Throwable ignored) { }
                     try {
                         /* 国外平台给双倍预算：境内访问境外站点常卡在 TLS 握手，
                            12 秒总预算切成 9 秒单地址往往不够，网络明明是通的。 */
@@ -2669,7 +2724,7 @@ public class BalanceFetcher {
                         && Clash.shouldProxy(ctx, it.platform, w.foreign);
                 try {
                     fillWeb(it, w, rate2, w.foreign ? timeoutMs * 2 : timeoutMs, vpx);
-                    it.ok = true;
+                    if (!it.noData) it.ok = true;
                 } catch (Exception e) {
                     it.ok = false;
                     it.error = (e.getMessage() == null) ? "查询失败" : e.getMessage();
@@ -2684,7 +2739,14 @@ public class BalanceFetcher {
                 it.label = p0.name;
                 it.tag = p0.unit;
                 it.kind = p0.kind;
-                try { fill(ctx, it, null, 7.1, timeoutMs); it.ok = true; }  // 修改：传递 null
+                /* 汇率别硬编码 7.1：这个分支在下面读 last_rate 之前就 return 了，
+                   美元账户的折算会一直偏。改用最近一次成功拿到的汇率。 */
+                double fallbackRate = 7.1;
+                try {
+                    fallbackRate = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                            .getFloat("last_rate", 7.1f);
+                } catch (Throwable ig) { }
+                try { fill(ctx, it, null, fallbackRate, timeoutMs); if (!it.noData) it.ok = true; }
                 catch (Exception e) {
                     it.ok = false;
                     it.error = e.getMessage();
@@ -2747,7 +2809,7 @@ public class BalanceFetcher {
                 it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
                 it.kind = c.kind;
                 fillCustom(ctx, it, c, rate, timeoutMs);
-                it.ok = true;
+                if (!it.noData) it.ok = true;
             } else {
                 Preset p = presetOf(ak.platform);
                 if (p == null) {
@@ -2772,7 +2834,7 @@ public class BalanceFetcher {
                 } finally {
                     if (viaProxy) VIA_PROXY.remove();
                 }
-                it.ok = true;
+                if (!it.noData) it.ok = true;
             }
         } catch (Exception e) {
             it.ok = false;
@@ -3283,7 +3345,12 @@ public class BalanceFetcher {
                     if (usd) it.conv = "≈¥" + (long) (available * rate);
                     return;
                 } catch (Exception e) {
-                    // 查询失败，降级到展示模式
+                    /* 查询失败 ≠ 查询成功但没有数据。
+                       不置 noData 的话，外层的 `if (!it.noData) it.ok = true`
+                       会把它标成成功：卡片显示"查询失败"却走成功样式，
+                       bal=0 还会参与阈值判断、被记进账本当基线点。 */
+                    it.noData = true;
+                    it.ok = false;
                     it.amount = "查询失败";
                     it.rows = e.getMessage();
                     return;
@@ -3301,6 +3368,10 @@ public class BalanceFetcher {
             it.cny = 0;
             it.bal = 0;
             it.conv = "";
+            /* 纯展示（没有可查的余额接口）：标 noData，
+               否则每轮刷新都会往账本/曲线落一个 0 基线点。 */
+            it.noData = true;
+            it.low = false;
             return;
         }
 

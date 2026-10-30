@@ -64,11 +64,56 @@ public final class Backup {
                     fo.put("__type", "float");
                     fo.put("value", ((Float) v).doubleValue());
                     prefs.put(e.getKey(), fo);
+                } else if (v instanceof Long) {
+                    /* ⚠️ Long 也必须打标记。org.json 把 3L 序列化成 "3"，
+                       读回来是 Integer → 恢复时 putInt，而读取方 getLong 会抛
+                       ClassCastException。后果不是"崩一下"：SubStore.save 的
+                       catch 整段吞掉 → 订阅的新增/改名/删除**静默不落盘**；
+                       Alert.threshold 的 getFloat 同理会把整轮刷新在预警处中断。 */
+                    JSONObject lo = new JSONObject();
+                    lo.put("__type", "long");
+                    lo.put("value", ((Long) v).longValue());
+                    prefs.put(e.getKey(), lo);
+                } else if (v instanceof Integer) {
+                    JSONObject io = new JSONObject();
+                    io.put("__type", "int");
+                    io.put("value", ((Integer) v).intValue());
+                    prefs.put(e.getKey(), io);
                 } else {
                     prefs.put(e.getKey(), v);
                 }
             }
             root.put("prefs", prefs);
+
+            /* 统计页的开关 / 折算率 / 曲线配色 / 控制台地址存在独立的 stats_opt 文件里，
+               不跟着走的话换机全丢（而且恢复时也不会被清，留下半新半旧的配置）。 */
+            try {
+                SharedPreferences so = c.getSharedPreferences(
+                        StatsOpt.PREF_NAME, Context.MODE_PRIVATE);
+                JSONObject soj = new JSONObject();
+                for (java.util.Map.Entry<String, ?> e : so.getAll().entrySet()) {
+                    Object v = e.getValue();
+                    if (v instanceof Float) {
+                        JSONObject fo = new JSONObject();
+                        fo.put("__type", "float");
+                        fo.put("value", ((Float) v).doubleValue());
+                        soj.put(e.getKey(), fo);
+                    } else if (v instanceof Long) {
+                        JSONObject lo = new JSONObject();
+                        lo.put("__type", "long");
+                        lo.put("value", ((Long) v).longValue());
+                        soj.put(e.getKey(), lo);
+                    } else if (v instanceof Integer) {
+                        JSONObject io = new JSONObject();
+                        io.put("__type", "int");
+                        io.put("value", ((Integer) v).intValue());
+                        soj.put(e.getKey(), io);
+                    } else if (v instanceof String || v instanceof Boolean) {
+                        soj.put(e.getKey(), v);
+                    }
+                }
+                root.put("statsOpt", soj);
+            } catch (Throwable ignored) { }
 
             Ledger lg = Ledger.get(c);
             root.put("snapshots", lg.exportSnapshots());
@@ -130,6 +175,33 @@ public final class Backup {
                进程一被杀就全丢 —— 而账本紧接着在 SQLite 事务里已提交，
                会留下"历史恢复了、设置没恢复"的半截状态。 */
             ed.commit();
+
+            /* 还原 stats_opt（旧备份没有这个字段就跳过） */
+            try {
+                JSONObject soj = root.optJSONObject("statsOpt");
+                if (soj != null) {
+                    SharedPreferences.Editor soe = c.getSharedPreferences(
+                            StatsOpt.PREF_NAME, Context.MODE_PRIVATE).edit();
+                    soe.clear();
+                    java.util.Iterator<String> sit = soj.keys();
+                    while (sit.hasNext()) {
+                        String k = sit.next();
+                        Object v = soj.get(k);
+                        if (v instanceof JSONObject && ((JSONObject) v).has("__type")) {
+                            JSONObject t2 = (JSONObject) v;
+                            String ty = t2.optString("__type");
+                            if ("float".equals(ty)) soe.putFloat(k, (float) t2.optDouble("value", 0));
+                            else if ("long".equals(ty)) soe.putLong(k, t2.optLong("value", 0));
+                            else if ("int".equals(ty)) soe.putInt(k, t2.optInt("value", 0));
+                            else soe.putString(k, t2.optString("value", ""));
+                        } else if (v instanceof String) soe.putString(k, (String) v);
+                        else if (v instanceof Boolean) soe.putBoolean(k, (Boolean) v);
+                        else if (v instanceof Integer) soe.putInt(k, (Integer) v);
+                        else if (v instanceof Long) soe.putLong(k, (Long) v);
+                    }
+                    soe.commit();
+                }
+            } catch (Throwable ignored) { }
 
             Ledger lg = Ledger.get(c);
             int n = lg.importAll(root.optJSONArray("snapshots"),

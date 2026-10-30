@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.graphics.Typeface;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -42,19 +43,33 @@ public final class PageManager {
         final java.util.ArrayList<String> order =
                 new java.util.ArrayList<String>(PageStore.order(act));
 
+        /* 拖拽排序的状态（照 DragSort / LinkMesh 那套）：
+           固定行高 + 滞回换位 + 不 bringToFront。 */
+        final int rowH = dp(act, 64);
+        final java.util.Map<String, View> rowByKey =
+                new java.util.HashMap<String, View>();
+        final View[] dragging = new View[1];
+        final String[] dragKey = new String[1];
+        final float[] startRawY = new float[1];
+        /* 拖动开始那一刻的索引快照（和 DragSort 同一套算法）：
+           不能读 getTop()，ScrollView 一滚就变，位移会算错。 */
+        final java.util.Map<String, Integer> baseIdx = new java.util.HashMap<String, Integer>();
+
         /* 上面的 Runnable 里用 run() 自调用是无效的（匿名类方法遮蔽），
            所以这里用一格数组做真正的自引用。 */
         final Runnable[] self = new Runnable[1];
         self[0] = new Runnable() {
             public void run() {
                 box.removeAllViews();
+                rowByKey.clear();
                 box.setAlpha(0f);      // 配合末尾的 Anim.fade，重建时才有"浮现"的过程
 
                 TextView tip = new TextView(act);
-                tip.setText("点「设为主页」= 打开应用直接进这一页，并自动排到最左。\n"
+                tip.setText("长按任意一行拖动排序（左侧 ≡ 是手柄）。\n"
+                        + "「设为主页」= 打开应用直接进这一页，并自动排到最左。\n"
                         + "隐藏后导航条会自动适应（至少保留一页）。");
                 tip.setTextSize(11.5f);
-                tip.setTextColor(0xFF8A94A3);
+                tip.setTextColor(Theme.c(act, R.attr.c_tx3));
                 tip.setPadding(dp(act, 6), dp(act, 4), dp(act, 6), dp(act, 10));
                 box.addView(tip);
 
@@ -70,7 +85,18 @@ public final class PageManager {
                     LinearLayout row = new LinearLayout(act);
                     row.setOrientation(LinearLayout.HORIZONTAL);
                     row.setGravity(Gravity.CENTER_VERTICAL);
-                    row.setPadding(dp(act, 4), dp(act, 5), dp(act, 4), dp(act, 5));
+                    row.setPadding(dp(act, 2), 0, dp(act, 4), 0);
+                    /* 固定行高：拖拽要靠"第几行 × 行高"算目标槽位，
+                       wrap_content 会让每行高度不一致，换位判定就飘了 */
+                    row.setLayoutParams(new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, rowH));
+
+                    TextView handle = new TextView(act);
+                    handle.setText("\u2261");
+                    handle.setTextSize(17);
+                    handle.setTextColor(Theme.c(act, R.attr.c_tx3));
+                    handle.setPadding(0, 0, dp(act, 10), 0);
+                    row.addView(handle);
 
                     LinearLayout col = new LinearLayout(act);
                     col.setOrientation(LinearLayout.VERTICAL);
@@ -82,7 +108,7 @@ public final class PageManager {
                             + (isHome ? "   ★主页" : "")
                             + (hidden ? "   （已隐藏）" : ""));
                     nm.setTextSize(14);
-                    nm.setTextColor(hidden ? 0xFF8A94A3 : 0xFF39424F);
+                    nm.setTextColor(hidden ? Theme.c(act, R.attr.c_tx3) : Theme.c(act, R.attr.c_tx));
                     nm.setTypeface(null, isHome ? Typeface.BOLD : Typeface.NORMAL);
                     col.addView(nm);
 
@@ -90,33 +116,110 @@ public final class PageManager {
                     sub.setText(isHome ? "打开应用即进入此页"
                             : (hidden ? "不在导航条显示" : "在导航条第 " + (vis.indexOf(key) + 1) + " 位"));
                     sub.setTextSize(11.5f);
-                    sub.setTextColor(0xFF8A94A3);
+                    sub.setTextColor(Theme.c(act, R.attr.c_tx3));
                     col.addView(sub);
                     row.addView(col);
 
-                    row.addView(arrow(act, "▲", i > 0, new View.OnClickListener() {
-                        public void onClick(View v) {
-                            String t = order.get(idx - 1);
-                            order.set(idx - 1, order.get(idx));
-                            order.set(idx, t);
-                            PageStore.saveOrder(act, order);
-                            if (onChanged != null) onChanged.run();
-                            self[0].run();
+                    /* 长按整行拖动（原来的 ▲▼ 点一次只挪一格，四页也要点好几下） */
+                    row.setOnLongClickListener(new View.OnLongClickListener() {
+                        public boolean onLongClick(View v) {
+                            if (v.getHeight() <= 0) return false;
+                            baseIdx.clear();
+                            for (int k = 0; k < order.size(); k++) baseIdx.put(order.get(k), k);
+                            dragging[0] = v;
+                            dragKey[0] = key;
+                            startRawY[0] = 0;
+                            v.setAlpha(0.92f);
+                            v.setElevation(dp(act, 8));
+                            v.setTranslationZ(dp(act, 8));
+                            try { sc.requestDisallowInterceptTouchEvent(true); } catch (Throwable ig) { }
+                            return true;
                         }
-                    }));
-                    row.addView(arrow(act, "▼", i < order.size() - 1, new View.OnClickListener() {
-                        public void onClick(View v) {
-                            String t = order.get(idx + 1);
-                            order.set(idx + 1, order.get(idx));
-                            order.set(idx, t);
-                            PageStore.saveOrder(act, order);
-                            if (onChanged != null) onChanged.run();
-                            self[0].run();
+                    });
+                    row.setOnTouchListener(new View.OnTouchListener() {
+                        public boolean onTouch(View v, MotionEvent e) {
+                            if (dragging[0] != v) return false;
+                            int action = e.getActionMasked();
+                            if (action == MotionEvent.ACTION_MOVE) {
+                                if (startRawY[0] == 0) startRawY[0] = e.getRawY();
+                                float dy = e.getRawY() - startRawY[0];
+                                v.setTranslationY(dy);
+                                Integer bi = baseIdx.get(dragKey[0]);
+                                int orig = bi == null ? order.indexOf(dragKey[0]) : bi.intValue();
+                                int target = Math.round(orig + dy / (float) rowH);
+                                target = Math.max(0, Math.min(order.size() - 1, target));
+                                int cur = order.indexOf(dragKey[0]);
+                                boolean changed = (target != cur);
+                                if (changed) {
+                                    order.remove(dragKey[0]);
+                                    order.add(target, dragKey[0]);
+                                    /* 只有目标槽位变了才重排动画，否则每帧重设会一直打断 */
+                                    for (int k = 0; k < order.size(); k++) {
+                                        String kk = order.get(k);
+                                        View r = rowByKey.get(kk);
+                                        if (r == null || r == v) continue;
+                                        Integer b2 = baseIdx.get(kk);
+                                        int bo = b2 == null ? k : b2.intValue();
+                                        r.animate().translationY((k - bo) * (float) rowH)
+                                                .setDuration(150).start();
+                                    }
+                                }
+                            } else if (action == MotionEvent.ACTION_UP
+                                    || action == MotionEvent.ACTION_CANCEL) {
+                                dragging[0] = null;
+                                try { sc.requestDisallowInterceptTouchEvent(false); } catch (Throwable ig) { }
+                                v.setAlpha(1f);
+                                v.setElevation(0);
+                                v.setTranslationZ(0);
+                                /* 先吸附到目标槽位（140ms），到位后归零 + 重排 */
+                                final int curIdx = order.indexOf(dragKey[0]);
+                                Integer b0 = baseIdx.get(dragKey[0]);
+                                final int bo0 = b0 == null ? curIdx : b0.intValue();
+                                v.animate().translationY((curIdx - bo0) * (float) rowH)
+                                        .setDuration(140)
+                                        .withEndAction(new Runnable() {
+                                            public void run() {
+                                                for (int k = 0; k < order.size(); k++) {
+                                                    View r = rowByKey.get(order.get(k));
+                                                    if (r == null) continue;
+                                                    r.animate().cancel();
+                                                    r.setTranslationY(0);
+                                                    r.setAlpha(1f);
+                                                    r.setElevation(0);
+                                                    r.setTranslationZ(0);
+                                                }
+                                                if (box.getChildCount() > 1) {
+                                                    box.removeViews(1, box.getChildCount() - 1);
+                                                }
+                                                /* 重排时要把每行后的 1px 分隔线一起补回来，
+                                                   否则拖一次整个列表就变成没有分隔线的秃块 */
+                                                for (int k = 0; k < order.size(); k++) {
+                                                    View r = rowByKey.get(order.get(k));
+                                                    if (r != null) box.addView(r);
+                                                    View ln = new View(act);
+                                                    ln.setLayoutParams(new LinearLayout.LayoutParams(
+                                                            ViewGroup.LayoutParams.MATCH_PARENT, 1));
+                                                    ln.setBackgroundColor(
+                                                            Theme.ca(act, R.attr.c_div_line, 40));
+                                                    box.addView(ln);
+                                                }
+                                            }
+                                        })
+                                        .start();
+                                PageStore.saveOrder(act, order);
+                                if (onChanged != null) onChanged.run();
+                                /* 不再 self.run() 整表重建：
+                                   重建会把 ScrollView 的滚动位置打回顶部，
+                                   用户看到的就是"一松手列表先弹回最上面"。
+                                   行的副标题（第 N 位）下次打开时自然是对的。 */
+                            }
+                            return true;
                         }
-                    }));
+                    });
+                    rowByKey.put(key, row);
 
                     if (!isHome) {
-                        row.addView(btn(act, "设为主页", 0xFF3D6FD6, new View.OnClickListener() {
+                        row.addView(btn(act, "设为主页", Theme.c(act, R.attr.c_accent), new View.OnClickListener() {
                             public void onClick(View v) {
                                 PageStore.setHome(act, key);
                                 order.remove(key);
@@ -148,7 +251,7 @@ public final class PageManager {
                         TextView lock = new TextView(act);
                         lock.setText("固定显示");
                         lock.setTextSize(11.5f);
-                        lock.setTextColor(0xFF8A94A3);
+                        lock.setTextColor(Theme.c(act, R.attr.c_tx3));
                         lock.setPadding(dp(act, 10), dp(act, 7), dp(act, 10), dp(act, 7));
                         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -163,7 +266,7 @@ public final class PageManager {
                     View line = new View(act);
                     line.setLayoutParams(new LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT, 1));
-                    line.setBackgroundColor(0x148A94A3);
+                    line.setBackgroundColor(Theme.ca(act, R.attr.c_div_line, 40));
                     box.addView(line);
                 }
                 /* 排完序整体淡入一次 —— 不然点了 ▲▼ 界面直接跳到新顺序，
@@ -173,6 +276,7 @@ public final class PageManager {
         };
         self[0].run();
 
+        Theme.skin(act, sc);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("页面管理")
                 .setView(sc)
@@ -187,8 +291,8 @@ public final class PageManager {
         t.setGravity(Gravity.CENTER);
         t.setWidth(dp(a, 42));
         t.setHeight(dp(a, 38));
-        t.setTextColor(enabled ? 0xFF3D6FD6 : 0xFFC6CDD6);
-        t.setBackgroundResource(R.drawable.mini_btn_border);
+        t.setTextColor(enabled ? Theme.c(a, R.attr.c_accent) : Theme.c(a, R.attr.c_tx3));
+        t.setBackgroundResource(Theme.bgRes(t.getContext(), R.attr.bg_pill));
         t.setAlpha(enabled ? 1f : 0.4f);
         t.setOnClickListener(enabled ? l : null);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -206,7 +310,7 @@ public final class PageManager {
         t.setGravity(Gravity.CENTER);
         t.setTextColor(color);
         t.setPadding(dp(a, 10), dp(a, 7), dp(a, 10), dp(a, 7));
-        t.setBackgroundResource(R.drawable.mini_btn_border);
+        t.setBackgroundResource(Theme.bgRes(t.getContext(), R.attr.bg_pill));
         t.setOnClickListener(l);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);

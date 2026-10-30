@@ -46,9 +46,19 @@ fi
 # ---------- ② 同步到仓库 ----------
 cd "$REPO"
 echo "📦 同步源码…"
-tar --exclude='./build' --exclude='./*.apk' --exclude='./*.idsig' \
-    --exclude='./.git' --exclude='./.buildcount' --exclude='./tools/probe.jar' \
-    -cf - -C "$SRC" . | tar -xf -
+# ⚠️ 必须能把"删除"同步过去。tar 只覆盖不删除，SRC 里删掉的文件会一直留在仓库里
+#    （res/values-night/ 就这么残留过），被 git add -A 一起提交，删除永远推不上去。
+if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete \
+        --exclude='build/' --exclude='*.apk' --exclude='*.idsig' \
+        --exclude='.git/' --exclude='.buildcount' --exclude='tools/probe.jar' \
+        "$SRC/" "$REPO/"
+else
+    echo "⚠️ 没有 rsync：只能覆盖、不能同步删除（删掉的文件会残留在仓库里）"
+    tar --exclude='./build' --exclude='./*.apk' --exclude='./*.idsig' \
+        --exclude='./.git' --exclude='./.buildcount' --exclude='./tools/probe.jar' \
+        -cf - -C "$SRC" . | tar -xf -
+fi
 
 # ---------- ③ 提交 ----------
 # ⚠️ APK 不再进 git（二进制放 GitHub Release，用 tools/release-apk.sh 上传）。
@@ -57,12 +67,14 @@ MSG="${1:-同步 $(date '+%Y-%m-%d %H:%M')}"
 git add -A
 if git diff --cached --quiet; then
     echo "✅ 无变更，跳过提交"
-    exit 0
+    # ⚠️ 这里**不能 exit**：上一轮如果"提交成功但推送失败"，
+    #    重跑时正好是"无变更"——一 exit 就永远推不上去，和脚本末尾
+    #    "网络恢复后重跑即可"的说法自相矛盾。跳过提交、继续推送。
+else
+    VER=$(grep -o 'versionName="[^"]*"' AndroidManifest.xml | head -1 | cut -d'"' -f2)
+    git commit -q -m "$MSG"$'\n\n'"versionName=$VER"
+    echo "📝 已提交：$MSG (versionName=$VER)"
 fi
-
-VER=$(grep -o 'versionName="[^"]*"' AndroidManifest.xml | head -1 | cut -d'"' -f2)
-git commit -q -m "$MSG"$'\n\n'"versionName=$VER"
-echo "📝 已提交：$MSG (versionName=$VER)"
 
 # ---------- ④ 推送（带重试） ----------
 # 两个坑：

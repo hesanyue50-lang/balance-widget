@@ -142,9 +142,14 @@ public class ClashVpnService extends VpnService {
 
     /** 真正耗时的部分：建 tun + 拉起内核。全程在后台线程。 */
     private void establishAndStart() {
-        final SubStore.Sub sub = SubStore.active(this);
-        if (sub == null || !sub.ready()) { stopSelf(); return; }
         try {
+            final SubStore.Sub sub = SubStore.active(this);
+            /* ⚠️ 这两行必须在 try 里：starting 的复位在 finally。
+               早退放在 try 之外的话，starting 会被永久留在 true ——
+               此后每次 startVpn() 都判"正在启动"直接丢弃，
+               用户再也开不了系统全局（只能杀进程），而且已经 startForeground
+               的常驻通知也撤不掉。 */
+            if (sub == null || !sub.ready()) { stopSelf(); return; }
             /* ① 建 tun。setBlocking(false) 让读操作可被打断，gvisor 需要非阻塞语义。
                   两个「不」很重要：
                     - 不设 addRoute 全量路由的话就不是全局；

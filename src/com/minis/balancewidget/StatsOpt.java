@@ -20,6 +20,8 @@ import android.content.SharedPreferences;
 public class StatsOpt {
 
     private static final String P = "stats_opt";
+    /** 备份模块要用：这个文件里的配置也要跟着走 */
+    public static final String PREF_NAME = "stats_opt";
 
     /** 默认折算率：元/积分。取官方正价档的中间值。 */
     public static final double DEFAULT_RATE = 0.02;

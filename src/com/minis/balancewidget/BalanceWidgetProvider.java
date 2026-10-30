@@ -138,7 +138,14 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                而这里原来是按「原始条目数」算 —— 两者不等时，
                点「下一页」会被夹回第 0 页，表现为"点了只刷新、不翻页"。
                （实测：items=6 但槽位=9，渲染器显示 1/2，这里却算成 1/1。） */
-            int perPage = WidgetStyle.capacityFor(mgr, ids[0]);
+            /* 取所有实例里**最小**的容量：page 是全局存的（WidgetCache.page），
+               用 ids[0] 一个实例的尺寸算页数，遇到高度不同的另一个实例就会越界
+               （页码超出 → 那个实例一片空白）。取最小值最保守，谁都不会越界。 */
+            int perPage = Integer.MAX_VALUE;
+            for (int i = 0; i < ids.length; i++) {
+                perPage = Math.min(perPage, WidgetStyle.capacityFor(mgr, ids[i]));
+            }
+            if (perPage == Integer.MAX_VALUE || perPage < 1) perPage = 1;
             int cols = WidgetStyle.colsFor(mgr, ids[0]);
             java.util.List<BalanceFetcher.Item> grouped = BalanceFetcher.groupByKind(r.items);
             int slots = WidgetRenderer.computeSlots(grouped, cols, null, null);

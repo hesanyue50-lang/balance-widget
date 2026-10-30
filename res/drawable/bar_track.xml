@@ -2,6 +2,6 @@
 <!-- 进度条底槽：浅色，够淡不抢数字的视线 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#1AFFFFFF" />
+    <solid android:color="?attr/c_div_line" />
     <corners android:radius="2dp" />
 </shape>

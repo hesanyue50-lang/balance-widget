@@ -20,7 +20,8 @@
     <attr name="c_tx_detail" format="color"/>       <!-- 明细行 -->
     <attr name="c_hint" format="color"/>            <!-- 输入提示 -->
     <attr name="c_accent" format="color"/>          <!-- 强调 -->
-    <attr name="c_accent_tx" format="color"/>       <!-- 强调上的文字 -->
+    <attr name="c_accent_tx" format="color"/>
+    <attr name="c_accent_soft" format="color"/>   <!-- 强调色的低透明度版：选中底、滑块 -->       <!-- 强调上的文字 -->
     <attr name="c_danger" format="color"/>
     <attr name="c_warn" format="color"/>
     <attr name="c_btn" format="color"/>             <!-- 次按钮底 -->
@@ -46,4 +47,11 @@
     <attr name="c_w_div" format="color"/>
     <attr name="c_w_accent" format="color"/>
     <attr name="c_w_danger" format="color"/>
+    <!-- 按钮形状：主题决定用胶囊还是直角（drawable 引用，圆角没法用 attr） -->
+    <attr name="bg_pill" format="reference"/>
+    <attr name="bg_tag" format="reference"/>
+    <attr name="bg_seg" format="reference"/>
+    <attr name="bg_input" format="reference"/>
+    <attr name="bg_segsel" format="reference"/>
+    <attr name="bg_pull" format="reference"/>
 </resources>

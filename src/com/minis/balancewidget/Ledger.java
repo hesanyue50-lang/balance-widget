@@ -120,8 +120,13 @@ public final class Ledger extends SQLiteOpenHelper {
     public double record(Context c, String keyId, double balance, double toppedUp,
                          boolean usd, double eps) {
         double consumed = 0;
+        SQLiteDatabase db = null;
         try {
-            SQLiteDatabase db = getWritableDatabase();
+            db = getWritableDatabase();
+            /* 充值记录（T_RECH）和快照（T_SNAP）是两条相互依赖的写入：
+               中途失败会留下"有充值、没快照"的账，series() 归并时会把这条充值
+               算进下一段区间 —— 消费额从此长期算错。放一个事务里要么都成要么都不成。 */
+            db.beginTransaction();
             double prevBal = Double.NaN;
             long prevTs = 0;
 
@@ -177,8 +182,13 @@ public final class Ledger extends SQLiteOpenHelper {
             sv.put("balance", balance);
             if (toppedUp >= 0) sv.put("topped_up", toppedUp);
             db.insert(T_SNAP, null, sv);
+            db.setTransactionSuccessful();
         } catch (Throwable t) {
             BalanceFetcher.diag(c, "账本写入失败: " + t);
+        } finally {
+            if (db != null) {
+                try { if (db.inTransaction()) db.endTransaction(); } catch (Throwable ignored) { }
+            }
         }
         return consumed;
     }

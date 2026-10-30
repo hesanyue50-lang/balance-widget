@@ -48,17 +48,23 @@ public final class UiInsets {
             View decor = w.getDecorView();
             /* 应用是浅色底，图标/文字要深色才看得见。
                用 WindowInsetsController（API 30+）或旧的 systemUiVisibility 两套写法。 */
+            /* 状态栏图标：浅底用深色图标，深底用浅色图标。
+               原来写死 LIGHT_STATUS_BARS（深色图标）—— 那是按浅色主题假设的，
+               切到 Aurora 暗 / Devtool 后状态栏图标直接看不见。 */
+            final boolean dark = Theme.isDark(act);
             if (Build.VERSION.SDK_INT >= 30) {
                 android.view.WindowInsetsController c = w.getInsetsController();
                 if (c != null) {
                     c.setSystemBarsAppearance(
-                            android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+                            dark ? 0
+                                 : android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
                             android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
-                    /* 导航栏保持浅色图标：应用底部是深色卡片，深色图标会看不见 */
                 }
             } else {
-                decor.setSystemUiVisibility(decor.getSystemUiVisibility()
-                        | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                int vis = decor.getSystemUiVisibility();
+                vis = dark ? (vis & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR)
+                           : (vis | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                decor.setSystemUiVisibility(vis);
             }
         } catch (Throwable ignored) { }
 

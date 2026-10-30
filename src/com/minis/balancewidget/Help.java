@@ -172,7 +172,7 @@ public final class Help {
         TextView foot = new TextView(a);
         foot.setText("版本 " + version(a) + "\n点标题可展开或收起");
         foot.setTextSize(11.5f);
-        foot.setTextColor(0xFFA2ABB9);
+        foot.setTextColor(Theme.c(a, R.attr.c_tx3));
         foot.setPadding(0, dp(a, 16), 0, 0);
         box.addView(foot);
 
@@ -182,6 +182,7 @@ public final class Help {
         sc.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, maxH));
 
+        Theme.skin(a, sc);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(a)
                 .setTitle("使用帮助")
                 .setView(sc)
@@ -201,7 +202,7 @@ public final class Help {
         TextView tv = new TextView(a);
         tv.setText(t);
         tv.setTextSize(16);
-        tv.setTextColor(0xFF39424F);
+        tv.setTextColor(Theme.c(a, R.attr.c_tx));
         tv.setTypeface(null, Typeface.BOLD);
         tv.setPadding(0, dp(a, 16), 0, dp(a, 6));
         return tv;
@@ -214,13 +215,13 @@ public final class Help {
         TextView t = new TextView(a);
         t.setText("· " + title);
         t.setTextSize(14);
-        t.setTextColor(0xFF2F3946);
+        t.setTextColor(Theme.c(a, R.attr.c_tx2));
         wrap.addView(t);
 
         TextView d = new TextView(a);
         d.setText("   " + desc);
         d.setTextSize(12);
-        d.setTextColor(0xFF5E6878);
+        d.setTextColor(Theme.c(a, R.attr.c_tx3));
         d.setPadding(0, dp(a, 2), 0, dp(a, 8));
         wrap.addView(d);
         return wrap;

@@ -93,7 +93,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:background="@drawable/pull_bg"
+        android:background="?attr/bg_pull"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingLeft="14dp"
@@ -138,7 +138,7 @@
             android:id="@+id/seg_wrap"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/seg_bg"
+            android:background="?attr/bg_seg"
             android:padding="5dp"
             android:layout_marginTop="10dp"
             android:layout_marginBottom="6dp">
@@ -147,7 +147,7 @@
                 android:id="@+id/seg_slider"
                 android:layout_width="40dp"
                 android:layout_height="1dp"
-                android:background="@drawable/seg_sel" />
+                android:background="?attr/bg_segsel" />
 
             <LinearLayout
                 android:id="@+id/seg_tabs"

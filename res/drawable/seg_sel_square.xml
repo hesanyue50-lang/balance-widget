@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分段控件选中滑块（直角款），由主题 bg_segsel 指向 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="2dp" />
+    <solid android:color="?attr/c_accent_soft" />
+</shape>

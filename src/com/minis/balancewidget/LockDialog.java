@@ -41,7 +41,7 @@ public final class LockDialog {
 
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(R.drawable.card_bg);
+        card.setBackground(Theme.cardBg(ctx));
         card.setPadding(dp(ctx, 22), dp(ctx, 22), dp(ctx, 22), dp(ctx, 22));
         sc.addView(card);
 
@@ -54,6 +54,7 @@ public final class LockDialog {
 
         Dialog dlg = new Dialog(ctx);
         dlg.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        Theme.skin(ctx, sc);
         dlg.setContentView(sc);
         /* 去掉 Dialog 自带的窗口底色 —— 否则卡片外面会再套一层白框，看着很臃肿 */
         try {
@@ -89,7 +90,7 @@ public final class LockDialog {
         if ((type & android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0) {
             e.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());
         }
-        e.setBackgroundResource(R.drawable.input_aurora);
+        e.setBackgroundResource(Theme.bgRes(e.getContext(), R.attr.bg_input));
         e.setPadding(dp(ctx, 20), dp(ctx, 19), dp(ctx, 20), dp(ctx, 19));
         return e;
     }
@@ -101,7 +102,8 @@ public final class LockDialog {
         b.setTextSize(13);
         b.setGravity(Gravity.CENTER);
         // 等大统一：固定最小高度 + 统一描边背景（主按钮保留主色）
-        b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.mini_btn_border);
+        if (primary) b.setBackground(Theme.primaryBg(ctx));
+        else b.setBackgroundResource(Theme.bgRes(b.getContext(), R.attr.bg_pill));
         b.setMinHeight(dp(ctx, 44));
         b.setPadding(dp(ctx, 12), dp(ctx, 8), dp(ctx, 12), dp(ctx, 8));
         b.setSingleLine(true);   // 自适应长度不转行
@@ -312,7 +314,8 @@ public final class LockDialog {
         b.setTextColor(Theme.c(ctx, primary ? R.attr.c_accent_tx : R.attr.c_tx));
         b.setTextSize(12);
         b.setGravity(Gravity.CENTER);
-        b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.mini_btn_border);
+        if (primary) b.setBackground(Theme.primaryBg(ctx));
+        else b.setBackgroundResource(Theme.bgRes(b.getContext(), R.attr.bg_pill));
         b.setMinHeight(dp(ctx, 34));
         b.setPadding(dp(ctx, 10), dp(ctx, 7), dp(ctx, 10), dp(ctx, 7));
         b.setSingleLine(false);      // 关键：允许换行，否则长文案一样会被截
@@ -344,7 +347,7 @@ public final class LockDialog {
         kv.setTextSize(14);
         kv.setTypeface(Typeface.MONOSPACE);
         kv.setTextIsSelectable(true);               // 也能长按手动选
-        kv.setBackgroundResource(R.drawable.input_aurora);
+        kv.setBackgroundResource(Theme.bgRes(kv.getContext(), R.attr.bg_input));
         kv.setPadding(dp(ctx, 20), dp(ctx, 19), dp(ctx, 20), dp(ctx, 19));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);

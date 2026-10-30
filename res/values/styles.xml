@@ -7,7 +7,7 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">#0B0E14</item>
         <item name="android:textColorSecondary">#414A5C</item>
-        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialog_AuroraLight</item>
         <item name="c_bg">#F6F7F9</item>
         <item name="c_card">#FFFFFF</item>
         <item name="c_line">#14090C14</item>
@@ -41,6 +41,13 @@
         <item name="c_w_div">#2E9AA6B2</item>
         <item name="c_w_accent">#4166F5</item>
         <item name="c_w_danger">#E5484D</item>
+            <item name="bg_pill">@drawable/mini_btn_border</item>
+            <item name="bg_tag">@drawable/tag_bg</item>
+        <item name="bg_seg">@drawable/seg_bg</item>
+        <item name="bg_input">@drawable/input_aurora</item>
+            <item name="bg_segsel">@drawable/seg_sel</item>
+        <item name="bg_pull">@drawable/pull_bg</item>
+            <item name="c_accent_soft">#264166F5</item>
     </style>
 
     <!-- Aurora Glass 暗 -->
@@ -50,7 +57,7 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">#F5F7FA</item>
         <item name="android:textColorSecondary">#9AA3B2</item>
-        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialog_AuroraDark</item>
         <item name="c_bg">#0A0B0F</item>
         <item name="c_card">#14161C</item>
         <item name="c_line">#1F232B</item>
@@ -84,6 +91,13 @@
         <item name="c_w_div">#26FFFFFF</item>
         <item name="c_w_accent">#6C8CFF</item>
         <item name="c_w_danger">#FF5C5C</item>
+            <item name="bg_pill">@drawable/mini_btn_border</item>
+            <item name="bg_tag">@drawable/tag_bg</item>
+        <item name="bg_seg">@drawable/seg_bg</item>
+        <item name="bg_input">@drawable/input_aurora</item>
+            <item name="bg_segsel">@drawable/seg_sel</item>
+        <item name="bg_pull">@drawable/pull_bg</item>
+            <item name="c_accent_soft">#266C8CFF</item>
     </style>
 
     <!-- Editorial 纸感 -->
@@ -93,7 +107,7 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">#1A1614</item>
         <item name="android:textColorSecondary">#574E45</item>
-        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialog_Editorial</item>
         <item name="c_bg">#FAF7F2</item>
         <item name="c_card">#FFFFFF</item>
         <item name="c_line">#2A1F1810</item>
@@ -127,6 +141,14 @@
         <item name="c_w_div">#2E6B5D4F</item>
         <item name="c_w_accent">#9A3412</item>
         <item name="c_w_danger">#B91C1C</item>
+            <item name="bg_pill">@drawable/pill_square</item>
+            <item name="bg_tag">@drawable/tag_square</item>
+        <item name="bg_seg">@drawable/seg_square</item>
+        <item name="bg_input">@drawable/input_square</item>
+            <item name="bg_segsel">@drawable/seg_sel_square</item>
+        <item name="bg_pull">@drawable/pull_square</item>
+            <item name="android:fontFamily">serif</item>
+            <item name="c_accent_soft">#269A3412</item>
     </style>
 
     <!-- Minimal 瑞士 -->
@@ -136,7 +158,7 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">#0A0A0A</item>
         <item name="android:textColorSecondary">#555555</item>
-        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialog_Swiss</item>
         <item name="c_bg">#FFFFFF</item>
         <item name="c_card">#FFFFFF</item>
         <item name="c_line">#E5E5E5</item>
@@ -170,6 +192,13 @@
         <item name="c_w_div">#1F000000</item>
         <item name="c_w_accent">#0A0A0A</item>
         <item name="c_w_danger">#D92D20</item>
+            <item name="bg_pill">@drawable/mini_btn_border</item>
+            <item name="bg_tag">@drawable/tag_bg</item>
+        <item name="bg_seg">@drawable/seg_bg</item>
+        <item name="bg_input">@drawable/input_aurora</item>
+            <item name="bg_segsel">@drawable/seg_sel</item>
+        <item name="bg_pull">@drawable/pull_bg</item>
+            <item name="c_accent_soft">#260A0A0A</item>
     </style>
 
     <!-- Devtool 终端 -->
@@ -179,7 +208,7 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">#E6E6E6</item>
         <item name="android:textColorSecondary">#8A8A8A</item>
-        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialog_Devtool</item>
         <item name="c_bg">#0A0A0A</item>
         <item name="c_card">#141414</item>
         <item name="c_line">#262626</item>
@@ -213,6 +242,14 @@
         <item name="c_w_div">#26FFFFFF</item>
         <item name="c_w_accent">#3ECF8E</item>
         <item name="c_w_danger">#F05252</item>
+            <item name="bg_pill">@drawable/mini_btn_border</item>
+            <item name="bg_tag">@drawable/tag_bg</item>
+        <item name="bg_seg">@drawable/seg_bg</item>
+        <item name="bg_input">@drawable/input_aurora</item>
+            <item name="bg_segsel">@drawable/seg_sel</item>
+        <item name="bg_pull">@drawable/pull_bg</item>
+            <item name="android:fontFamily">monospace</item>
+            <item name="c_accent_soft">#263ECF8E</item>
     </style>
 
     <!-- Neo-Brutalism 撞色 -->
@@ -222,7 +259,7 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">#000000</item>
         <item name="android:textColorSecondary">#333333</item>
-        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialog_Brutal</item>
         <item name="c_bg">#FFF8E7</item>
         <item name="c_card">#FFFFFF</item>
         <item name="c_line">#000000</item>
@@ -256,6 +293,13 @@
         <item name="c_w_div">#26000000</item>
         <item name="c_w_accent">#FF5C5C</item>
         <item name="c_w_danger">#DC2626</item>
+            <item name="bg_pill">@drawable/pill_square</item>
+            <item name="bg_tag">@drawable/tag_square</item>
+        <item name="bg_seg">@drawable/seg_square</item>
+        <item name="bg_input">@drawable/input_square</item>
+            <item name="bg_segsel">@drawable/seg_sel_square</item>
+        <item name="bg_pull">@drawable/pull_square</item>
+            <item name="c_accent_soft">#26FF5C5C</item>
     </style>
 
     <!-- Soft Clay 柔和 -->
@@ -265,7 +309,7 @@
         <item name="android:fitsSystemWindows">false</item>
         <item name="android:textColorPrimary">#2B3446</item>
         <item name="android:textColorSecondary">#5A6B85</item>
-        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialog_Clay</item>
         <item name="c_bg">#EEF1F6</item>
         <item name="c_card">#F7F9FC</item>
         <item name="c_line">#0FFFFFFF</item>
@@ -299,12 +343,77 @@
         <item name="c_w_div">#1A5A6B85</item>
         <item name="c_w_accent">#7C9CFF</item>
         <item name="c_w_danger">#E57373</item>
+            <item name="bg_pill">@drawable/mini_btn_border</item>
+            <item name="bg_tag">@drawable/tag_bg</item>
+        <item name="bg_seg">@drawable/seg_bg</item>
+        <item name="bg_input">@drawable/input_aurora</item>
+            <item name="bg_segsel">@drawable/seg_sel</item>
+        <item name="bg_pull">@drawable/pull_bg</item>
+            <item name="c_accent_soft">#267C9CFF</item>
     </style>
 
 
-    <!-- 弹窗统一外观 + 动画 -->
-    <style name="AppDialogTheme" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
+
+
+
+    <!-- ===== 对话框主题：每个主主题一份，保证标题/按钮的字体和明暗都跟得上 =====
+         只做 Light/Dark 两套是不够的：AlertDialog 的标题和按钮是系统建的，
+         它们在 content View 之外，代码遍历不到 —— 只能靠 theme 的 fontFamily 交给系统。 -->
+    <style name="AppDialog_AuroraLight" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
         <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="android:colorAccent">#4166F5</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:textColorPrimary">#0B0E14</item>
+        <item name="android:textColorSecondary">#414A5C</item>
+    </style>
+    <style name="AppDialog_AuroraDark" parent="@android:style/Theme.DeviceDefault.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="android:colorAccent">#6C8CFF</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorBackground">#14161C</item>
+        <item name="android:textColorPrimary">#F5F7FA</item>
+        <item name="android:textColorSecondary">#9AA3B2</item>
+    </style>
+    <style name="AppDialog_Editorial" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="android:colorAccent">#9A3412</item>
+        <item name="android:fontFamily">serif</item>
+        <item name="android:colorBackground">#FAF7F2</item>
+        <item name="android:textColorPrimary">#1A1614</item>
+        <item name="android:textColorSecondary">#574E45</item>
+    </style>
+    <style name="AppDialog_Swiss" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="android:colorAccent">#0A0A0A</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:textColorPrimary">#0A0A0A</item>
+        <item name="android:textColorSecondary">#555555</item>
+    </style>
+    <style name="AppDialog_Devtool" parent="@android:style/Theme.DeviceDefault.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="android:colorAccent">#3ECF8E</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:colorBackground">#14161C</item>
+        <item name="android:textColorPrimary">#F5F7FA</item>
+        <item name="android:textColorSecondary">#9AA3B2</item>
+    </style>
+    <style name="AppDialog_Brutal" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="android:colorAccent">#FF5C5C</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorBackground">#FFF8E7</item>
+        <item name="android:textColorPrimary">#000000</item>
+        <item name="android:textColorSecondary">#333333</item>
+    </style>
+    <style name="AppDialog_Clay" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="android:colorAccent">#7C9CFF</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorBackground">#EEF1F6</item>
+        <item name="android:textColorPrimary">#2B3446</item>
+        <item name="android:textColorSecondary">#5A6B85</item>
     </style>
 
     <style name="DialogAnim">
@@ -323,7 +432,7 @@
         <item name="android:layout_marginTop">24dp</item>
         <item name="android:layout_marginLeft">6dp</item>
         <item name="android:layout_marginBottom">10dp</item>
-        <item name="android:textColor">@color/tx</item>
+        <item name="android:textColor">?attr/c_tx</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.01</item>
@@ -351,7 +460,7 @@
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:textColor">@color/tx</item>
+        <item name="android:textColor">?attr/c_tx</item>
         <item name="android:textSize">14sp</item>
     </style>
 
@@ -360,10 +469,10 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:gravity">center</item>
         <item name="android:textSize">14sp</item>
-        <item name="android:textColor">@color/tx</item>
-        <item name="android:textColorHint">@color/hint_c</item>
+        <item name="android:textColor">?attr/c_tx</item>
+        <item name="android:textColorHint">?attr/c_hint</item>
         <item name="android:singleLine">true</item>
-        <item name="android:background">@drawable/input_aurora</item>
+        <item name="android:background">?attr/bg_input</item>
         <item name="android:paddingLeft">20dp</item>
         <item name="android:paddingRight">20dp</item>
         <item name="android:paddingTop">19dp</item>
@@ -374,7 +483,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginLeft">8dp</item>
-        <item name="android:textColor">@color/tx2</item>
+        <item name="android:textColor">?attr/c_tx2</item>
         <item name="android:textSize">13sp</item>
     </style>
 
@@ -382,7 +491,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">7dp</item>
-        <item name="android:textColor">@color/tx3</item>
+        <item name="android:textColor">?attr/c_tx3</item>
         <item name="android:textSize">11.5sp</item>
         <item name="android:lineSpacingExtra">3dp</item>
     </style>

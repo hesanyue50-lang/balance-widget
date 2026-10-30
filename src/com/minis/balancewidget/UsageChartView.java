@@ -308,13 +308,23 @@ public class UsageChartView extends View {
 
         cv.restore();   // 结束数据层裁剪
 
-        // X 轴标签：尽量每天标（最多 8 个），MM/DD
-        int step = Math.max(1, (n + 7) / 8);
-        for (int i = 0; i < n; i += step) {
+        /* X 轴标签：最多 4 个。
+           原来标 8 个 —— 近 7 日（168 个桶）时标签宽度比间距还大，挤成一片；
+           而且第一个标签会被旧代码硬推到 padL-20，直接盖住 Y 轴的「¥0.0」。
+
+           两个约束：
+             ① **不标最左边那个**（从 step 开始），让开 Y 轴刻度；
+             ② 仍然越界就不画，宁可少一个也不重叠。 */
+        final int maxLabels = 4;
+        int step = Math.max(1, (n + maxLabels - 1) / maxLabels);
+        for (int i = step; i < n; i += step) {
+            if (i >= labels.length) break;
             float x = padL + slot * i + slot / 2f;
             String t = labels[i];
             float tw = pAxis.measureText(t);
-            float dx = Math.min(Math.max(x - tw / 2, padL - 20), w - padR - tw);
+            float dx = x - tw / 2f;
+            if (dx < padL + 2) continue;              // 会压到 Y 轴刻度
+            if (dx + tw > w - padR) continue;         // 右边出界
             cv.drawText(t, dx, h - getPaddingBottom() - 12, pAxis);
         }
 
@@ -333,18 +343,27 @@ public class UsageChartView extends View {
                     maxW = Math.max(maxW, pLegend.measureText(rowTxt));
                 }
                 float boxW = maxW + 60;   // 左色点留白 + 右内边距，宽度随文字自适应
-                float boxH = (entries + 1) * rowH + 12;
+                /* 高度要夹到绘图区内：平台多到十几个时，Box 下半截会被 View 边界裁掉，
+                   最下面几行的余额根本看不见。行数太多就少画几行（由裁剪自然截断）。 */
+                float boxH = Math.min((entries + 1) * rowH + 12, ch - 8);
                 float slot2 = mCw / mN;
                 float cx = mPadL + slot2 * touchIdx + slot2 / 2f;
                 float bx = Math.min(Math.max(cx - boxW / 2, padL), w - padR - boxW);
                 float by = padT + 4;
+                if (by + boxH > padT + ch) by = padT + ch - boxH;
+                if (by < padT) by = padT;
                 Paint bp = pTip;
-                bp.setStyle(Paint.Style.FILL); bp.setColor(0xF5FFFFFF);
+                /* 浮窗跟着主题走：原来写死 0xF5FFFFFF（白底）+ 黑边，
+                   暗色主题下是一块发光的白板，压住整条曲线。 */
+                bp.setStyle(Paint.Style.FILL);
+                bp.setColor(Theme.ca(getContext(), R.attr.c_card, 245));
                 cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, bp);
-                bp.setStyle(Paint.Style.STROKE); bp.setStrokeWidth(1.5f); bp.setColor(0x2A000000);
+                bp.setStyle(Paint.Style.STROKE);
+                bp.setStrokeWidth(1.5f);
+                bp.setColor(Theme.c(getContext(), R.attr.c_line));
                 cv.drawRoundRect(bx, by, bx + boxW, by + boxH, 12, 12, bp);
                 float ry = by + 8 + rowH / 2;
-                pLegend.setColor(0xFF39424F);
+                pLegend.setColor(Theme.c(getContext(), R.attr.c_tx_detail));
                 cv.drawText(labels[touchIdx], bx + 16, ry + 11, pLegend);
                 ry += rowH;
                 for (Series ss : series) {
@@ -352,14 +371,14 @@ public class UsageChartView extends View {
                     double v = (ss.vals != null && touchIdx < ss.vals.length) ? ss.vals[touchIdx] : Double.NaN;
                     pDot.setColor(ss.color);
                     cv.drawCircle(bx + 24, ry, 9, pDot);
-                    pLegend.setColor(0xFF39424F);
+                    pLegend.setColor(Theme.c(getContext(), R.attr.c_tx_detail));
                     cv.drawText(ss.label + "  余额 \u00a5" + (Double.isNaN(v) ? "--" : String.format("%.2f", v)),
                             bx + 40, ry + 11, pLegend);
                     ry += rowH;
                 }
                 pHl.setStyle(Paint.Style.STROKE);
                 pHl.setStrokeWidth(2f);
-                pHl.setColor(0x3339424F);
+                pHl.setColor(Theme.ca(getContext(), R.attr.c_tx_detail, 60));
                 cv.drawLine(cx, padT, cx, padT + ch, pHl);
             }
         }

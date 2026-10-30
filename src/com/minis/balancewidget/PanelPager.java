@@ -216,6 +216,36 @@ public class PanelPager extends HorizontalScrollView {
         if (listener != null && pageWidth > 0) {
             listener.onPagerScroll(l / (float) pageWidth);
         }
+        applyParallax(l);
+    }
+
+    /**
+     * 翻页视差：正在离开的页稍微下沉 + 淡出，进来的页升起来。
+     *
+     * 只动 alpha 和一点 translationY，**不动 scale** —— scale 会改触摸区域，
+     * 也会让 HorizontalScrollView 的宽度计算更绕（踩过一次，页面宽度会漂）。
+     * 滚动停下（停在整页位置）时所有页复位，不留后遗症。
+     */
+    private void applyParallax(int scrollX) {
+        if (pageWidth <= 0) return;
+        if (getChildCount() == 0) return;
+        View row = getChildAt(0);
+        if (!(row instanceof android.view.ViewGroup)) return;
+        android.view.ViewGroup pages = (android.view.ViewGroup) row;
+        for (int i = 0; i < pages.getChildCount(); i++) {
+            View page = pages.getChildAt(i);
+            if (page == null) continue;
+            float offset = (scrollX - i * pageWidth) / (float) pageWidth;   // 0=完全可见
+            float a = Math.min(1f, Math.abs(offset));
+            if (a < 0.001f) {
+                /* 已经完全对齐：彻底复位，避免残留半透明 */
+                page.setAlpha(1f);
+                page.setTranslationY(0f);
+            } else {
+                page.setAlpha(1f - 0.35f * a);
+                page.setTranslationY(18f * a);
+            }
+        }
     }
 
     /** 切页时如果视口宽度还没量出来，先记下来，等 onSizeChanged 再补上 */

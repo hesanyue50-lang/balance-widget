@@ -47,6 +47,12 @@ public class VpnBinder {
     private ExecutorService pool;
     /** 运行信息轮询专用单线程池（原来每次 new Thread） */
     private ExecutorService infoPool;
+    /** 上一轮运行信息还没跑完就跳过本轮：内核卡住时任务会按 2 秒/个净堆积，
+        单线程池的队列无界，永不回落，而且页面销毁后还在持有 act / box。 */
+    private final java.util.concurrent.atomic.AtomicBoolean infoBusy =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    /** 节点列表请求闸门：空结果时 renderNodes 会重新进来，不挡就是一个无限 new Thread 循环 */
+    private boolean groupsLoading = false;
     private boolean built;
     /** VPN 授权请求码（MainActivity 转发 onActivityResult 用） */
     public static final int REQ_VPN = 0x5670;
@@ -72,7 +78,9 @@ public class VpnBinder {
         if (pending == null) return;
         final SubStore.Sub s0 = SubStore.byId(act, pending);
         if (s0 == null) return;
-        root.postDelayed(new Runnable() {
+        /* 投到 h 而不是 root：release() 清的是 h/runHandler 的队列，
+           挂在 View 上的 postDelayed 清不掉 —— Activity 销毁后仍会跑 downloadSub。 */
+        h.postDelayed(new Runnable() {
             public void run() { downloadSub(s0, false); }
         }, 300);
     }
@@ -124,6 +132,8 @@ public class VpnBinder {
         renderSubs();
         renderPlatforms();
         renderNodes();
+        /* 整页内容都是运行时建的，换主题后要在这里补一次套皮（字体 + 卡片圆角） */
+        Theme.skin(act, root);
     }
 
     /** 模式选择：三选一的单选行 */
@@ -397,9 +407,11 @@ public class VpnBinder {
         if (infoPool == null) {
             infoPool = java.util.concurrent.Executors.newSingleThreadExecutor();
         }
+        if (!infoBusy.compareAndSet(false, true)) return;   // 上一轮还没回来，跳过
         try {
             infoPool.execute(new Runnable() {
             public void run() {
+                try {
                 /* 节点名带缓存；时长与流量每次都要新值 */
                 long now = System.currentTimeMillis();
                 if (cachedNode == null || now - cachedNodeAt > NODE_CACHE_MS) {
@@ -426,10 +438,14 @@ public class VpnBinder {
                         }
                     }
                 });
+                } finally {
+                    infoBusy.set(false);   // 无论成败都放开，否则下一轮全被跳过
+                }
             }
             });
         } catch (Throwable t) {
             /* 池已 shutdown（页面已销毁）→ 这次刷新直接放弃 */
+            infoBusy.set(false);
         }
     }
 
@@ -655,7 +671,7 @@ public class VpnBinder {
             upd.setTextSize(11.5f);
             upd.setTextColor(Theme.c(act, R.attr.c_accent));
             upd.setPadding(dp(10), dp(6), dp(10), dp(6));
-            upd.setBackgroundResource(R.drawable.mini_btn_border);
+            upd.setBackgroundResource(Theme.bgRes(upd.getContext(), R.attr.bg_pill));
             upd.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { downloadSub(sub, false); }
             });
@@ -740,6 +756,11 @@ public class VpnBinder {
             return;
         }
         if (groups.isEmpty()) {
+            /* ⚠️ 这里曾经是个死循环：Clash 返回空列表时，回调里 `groups = gs` 仍是空，
+               末尾又调 renderNodes() → 再次进入这个分支 → 又 new 一个 Thread。
+               内核没就绪时会每秒起一个线程、拉一次 /proxies，离开页面也不停。 */
+            if (groupsLoading) return;
+            groupsLoading = true;
             new Thread(new Runnable() {
                 public void run() {
                     try {
@@ -750,6 +771,8 @@ public class VpnBinder {
                         final String auto = Clash.autoSelectRealNode();
                         act.runOnUiThread(new Runnable() {
                             public void run() {
+                                groupsLoading = false;
+                                if (act.isFinishing() || act.isDestroyed()) return;
                                 if (auto != null) {
                                     /* 切了节点，本地列表要重新拉一次，
                                        否则界面上显示的还是旧的"当前节点" */
@@ -762,12 +785,21 @@ public class VpnBinder {
                                 if (auto != null) {
                                     toast("已自动选择节点：" + auto + "（原先停在直连）");
                                 }
+                                /* 空结果就是终态：再调 renderNodes() 又会进空分支 */
+                                if (groups == null || groups.isEmpty()) {
+                                    if (hint != null) {
+                                        hint.setText("没有可用策略组（内核可能还没就绪，稍后下拉刷新）");
+                                    }
+                                    return;
+                                }
                                 renderNodes();
                             }
                         });
                     } catch (Throwable t) {
                         act.runOnUiThread(new Runnable() {
                             public void run() {
+                                groupsLoading = false;
+                                if (act.isFinishing() || act.isDestroyed()) return;
                                 if (hint != null) hint.setText("读取节点失败：" + t.getMessage());
                             }
                         });
@@ -835,7 +867,7 @@ public class VpnBinder {
             delay.setTextSize(12);
             delay.setGravity(Gravity.CENTER);
             delay.setPadding(dp(10), dp(4), dp(10), dp(4));
-            delay.setBackgroundResource(R.drawable.mini_btn_border);
+            delay.setBackgroundResource(Theme.bgRes(delay.getContext(), R.attr.bg_pill));
             bindDelay(delay, n);
             delay.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { testOne(delay, n.name); }
@@ -966,7 +998,7 @@ public class VpnBinder {
             sw.setChecked(Clash.platformViaProxy(act, plat, p != null && p.foreign));
             sw.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
-                    new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
+                    new int[] { Theme.c(act, R.attr.c_accent), Theme.c(act, R.attr.c_tx3) }));
             sw.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
             sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
@@ -1044,6 +1076,7 @@ public class VpnBinder {
         eUrl.setSingleLine(true);
         panel.addView(eUrl);
 
+        Theme.skin(act, panel);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("新增 VPN 订阅")
                 .setView(panel)
@@ -1136,6 +1169,7 @@ public class VpnBinder {
         note.setTextColor(Theme.c(act, R.attr.c_tx3));
         p.addView(note);
 
+        Theme.skin(act, p);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("编辑订阅")
                 .setView(p)
@@ -1161,6 +1195,7 @@ public class VpnBinder {
         LinearLayout p = new LinearLayout(act);
         p.setPadding(dp(20), dp(10), dp(20), 0);
         p.addView(e);
+        Theme.skin(act, p);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("重命名")
                 .setView(p)

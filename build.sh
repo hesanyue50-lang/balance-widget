@@ -53,13 +53,12 @@ if [ "$BUILD_SERIAL" != "1" ] && [ -f /var/minis/shared/pbuild/pbuild.py ]; then
   LIBSO=/var/minis/shared/clash/libmihomo.so
   SOARG=""
   [ -f "$LIBSO" ] && SOARG="--so arm64-v8a=$LIBSO"
-  if python3 /var/minis/shared/pbuild/pbuild.py --project "$SRC" \
+  python3 /var/minis/shared/pbuild/pbuild.py --project "$SRC" \
        --out "$SRC/$PKG.apk" \
        --keystore "$KS" --ks-pass android \
-       --min-api 24 --java-level 8 $SOARG "$@"; then
-    exit 0
-  fi
-  RC=$?
+       --min-api 24 --java-level 8 $SOARG "$@"
+  RC=$?                        # 必须在语句之后立刻取，放进 if 里就恒为 0
+  if [ "$RC" -eq 0 ]; then exit 0; fi
   # ⚠️ 回退必须**看得见**。静默回退会误导排查：产物其实没问题，但因为走了
   #    另一条路径（d8 参数不同），md5 与预期对不上，很容易误判成"并行版坏了"。
   echo "⚠️⚠️ 并行构建失败（退出码 $RC）→ 已回退到串行路径" >&2

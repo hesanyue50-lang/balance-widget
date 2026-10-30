@@ -81,7 +81,7 @@ public final class KeyVault {
     }
 
     /** 取（必要时创建）设备绑定的 AES 密钥 */
-    private static SecretKey secretKey() throws Exception {
+    private static synchronized SecretKey secretKey() throws Exception {
         KeyStore ks = KeyStore.getInstance(KS);
         ks.load(null);
         KeyStore.Entry e = ks.getEntry(ALIAS, null);

@@ -8,7 +8,10 @@
             <solid android:color="?attr/c_bg" />
         </shape>
     </item>
-    <item android:top="-1dp">
+    <!-- 只要**底部**一条分隔线：stroke 会画满四条边，靠负 inset 把左右和顶部
+         挤出可视区。原来只写了 top="-1dp"，只裁掉顶边 —— 左右两侧各留了一条
+         1dp 竖线，在深色主题下看起来就是"顶部左右两侧的白边"。 -->
+    <item android:top="-2dp" android:left="-2dp" android:right="-2dp">
         <shape android:shape="rectangle">
             <solid android:color="@android:color/transparent" />
             <stroke android:width="1dp" android:color="?attr/c_line" />

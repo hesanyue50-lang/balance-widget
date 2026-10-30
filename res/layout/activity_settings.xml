@@ -40,7 +40,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@drawable/seg_bg"
+            android:background="?attr/bg_seg"
             android:padding="5dp"
             android:layout_marginTop="10dp"
             android:layout_marginBottom="6dp">
@@ -74,7 +74,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:background="@drawable/seg_sel"
+                android:background="?attr/bg_segsel"
                 android:gravity="center"
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"

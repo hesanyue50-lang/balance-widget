@@ -148,14 +148,25 @@ public final class KeyStore {
      */
     public static boolean hasAnyConfigured(Context c) {
         try {
-            String json = sp(c).getString(K_KEYS, "");
-            if (json == null || json.length() < 3) return false;
+            SharedPreferences p = sp(c);
+            String json = p.getString(K_KEYS, "");
+            if (json == null || json.length() < 3) {
+                /* 老格式（v2 存档要等 load() 才迁移生成）：
+                   直接查有没有平台级的旧键，否则升级后开机广播会以为"没配过 Key"，
+                   闹钟不排、后台刷新一直停到用户下次打开 App 为止。 */
+                for (int i = 0; i < BalanceFetcher.IDS.length; i++) {
+                    if (p.contains(BalanceFetcher.IDS[i])) return true;
+                }
+                return false;
+            }
             JSONArray arr = new JSONArray(json);
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
                 if (o.optString("platform", "").length() == 0) continue;
                 if (o.optString("key", "").length() > 0) return true;
+                /* 百炼只填阿里云 AccessKey 的条目没有 key 字段，但它同样是"配过" */
+                if (o.optString("accessKeyId", "").length() > 0) return true;
             }
         } catch (Throwable ignored) { }
         return false;

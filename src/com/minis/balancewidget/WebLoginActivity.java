@@ -113,7 +113,7 @@ public class WebLoginActivity extends Activity {
         TextView t2 = new TextView(this);
         t2.setText("登录态只存在本机，用于抓取余额数据");
         t2.setTextSize(11.5f);
-        t2.setTextColor(0xFF8A8F99);
+        t2.setTextColor(Theme.c(this, R.attr.c_tx3));
         titles.addView(t2);
         titles.setLayoutParams(new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -122,7 +122,7 @@ public class WebLoginActivity extends Activity {
         TextView btnDone = new TextView(this);
         btnDone.setText("完成");
         btnDone.setTextSize(13);
-        btnDone.setTextColor(0xFF4D6BFE);
+        btnDone.setTextColor(Theme.c(this, R.attr.c_accent));
         btnDone.setPadding(dp(12), dp(6), dp(12), dp(6));
         btnDone.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { finishWithCookie(); }
@@ -160,7 +160,7 @@ public class WebLoginActivity extends Activity {
         status = new TextView(this);
         status.setText("在下面完成登录后，点右上角「完成」");
         status.setTextSize(11.5f);
-        status.setTextColor(0xFF8A8F99);
+        status.setTextColor(Theme.c(this, R.attr.c_tx3));
         status.setPadding(dp(16), dp(10), dp(16), dp(14));
         root.addView(status);
 

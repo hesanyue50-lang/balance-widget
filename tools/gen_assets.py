@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -82,7 +83,7 @@ THEMES = [
     ('drawable-night-nodpi', (30, 34, 42, 255),    (0, 0, 0, 130),    (42, 47, 56, 255),    (91, 123, 254, 255), (42, 47, 56, 255),    (255, 255, 255, 26)),
 ]
 
-ROOT = '/var/minis/mounts/AIWord/projects/balance-widget/res/'
+ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "res")
 
 for folder, card_c, shadow_c, btn_c, primary_c, input_c, hl_c in THEMES:
     print(folder + ':')

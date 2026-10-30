@@ -96,12 +96,26 @@ public final class Theme {
     }
 
     public static int index(Context c) {
-        int i = 0;
         try {
-            i = sp(c).getInt(KEY, 0);
+            if (!sp(c).contains(KEY)) {
+                /* 从没选过：跟随系统深浅。选过就听用户的 ——
+                   否则用户明明选了「Aurora 亮」，系统一进深色模式又被拽回去。 */
+                boolean night = (c.getResources().getConfiguration().uiMode
+                        & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                        == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+                return night ? 1 : 0;
+            }
+            int i = sp(c).getInt(KEY, 0);
+            return (i < 0 || i >= STYLES.length) ? 0 : i;
         } catch (Throwable ignored) { }
-        if (i < 0 || i >= STYLES.length) i = 0;
-        return i;
+        return 0;
+    }
+
+    /** 当前主题是不是深色底（状态栏图标、系统栏配色要用） */
+    public static boolean isDark(Context c) {
+        int bg = PREVIEW[index(c)][0];
+        int r = (bg >> 16) & 0xFF, g = (bg >> 8) & 0xFF, b = bg & 0xFF;
+        return (r * 299 + g * 587 + b * 114) / 1000 < 128;
     }
 
     public static void setIndex(Context c, int i) {
@@ -207,5 +221,42 @@ public final class Theme {
                 : android.graphics.Typeface.SERIF;
         tv.setTypeface(base, bold ? android.graphics.Typeface.BOLD
                 : android.graphics.Typeface.NORMAL);
+    }
+
+    /**
+     * 卡片背景（圆角 + 1dp 描边），跟随主题。
+     *
+     * 代码里动态建的卡片**别用 9-patch**：card_bg.9.png 是写死的白色，
+     * 暗色主题下会变成一块白板（LockDialog 的菜单就是这么白的）。
+     */
+    public static android.graphics.drawable.GradientDrawable cardBg(Context c) {
+        int r = dp(c, isStyled(c) ? radiusDp(c) : 20);
+        android.graphics.drawable.GradientDrawable d =
+                new android.graphics.drawable.GradientDrawable();
+        d.setColor(c(c, R.attr.c_card));
+        d.setCornerRadius(r);
+        int sw = dp(c, isStyled(c) ? strokeDp(c) : 1);
+        if (sw > 0) d.setStroke(sw, c(c, R.attr.c_line));
+        return d;
+    }
+
+    /** 主按钮背景（胶囊 + 强调色），跟随主题。同上，别用 btn_primary.9.png。 */
+    public static android.graphics.drawable.GradientDrawable primaryBg(Context c) {
+        android.graphics.drawable.GradientDrawable d =
+                new android.graphics.drawable.GradientDrawable();
+        d.setColor(c(c, R.attr.c_accent));
+        d.setCornerRadius(dp(c, 999));
+        return d;
+    }
+
+    /** 取主题里指向的 drawable 资源 id（如 bg_pill：胶囊 / 直角由主题决定） */
+    public static int bgRes(Context c, int attr) {
+        try {
+            TypedValue tv = new TypedValue();
+            if (c.getTheme().resolveAttribute(attr, tv, true) && tv.resourceId != 0) {
+                return tv.resourceId;
+            }
+        } catch (Throwable ignored) { }
+        return 0;
     }
 }

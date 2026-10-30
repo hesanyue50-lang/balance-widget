@@ -109,7 +109,7 @@ public class MimoLoginActivity extends Activity {
         TextView close = new TextView(this);
         close.setText("关闭");
         close.setTextSize(13);
-        close.setTextColor(0xFF4D6BFE);
+        close.setTextColor(Theme.c(this, R.attr.c_accent));
         close.setPadding(dp(12), dp(6), dp(12), dp(6));
         close.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { finish(); }

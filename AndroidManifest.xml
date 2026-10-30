@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="618"
-    android:versionName="26.10.618">
+    android:versionCode="676"
+    android:versionName="26.10.676">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -102,13 +102,15 @@
         <activity
             android:name=".MimoLoginActivity"
             android:label="登录小米账号"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <!-- OpenAI 同理：官方关掉了普通 Key 的余额接口，只能靠浏览器会话 -->
         <activity
             android:name=".OpenAILoginActivity"
             android:label="登录 OpenAI 账号"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <!-- 上次崩溃的提示页：独立且极轻（只读两个字符串画几个 TextView），
              不依赖任何可能崩的组件 —— 主界面初始化链上的崩溃也能稳稳站在废墟上。 -->
@@ -121,10 +123,13 @@
 
         <!-- 通用网页登录（高级自定义平台用）：内置 WebView 走完登录流程后，
              把该域名下的 Cookie 抄下来存进平台的「附加请求头」。 -->
+        <!-- ⚠️ configChanges 必须写在**标签内部**。原来它跟在 `/>` 后面成了游离属性，
+             aapt2 静默忽略（不报错、APK 照出），结果这个 Activity 根本没有 configChanges ——
+             转屏就重建，WebView 的登录流程当场丢失。 -->
         <activity
             android:name=".WebLoginActivity"
             android:label="网页登录"
-            android:exported="false" />
+            android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <receiver

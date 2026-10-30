@@ -114,6 +114,7 @@ public final class ClashImport {
         p.setPadding(dp(act, 20), dp(act, 10), dp(act, 20), 0);
         p.addView(e);
 
+        Theme.skin(act, p);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("导入 Clash 订阅")
                 .setMessage("订阅地址：\n" + clip(url, 120))

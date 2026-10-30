@@ -291,8 +291,11 @@ public final class BackupStore {
     }
 
     /** 只保留最近 KEEP_MAX 份 */
-    private static void prune(Context c) {        List<Item> all = list(c);
-        for (int i = KEEP_MAX; i < all.size(); i++) delete(c, all.get(i).name);
+    private static void prune(Context c) {
+        List<Item> all = list(c);
+        /* 用 deleteBoth 而不是 delete：只删本机副本的话，用户在下载目录里的
+           .apibak 会变成没人管的孤儿（和 deleteBoth 的设计目标正好相反）。 */
+        for (int i = KEEP_MAX; i < all.size(); i++) deleteBoth(c, all.get(i));
     }
 
     /** 防目录穿越：名字必须是本模块自己生成的那种 */

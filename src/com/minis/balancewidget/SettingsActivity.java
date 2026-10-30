@@ -62,7 +62,7 @@ public class SettingsActivity extends Activity {
         if ((type & InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0) {
             et.setTransformationMethod(PasswordTransformationMethod.getInstance());
         }
-        et.setBackgroundResource(R.drawable.input_aurora);
+        et.setBackgroundResource(Theme.bgRes(et.getContext(), R.attr.bg_input));
         et.setPadding(dp(20), dp(19), dp(20), dp(19));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -163,7 +163,7 @@ public class SettingsActivity extends Activity {
         TextView btn = mkText(Lock.isSet(this) ? "重置查看密码" : "设置查看密码",
                 Theme.c(this, R.attr.c_accent_tx), 13f, 10);
         btn.setGravity(Gravity.CENTER);
-        btn.setBackgroundResource(R.drawable.btn_primary);
+        btn.setBackground(Theme.primaryBg(this));
         btn.setPadding(0, dp(12), 0, dp(12));
         btn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -491,7 +491,7 @@ public class SettingsActivity extends Activity {
 
         TextView cfg = mkTextWrap("配置", Theme.c(this, R.attr.c_accent), 11f);
         cfg.setPadding(dp(10), dp(5), dp(10), dp(5));
-        cfg.setBackgroundResource(R.drawable.mini_btn_border);
+        cfg.setBackgroundResource(Theme.bgRes(cfg.getContext(), R.attr.bg_pill));
         cfg.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCustomDialog(idx, c); }
         });
@@ -503,7 +503,7 @@ public class SettingsActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         dlp.leftMargin = dp(6);
         del.setLayoutParams(dlp);
-        del.setBackgroundResource(R.drawable.mini_btn_border);
+        del.setBackgroundResource(Theme.bgRes(del.getContext(), R.attr.bg_pill));
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 /* 删平台时把它名下的 Key 记录一并清掉，
@@ -568,7 +568,7 @@ public class SettingsActivity extends Activity {
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             slp.rightMargin = dp(6);
             site.setLayoutParams(slp);
-            site.setBackgroundResource(R.drawable.mini_btn_border);
+            site.setBackgroundResource(Theme.bgRes(site.getContext(), R.attr.bg_pill));
             site.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     // 直达控制台（collectSites 控制台永远排第一），不弹子菜单
@@ -583,7 +583,7 @@ public class SettingsActivity extends Activity {
 
         TextView add = mkTextWrap("+ 添加", Theme.c(this, R.attr.c_accent), 11f);
         add.setPadding(dp(10), dp(5), dp(10), dp(5));
-        add.setBackgroundResource(R.drawable.mini_btn_border);
+        add.setBackgroundResource(Theme.bgRes(add.getContext(), R.attr.bg_pill));
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(platform, null); }
         });
@@ -625,7 +625,7 @@ public class SettingsActivity extends Activity {
 
         TextView edit = mkTextWrap("编辑", Theme.c(this, R.attr.c_accent), 11f);
         edit.setPadding(dp(10), dp(5), dp(10), dp(5));
-        edit.setBackgroundResource(R.drawable.mini_btn_border);
+        edit.setBackgroundResource(Theme.bgRes(edit.getContext(), R.attr.bg_pill));
         edit.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(k.platform, k); }
         });
@@ -637,7 +637,7 @@ public class SettingsActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         dlp.leftMargin = dp(6);
         del.setLayoutParams(dlp);
-        del.setBackgroundResource(R.drawable.mini_btn_border);
+        del.setBackgroundResource(Theme.bgRes(del.getContext(), R.attr.bg_pill));
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 KeyStore.remove(SettingsActivity.this, k.id);
@@ -658,7 +658,7 @@ public class SettingsActivity extends Activity {
         sc.setPadding(dp(16), dp(24), dp(16), dp(24));
         final LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(R.drawable.card_bg);
+        card.setBackground(Theme.cardBg(this));
         card.setPadding(dp(24), dp(24), dp(24), dp(24));
         sc.addView(card);
 
@@ -727,7 +727,7 @@ public class SettingsActivity extends Activity {
             // 添加"如何配置"帮助按钮
             TextView helpBtn = mkText("如何配置阿里云 AccessKey？", Theme.c(this, R.attr.c_accent), 12, 12);
             helpBtn.setGravity(Gravity.CENTER);
-            helpBtn.setBackgroundResource(R.drawable.mini_btn_border);
+            helpBtn.setBackgroundResource(Theme.bgRes(helpBtn.getContext(), R.attr.bg_pill));
             helpBtn.setPadding(0, dp(10), 0, dp(10));
             helpBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -756,6 +756,7 @@ public class SettingsActivity extends Activity {
 
         final android.app.Dialog dlg = new android.app.Dialog(this);
         dlg.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        Theme.skin(this, sc);
         dlg.setContentView(sc);
         try {
             if (dlg.getWindow() != null) {
@@ -772,7 +773,7 @@ public class SettingsActivity extends Activity {
 
         TextView cancel = mkText("取消", Theme.c(this, R.attr.c_tx2), 14f, 0);
         cancel.setGravity(Gravity.CENTER);
-        cancel.setBackgroundResource(R.drawable.mini_btn_border);
+        cancel.setBackgroundResource(Theme.bgRes(cancel.getContext(), R.attr.bg_pill));
         cancel.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -786,7 +787,7 @@ public class SettingsActivity extends Activity {
         TextView save = mkText("保存", Theme.c(this, R.attr.c_accent_tx), 14f, 0);
         save.setGravity(Gravity.CENTER);
         save.setTypeface(null, Typeface.BOLD);
-        save.setBackgroundResource(R.drawable.btn_primary);
+        save.setBackground(Theme.primaryBg(this));
         save.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -886,7 +887,7 @@ public class SettingsActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackgroundResource(R.drawable.card_bg);
+        row.setBackground(Theme.cardBg(this));
         row.setPadding(dp(24), dp(18), dp(14), dp(18));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -970,7 +971,7 @@ public class SettingsActivity extends Activity {
 
         final LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(R.drawable.card_bg);
+        card.setBackground(Theme.cardBg(this));
         card.setPadding(dp(27), dp(27), dp(27), dp(27));
         sc.addView(card);
 
@@ -1011,7 +1012,7 @@ public class SettingsActivity extends Activity {
         unitBtn.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         unitBtn.setPadding(dp(12), dp(6), dp(12), dp(6));
-        unitBtn.setBackgroundResource(R.drawable.mini_btn_border);
+        unitBtn.setBackgroundResource(Theme.bgRes(unitBtn.getContext(), R.attr.bg_pill));
         unitRow.addView(unitBtn);
         card.addView(unitRow);
 
@@ -1026,7 +1027,7 @@ public class SettingsActivity extends Activity {
 
         final TextView kindBtn = mkText("制式：" + kindLabel(kind[0]), Theme.c(this, R.attr.c_tx2), 12, 0);
         kindBtn.setPadding(dp(12), dp(6), dp(12), dp(6));
-        kindBtn.setBackgroundResource(R.drawable.mini_btn_border);
+        kindBtn.setBackgroundResource(Theme.bgRes(kindBtn.getContext(), R.attr.bg_pill));
         kindRow.addView(kindBtn);
         card.addView(kindRow);
 
@@ -1081,7 +1082,7 @@ public class SettingsActivity extends Activity {
         eThr.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         eThr.setSingleLine(true);
         eThr.setGravity(Gravity.END);
-        eThr.setBackgroundResource(R.drawable.input_aurora);
+        eThr.setBackgroundResource(Theme.bgRes(eThr.getContext(), R.attr.bg_input));
         eThr.setPadding(dp(20), dp(19), dp(20), dp(19));
         if (src.threshold > 0) eThr.setText(src.threshold == Math.floor(src.threshold)
                 ? String.valueOf((long) src.threshold) : String.valueOf(src.threshold));
@@ -1123,7 +1124,7 @@ public class SettingsActivity extends Activity {
         cancel.setTextColor(Theme.c(this, R.attr.c_tx2));
         cancel.setTextSize(14);
         cancel.setGravity(Gravity.CENTER);
-        cancel.setBackgroundResource(R.drawable.mini_btn_border);
+        cancel.setBackgroundResource(Theme.bgRes(cancel.getContext(), R.attr.bg_pill));
         cancel.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -1140,7 +1141,7 @@ public class SettingsActivity extends Activity {
         save.setTextSize(14);
         save.setTypeface(null, Typeface.BOLD);
         save.setGravity(Gravity.CENTER);
-        save.setBackgroundResource(R.drawable.btn_primary);
+        save.setBackground(Theme.primaryBg(this));
         save.setPadding(0, dp(12), 0, dp(12));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -1188,6 +1189,7 @@ public class SettingsActivity extends Activity {
         btns.addView(save);
         card.addView(btns);
 
+        Theme.skin(this, sc);
         dlg.setContentView(sc);
         Window w = dlg.getWindow();
         if (w != null) {

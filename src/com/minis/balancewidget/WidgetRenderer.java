@@ -162,6 +162,11 @@ public final class WidgetRenderer {
         int slot = computeSlots(items, cols, slotOf, groupStart);
 
         int pages = Math.max(1, (slot + perPage - 1) / perPage);
+        /* 调用方给的 page 可能是上一轮留下的（实例被缩小 / 平台变少），
+           越界时下面 base = page*perPage 会超出所有槽位 → 格子全隐藏、
+           组件一片空白，而且 pages==1 时翻页箭头也被藏掉，用户没法翻回来。 */
+        if (page >= pages) page = pages - 1;
+        if (page < 0) page = 0;
         v.setTextViewText(R.id.w2_page, pages > 1 ? (page + 1) + "/" + pages : "");
         v.setViewVisibility(R.id.w2_prev, pages > 1 ? View.VISIBLE : View.GONE);
         v.setViewVisibility(R.id.w2_next, pages > 1 ? View.VISIBLE : View.GONE);

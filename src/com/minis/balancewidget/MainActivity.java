@@ -95,6 +95,11 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         /* 主题必须在 setContentView 之前应用：attr 是在 View 创建时解析的 */
         Theme.apply(this);
+        /* 统计范围记住上次的选择（默认 7 天） */
+        try {
+            statsDays = getSharedPreferences(BalanceFetcher.PREFS, MODE_PRIVATE)
+                    .getInt("stats_days", 7);
+        } catch (Throwable ig) { }
         /* 上次崩溃了：先跳提示页，**任何**初始化都不做 ——
            崩溃点可能就在这条链上（页面隐藏后切页崩），继续初始化可能当场又崩，
            提示页就永远弹不出来。提示页自己极轻（只读字符串画 TextView），站得住。 */
@@ -290,6 +295,10 @@ public class MainActivity extends Activity {
                         new android.content.DialogInterface.OnClickListener() {
                             public void onClick(android.content.DialogInterface d, int which) {
                                 statsDays = days[which];
+                                try {
+                                    getSharedPreferences(BalanceFetcher.PREFS, MODE_PRIVATE)
+                                            .edit().putInt("stats_days", statsDays).apply();
+                                } catch (Throwable ig) { }
                                 d.dismiss();
                                 buildStats();   // 只换时间范围，重算很快，不必盖遮罩
                             }
@@ -334,6 +343,7 @@ public class MainActivity extends Activity {
             panel.addView(et);
             inputs.add(et);
         }
+        Theme.skin(this, panel);
         new android.app.AlertDialog.Builder(this)
                 .setTitle("修正充值金额")
                 .setView(panel)
@@ -474,8 +484,13 @@ public class MainActivity extends Activity {
             pager.post(new Runnable() {
                 public void run() {
                     layoutSlider();
-                    pager.setPage(curPanel, false);
-                    onPanelSettled(curPanel);
+                    /* 用 curPanel 而不是 0：这段 post 在 showPanel(home) /
+                       handleImportIntent()（切到加速页）之后才执行，
+                       写死 0 会把已经请求的目标页覆盖回第一页
+                       （表现：clash:// 导入进来却停在余额页）。 */
+                    int target = curPanel >= 0 ? curPanel : 0;
+                    pager.setPage(target, false);
+                    onPanelSettled(target);
                 }
             });
         }
@@ -685,7 +700,14 @@ public class MainActivity extends Activity {
             buildStats();
         } else if (PageStore.K_VPN.equals(pk)) {
             boolean firstVpn = vpnBinder == null;
-            if (vpnBinder == null) vpnBinder = new VpnBinder(this, findViewById(R.id.vpn_page));
+            if (vpnBinder == null) {
+                View vpnRoot = findViewById(R.id.vpn_page);
+                if (vpnRoot == null) {
+                    BalanceFetcher.diag(this, "⚠️ 找不到 vpn_page，跳过加速页绑定");
+                } else {
+                    vpnBinder = new VpnBinder(this, vpnRoot);
+                }
+            }
             vpnBinder.bind();
             /* 首次进入这页才播进场 —— 每次切页都播会显得页面在"跳" */
             if (firstVpn) Anim.enterPage(findViewById(R.id.scroll_vpn));
@@ -752,6 +774,7 @@ public class MainActivity extends Activity {
     }
 
     /** 当前统计范围天数（默认 7 天，可切换 30/90/180） */
+    /** 统计范围（天）。首次用 7，之后记住用户上次选的 —— 存 prefs 的 stats_days */
     private int statsDays = 7;
     /** 当前图表序列与日期标签（供点击某天弹框用） */
     private java.util.List<UsageChartView.Series> statsSeries;
@@ -1158,6 +1181,13 @@ public class MainActivity extends Activity {
                 + "    总消耗 ¥" + String.format("%.2f", totalCons));
 
         if (rebuildToggles) buildPlatformToggles(aks);
+        /* 明细行瀑布入场（只动前 8 行，长列表后面直接显示） */
+        View dbox0 = findViewById(R.id.stats_detail);
+        if (dbox0 instanceof android.view.ViewGroup) {
+            Anim.cascadeIn((android.view.ViewGroup) dbox0, 60, 8);
+        }
+        /* 统计页的明细行、开关行同样是运行时建的，补一次套皮 */
+        Theme.skin(this, findViewById(R.id.stats_container));
     }
 
     /** 每个 API 一个 Switch 开关数据源；总计单独一个 Switch。切换后重绘图表。 */
@@ -1296,7 +1326,8 @@ public class MainActivity extends Activity {
             sw.setChecked(on0);
             sw.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
-                    new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
+                    new int[] { Theme.c(this, R.attr.c_accent),
+                                Theme.c(this, R.attr.c_tx3) }));
             sw.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
             sw.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -1310,6 +1341,8 @@ public class MainActivity extends Activity {
                         KeyStore.update(MainActivity.this, t);
                     }
                     platformDraw.put(plat, Boolean.valueOf(on));
+                    /* 拨动的手感：开关轻微弹一下（只放大 2%，大了会显得廉价） */
+                    Anim.pulse(sw);
                     Integer nc = platformColor.get(plat);
                     /* 注意改的是 dot 当前实际背景（可能是改色后的新 drawable） */
                     android.graphics.drawable.GradientDrawable curGd =
@@ -1326,8 +1359,11 @@ public class MainActivity extends Activity {
                 }
             });
             row.addView(sw);
-            /* 长按行（非开关区）进排序；开关本身的长按不吃，免得误触 */
-            row.setOnLongClickListener(new android.view.View.OnLongClickListener() {
+            /* 长按进排序。
+               ⚠️ 必须**同时**挂在 Switch 上：它 weight=1 占满整行，
+               手指落到这一行时事件基本都被 Switch 消费（它 clickable），
+               row 自己的 onLongClick 永远收不到 —— 这就是"怎么长按都没反应"的原因。 */
+            android.view.View.OnLongClickListener sortLong = new android.view.View.OnLongClickListener() {
                 public boolean onLongClick(android.view.View v) {
                     java.util.List<String> ids = new java.util.ArrayList<String>(gmap.keySet());
                     java.util.List<String> names = new java.util.ArrayList<String>();
@@ -1335,7 +1371,10 @@ public class MainActivity extends Activity {
                     showStatsOrder(ids, names);
                     return true;
                 }
-            });
+            };
+            row.setOnLongClickListener(sortLong);
+            sw.setOnLongClickListener(sortLong);
+            dot.setOnLongClickListener(sortLong);
             if (on0) box.addView(row); else hiddenContainer.addView(row);
         }
 
@@ -1349,7 +1388,7 @@ public class MainActivity extends Activity {
             head.setTextSize(12);
             head.setTextColor(Theme.c(this, R.attr.c_tx3));
             head.setPadding(dp(6), dp(8), dp(6), dp(8));
-            head.setBackgroundResource(R.drawable.mini_btn_border);
+            head.setBackgroundResource(Theme.bgRes(head.getContext(), R.attr.bg_pill));
             wrap.addView(head);
 
             final boolean[] open = { getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE)
@@ -1446,7 +1485,7 @@ public class MainActivity extends Activity {
                              final java.util.List<String> names) {
         if (ids == null || ids.size() < 2) return;      // 一项都没有就别摆提示
         TextView hint = new TextView(this);
-        hint.setText("长按任意一行可调整顺序");
+        hint.setText("长按任意一行可拖动调整顺序（也可以点右侧开关长按）");
         hint.setTextSize(11.5f);
         hint.setTextColor(Theme.c(this, R.attr.c_tx3));
         hint.setGravity(android.view.Gravity.CENTER);
@@ -1855,6 +1894,7 @@ public class MainActivity extends Activity {
         box.setPadding(pad, pad / 2, pad, 0);
         box.addView(et);
 
+        Theme.skin(this, box);
         new android.app.AlertDialog.Builder(this)
             .setTitle("积分折算率")
             .setMessage("1 积分值多少元？\n"
@@ -2105,11 +2145,28 @@ public class MainActivity extends Activity {
         lastResult.totalEstimated = est;
     }
 
+    /** 把 "¥1,234.56" 这类文本解析回数字；解析不了返回 NaN（调用方据此跳过动画） */
+    private static double parseMoney(String t) {
+        if (t == null) return Double.NaN;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if ((c >= '0' && c <= '9') || c == '.' || c == '-') sb.append(c);
+        }
+        try {
+            return Double.parseDouble(sb.toString());
+        } catch (Throwable e) {
+            return Double.NaN;
+        }
+    }
+
     private void render(BalanceFetcher.Result r) {
         lastResult = r;
         /* 控件缺失（某些设备/重打包）时不要崩在渲染链上 —— 数据照样记进 lastResult，
            统计页和小组件仍可用。 */
-        if (cards == null || tTotal == null) return;
+        /* tSub 也要判：缺 t_sub 时后面 2163/2188 两处直接用会 NPE，
+           而本文件别的地方（176/1703）都是当"可能为 null"处理的。 */
+        if (cards == null || tTotal == null || tSub == null) return;
         /* 首次渲染（列表本来是空的）才播入场动画 ——
            自动刷新时也播的话，每几分钟整页闪一次，反而烦 */
         final boolean firstFill = cards.getChildCount() == 0;
@@ -2129,10 +2186,12 @@ public class MainActivity extends Activity {
            这是"数据更新了"最直接的视觉确认。 */
         final String newTotal = "¥" + String.format("%.2f", r.totalCny);
         String oldTotal = tTotal.getText() == null ? "" : tTotal.getText().toString();
-        if (!firstFill && oldTotal.length() > 0 && !newTotal.equals(oldTotal)) {
-            Anim.valueChange(tTotal, new Runnable() {
-                public void run() { tTotal.setText(newTotal); }
-            });
+        /* 数字滚动而不是淡入换值：金额变化时用户能直接看出涨/跌和差值。
+           首次填充（没有旧值）不滚，直接落 —— 否则开屏就在那儿数数。 */
+        double oldVal = parseMoney(oldTotal);
+        if (!firstFill && !Double.isNaN(oldVal)
+                && Math.abs(oldVal - r.totalCny) > 0.005) {
+            Anim.countTo(tTotal, oldVal, r.totalCny, "¥%.2f");
         } else {
             tTotal.setText(newTotal);
         }
@@ -2270,7 +2329,10 @@ public class MainActivity extends Activity {
             name.setText(it.label);
             tag.setText(it.tag);
 
-            int color = BalanceFetcher.colorOf(platformOf(it));
+            /* 优先用「用量统计」里给这个平台选的颜色 —— 两个界面必须是同一个色，
+               否则同一平台在图表是一条线、在卡片是另一个圆点，看着像两个东西。 */
+            int color = StatsOpt.effectiveColor(this, platformOf(it),
+                    BalanceFetcher.colorOf(platformOf(it)));
             GradientDrawable gd = new GradientDrawable();
             gd.setShape(GradientDrawable.OVAL);
             gd.setColor(color);
@@ -2389,15 +2451,23 @@ public class MainActivity extends Activity {
                 } else {
                     rows.setText(it.error);
                     rows.setTextColor(Theme.c(this, R.attr.c_danger));
+                    /* ⚠️ 不能写 setOnClickListener(null) —— Android 的实现会顺带
+                       setClickable(true)，于是点这块红色错误文字时事件被 p_rows
+                       吞掉，卡片的点击菜单弹不出来（点同一张卡别处却可以）。 */
+                    rows.setClickable(false);
                     rows.setOnClickListener(null);
                 }
             }
             cards.addView(v);
-            if (firstFill) {
-                /* 首次填充：缩放 + 淡入 + 上移，逐条错开 32ms */
-                Anim.popIn(v, Math.min(cards.getChildCount() - 1, 12) * 32L);
-            }
         }
+        if (firstFill) {
+            /* 整块瀑布入场：从下往上滑入 + 轻微放大 + 淡入，逐条错开 36ms。
+               比原来逐条 popIn 的统一感更强（同一批元素一起"落"下来）。 */
+            Anim.cascadeIn(cards, 0, 12);
+        }
+        /* 卡片是运行时 inflate 的，不在 onCreate 那次 skin 的覆盖范围内。
+           不补的话：换主题后字体和圆角只有"静态部分"变了，卡片还是老样子。 */
+        Theme.skin(this, cards);
     }
 
     /**

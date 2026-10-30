@@ -99,7 +99,14 @@ public final class SubStore {
 
     public static List<Sub> all(Context c) {
         long ver = -1;
-        try { ver = sp(c).getLong("subs_ver", 0); } catch (Throwable ignored) { }
+        try {
+            /* 用 getAll() 拿原类型再转 —— 备份恢复后这里可能是 Integer，
+               直接 getLong 会抛 ClassCastException，导致 ver 恒为 -1、
+               缓存被永久钉死（订阅改了看不到）。 */
+            Object o = sp(c).getAll().get("subs_ver");
+            if (o instanceof Number) ver = ((Number) o).longValue();
+            else if (o != null) ver = 0;
+        } catch (Throwable ignored) { }
         if (cacheList != null && ver == cacheVer) return new ArrayList<Sub>(cacheList);
         List<Sub> out = new ArrayList<Sub>();
         try {
@@ -228,7 +235,8 @@ public final class SubStore {
             }
             SharedPreferences.Editor ed = sp(c).edit();
             ed.putString(K_SUBS, arr.toString());
-            ed.putLong("subs_ver", sp(c).getLong("subs_ver", 0) + 1);
+            /* 不读旧值直接自增会踩类型坑（见上）；用时间戳当版本号，单调且类型永远对 */
+            ed.putLong("subs_ver", System.currentTimeMillis());
             ed.commit();
         } catch (Throwable ignored) { }
     }

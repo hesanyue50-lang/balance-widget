@@ -142,8 +142,19 @@ public class SettingsBinder {
                 android.widget.Toast.makeText(act,
                         act.getString(R.string.theme_applied, Theme.NAMES[idx]),
                         android.widget.Toast.LENGTH_SHORT).show();
-                /* 必须重建：attr 是 View 创建时解析的，已经建好的控件不会自己换色 */
-                act.recreate();
+                /* 必须重建：attr 是 View 创建时解析的，已经建好的控件不会自己换色。
+                   先整体淡出 110ms 再 recreate —— 直接重建是"啪"地切一下，
+                   淡出把这下换色做成一次转场。 */
+                final android.view.View deco = act.getWindow() == null
+                        ? null : act.getWindow().getDecorView();
+                if (deco == null) {
+                    act.recreate();
+                } else {
+                    deco.animate().alpha(0f).setDuration(110)
+                            .withEndAction(new Runnable() {
+                                public void run() { act.recreate(); }
+                            }).start();
+                }
             }
         });
         return row;
@@ -333,6 +344,7 @@ public class SettingsBinder {
             keyToggle.setText(opened ? "收起 ▴" : "展开 ▾");
             keyToggle.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
+                    if (keyCard == null) return;
                     boolean now = keyCard.getVisibility() != View.VISIBLE;
                     prefs().edit().putBoolean("key_opened", now).apply();
                     keyToggle.setText(now ? "收起 ▴" : "展开 ▾");
@@ -396,6 +408,7 @@ public class SettingsBinder {
                     ? "收起 ▴" : "展开 ▾");
             hideToggle.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
+                    if (hideCard == null) return;
                     boolean now = hideCard.getVisibility() != View.VISIBLE;
                     hideToggle.setText(now ? "收起 ▴" : "展开 ▾");
                     if (now) {
@@ -602,7 +615,7 @@ public class SettingsBinder {
         row.addView(tv);
 
         final TextView btn = new TextView(act);
-        btn.setBackgroundResource(R.drawable.mini_btn_border);
+        btn.setBackgroundResource(Theme.bgRes(btn.getContext(), R.attr.bg_pill));
         btn.setGravity(Gravity.CENTER);
         btn.setMinWidth(dp(64));
         btn.setPadding(dp(14), dp(8), dp(14), dp(8));
@@ -754,7 +767,7 @@ public class SettingsBinder {
             List<KeyStore.ApiKey> ks = KeyStore.get(act, plat);
             String hay = (cs.get(i).name + plat + labels(ks)).toLowerCase();
             if (q.length() > 0 && !hay.contains(q)) continue;
-            View v = platformBlock(plat, cs.get(i).name, 0xFF8A94A3);
+            View v = platformBlock(plat, cs.get(i).name, Theme.c(act, R.attr.c_tx3));
             box.addView(v);
             keyBlocks.add(v);
             keyBlockKeys.add(hay);
@@ -910,7 +923,7 @@ public class SettingsBinder {
         b.setTextColor(c);
         b.setTextSize(12.5f);
         b.setGravity(Gravity.CENTER);
-        b.setBackgroundResource(R.drawable.mini_btn_border);
+        b.setBackgroundResource(Theme.bgRes(b.getContext(), R.attr.bg_pill));
         b.setPadding(dp(13), dp(7), dp(13), dp(7));
         b.setClickable(true);
         b.setFocusable(true);
@@ -1198,7 +1211,7 @@ public class SettingsBinder {
             btn.setTextSize(13);
             btn.setTextColor(color(R.attr.c_accent));
             btn.setPadding(0, dp(10), 0, dp(10));
-            btn.setBackgroundResource(R.drawable.mini_btn_border);
+            btn.setBackgroundResource(Theme.bgRes(btn.getContext(), R.attr.bg_pill));
             btn.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     Busy.run(act, "正在准备登录…", new Runnable() {
@@ -1215,6 +1228,7 @@ public class SettingsBinder {
             panel.addView(btn);
         }
 
+        Theme.skin(act, scroll);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle(isNew ? "添加 Key" : "编辑 Key")
                 .setView(scroll)
@@ -1288,7 +1302,7 @@ public class SettingsBinder {
             swCard.setChecked(hideCard);
             swCard.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
-                    new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
+                    new int[] { Theme.c(act, R.attr.c_accent), Theme.c(act, R.attr.c_tx3) }));
             swCard.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
             swCard.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
@@ -1312,7 +1326,7 @@ public class SettingsBinder {
             swStat.setChecked(drawOff);
             swStat.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
-                    new int[] { 0xFF3D6FD6, 0xFFC6CDD6 }));
+                    new int[] { Theme.c(act, R.attr.c_accent), Theme.c(act, R.attr.c_tx3) }));
             swStat.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
             swStat.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
@@ -1362,6 +1376,7 @@ public class SettingsBinder {
         tip.setPadding(0, dp(6), 0, 0);
         panel.addView(tip);
 
+        Theme.skin(act, panel);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("💥 崩溃日志")
                 .setView(panel)
@@ -1405,6 +1420,7 @@ public class SettingsBinder {
         tv.setTypeface(Typeface.MONOSPACE);
         android.widget.ScrollView sc = new android.widget.ScrollView(act);
         sc.addView(tv);
+        Theme.skin(act, sc);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("最近诊断日志")
                 .setView(sc)
@@ -2174,6 +2190,7 @@ public class SettingsBinder {
                         + "填 0 或留空 = 不预警。",
                 eThreshold);
 
+        Theme.skin(act, scroll);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle(isEdit ? "编辑高级平台" : "添加高级平台")
                 .setView(scroll)
@@ -2765,8 +2782,26 @@ public class SettingsBinder {
     /** 把用户带到密钥列表（填 Key 的地方） */
     private void scrollToKeys() {
         try {
-            View box = root.findViewById(R.id.key_fields);
-            if (box != null) box.requestFocus();
+            /* 原来只对 LinearLayout 调 requestFocus —— 它默认不可获焦，等于没做任何事，
+               而且密钥区默认是收起的，用户点「去填 Key」只看到一个 Toast。 */
+            View keyCard = root.findViewById(R.id.key_card);
+            TextView keyToggle = (TextView) root.findViewById(R.id.key_toggle);
+            if (keyCard != null && keyCard.getVisibility() != View.VISIBLE) {
+                prefs().edit().putBoolean("key_opened", true).apply();
+                Anim.expand(keyCard);
+                if (keyToggle != null) keyToggle.setText(act.getString(R.string.toggle_collapse));
+            }
+            final View box = keyCard != null ? keyCard : root.findViewById(R.id.key_fields);
+            if (box != null) {
+                box.post(new Runnable() {
+                    public void run() {
+                        try {
+                            box.requestRectangleOnScreen(new android.graphics.Rect(
+                                    0, 0, box.getWidth(), box.getHeight()), true);
+                        } catch (Throwable ignored) { }
+                    }
+                });
+            }
             Toast.makeText(act, "在「API 密钥与平台」里找到该平台，点「添加 Key」",
                     Toast.LENGTH_LONG).show();
         } catch (Throwable ignored) { }
@@ -2868,6 +2903,7 @@ public class SettingsBinder {
         final android.widget.ScrollView scroll = new android.widget.ScrollView(act);
         scroll.addView(panel);
 
+        Theme.skin(act, scroll);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle(isEdit ? "编辑自定义平台" : "添加自定义平台")
                 .setView(scroll)
@@ -3013,6 +3049,7 @@ public class SettingsBinder {
         q.setTextSize(13);
         panel.addView(q);
         panel.addView(ans);
+        Theme.skin(act, panel);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle("清除密码保护")
                 .setMessage("需回答密保问题验证身份")

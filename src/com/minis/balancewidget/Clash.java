@@ -307,6 +307,12 @@ public final class Clash {
     public static synchronized String start(Context c, String cfgText) {
         /* 先把上次遗留的内核清掉 —— 它占着 7890，不清的话这次必然启动失败 */
         killStaleCore(c);
+            /* 强制下一次 isRunning() 真探一次：killStaleCore 之后端口状态刚变过，
+               1.5 秒内的旧缓存可能还是 true —— startInternal 的
+               `if (isRunning()) return null` 会据此返回"成功"，而内核其实没起，
+               调用方还 setEnabled(true) 并提示"加速已启动"。 */
+            lastProbeAt = 0L;
+            lastProbeOk = false;
         return startInternal(c, cfgText, -1);
     }
 
@@ -412,11 +418,17 @@ public final class Clash {
        每个还要再吃 6 秒。加锁 + 5 秒缓存后：只有第一个线程真探，其余等它的结果。 */
     private static volatile long lastAliveAt = 0L;
     private static volatile boolean lastAliveOk = false;
+    /* ⚠️ 单飞用**独立**锁对象。原来 synchronized (Clash.class) 是和
+       start()/stop() 共用的同一个监视器 —— start() 里会持锁 sleep 轮询 8 秒，
+       而 proxyAlive 自己要真发一次最长 6 秒的 HTTPS 探测。
+       VpnBinder 的「停止/切换订阅」都在 UI 线程调 Clash.stop()，
+       撞上抓取线程正在 proxyAlive 里，主线程就直接冻 6 秒（够 ANR 了）。 */
+    private static final Object PROBE_LOCK = new Object();
 
     public static boolean proxyAlive() {
         long now = System.currentTimeMillis();
         if (now - lastAliveAt < 5000L) return lastAliveOk;
-        synchronized (Clash.class) {
+        synchronized (PROBE_LOCK) {
             now = System.currentTimeMillis();
             if (now - lastAliveAt < 5000L) return lastAliveOk;   // 等锁期间别人已经探完了
             boolean ok = proxyAliveReal();

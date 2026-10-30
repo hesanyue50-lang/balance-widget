@@ -68,6 +68,9 @@ public class ColorPicker {
         grid.setOrientation(LinearLayout.VERTICAL);
         /* 当前选中的颜色（int 值 + 来源标记） */
         final int[] sel = { current == 0 ? PRESETS[0] : current };
+        /* 打开时的初始选中值。用户只是看看、没动过就点"确定"时，
+           要回调 0（= 保持自动分配），而不是把自动色悄悄改成 PRESETS[0]。 */
+        final int initSel = sel[0];
         final boolean[] fromPreset = { true };
         /* 单独记着 HSV 三元组：拖到纯黑/纯白时，从颜色反推不出色相和饱和度
            （黑白的色相是 0），若每次都反推，用户调好的颜色会莫名跳回红色。
@@ -196,6 +199,7 @@ public class ColorPicker {
         android.widget.ScrollView scroll = new android.widget.ScrollView(act);
         scroll.addView(panel);
 
+        Theme.skin(act, scroll);   // 弹窗是独立窗口，Activity 那棵树遍历不到
         new AlertDialog.Builder(act)
                 .setTitle(title)
                 .setView(scroll)
@@ -203,7 +207,8 @@ public class ColorPicker {
                     public void onClick(DialogInterface d, int w) {
                         /* Hex 输入框还有焦点时先应用它 */
                         if (eHex.hasFocus()) applyHex(act, eHex, sel, hsvRef, fromPreset, preview, hueBar, svPad);
-                        cb.onPick(sel[0]);
+                        boolean untouchedAuto = (current == 0 && sel[0] == initSel);
+                        cb.onPick(untouchedAuto ? 0 : sel[0]);
                     }
                 })
                 .setNeutralButton("恢复自动", new DialogInterface.OnClickListener() {
@@ -354,5 +359,31 @@ public class ColorPicker {
 
     private static int dp(android.content.Context c, float v) {
         return (int) (v * c.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /**
+     * 清掉预设色块上的白圈。
+     *
+     * 从自定义取色（色相条 / SV 面板 / 手填 hex）回来时用 —— 那些白圈只在
+     * buildGrid 里按 fromPreset 画一次，不主动清就会一直留着，
+     * 看起来像"同时选中了两个颜色"。
+     */
+    private static void clearPresetMark(LinearLayout grid) {
+        if (grid == null) return;
+        try {
+            for (int i = 0; i < grid.getChildCount(); i++) {
+                View row = grid.getChildAt(i);
+                if (!(row instanceof ViewGroup)) continue;
+                ViewGroup rg = (ViewGroup) row;
+                for (int j = 0; j < rg.getChildCount(); j++) {
+                    View dot = rg.getChildAt(j);
+                    android.graphics.drawable.Drawable bg = dot.getBackground();
+                    if (bg instanceof android.graphics.drawable.GradientDrawable) {
+                        ((android.graphics.drawable.GradientDrawable) bg).setStroke(0, 0);
+                        dot.invalidate();
+                    }
+                }
+            }
+        } catch (Throwable ignored) { }
     }
 }

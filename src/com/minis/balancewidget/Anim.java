@@ -33,6 +33,12 @@ public final class Anim {
      * 用于**高度/透明度**这类不能过冲的属性 —— 高度冲过头会把内容裁掉，
      * 透明度超 1 会被裁剪，所以这类一律走单调曲线。
      */
+    /** 每个 View 当前的高度动画。expand/collapse 互不取消的话，
+        先点收起、240ms 内再点展开时，收起那边的结束回调仍会把 View 置 GONE ——
+        区块消失、按钮却显示「收起」。 */
+    private static final java.util.WeakHashMap<View, ValueAnimator> HEIGHT_ANIM =
+            new java.util.WeakHashMap<View, ValueAnimator>();
+
     private static final android.view.animation.Interpolator EMPHASIZED =
             new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f);
 
@@ -72,11 +78,17 @@ public final class Anim {
             if (end != null) end.run();
             return;
         }
+        /* 先把同一 View 上还没跑完的高度动画掐掉，否则两个动画会互相打架 */
+        ValueAnimator prev = HEIGHT_ANIM.get(v);
+        if (prev != null) {
+            try { prev.cancel(); } catch (Throwable ignored) { }
+        }
         v.getLayoutParams().height = from;
         v.requestLayout();
         ValueAnimator a = ValueAnimator.ofInt(from, to);
         a.setDuration(DUR_EXPAND);
         a.setInterpolator(EMPHASIZED);   // 高度不能过冲，用单调的 emphasized
+        HEIGHT_ANIM.put(v, a);
         a.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             public void onAnimationUpdate(ValueAnimator an) {
                 ViewGroup.LayoutParams lp = v.getLayoutParams();
@@ -88,6 +100,7 @@ public final class Anim {
         a.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator an) {
+                if (HEIGHT_ANIM.get(v) == an) HEIGHT_ANIM.remove(v);
                 ViewGroup.LayoutParams lp = v.getLayoutParams();
                 if (lp != null) {
                     /* 收回收起态时要留成 0，展开态交还 wrap_content ——
@@ -120,6 +133,11 @@ public final class Anim {
         v.setAlpha(0f);
         v.animate().alpha(1f).setDuration(DUR_FADE).start();
         animateHeight(v, 0, target, null);
+        /* 展开一块折叠区时，内容整体淡入会显得"平"；
+           拆成子项瀑布（每个错开 36ms）才有"内容在长出来"的感觉。 */
+        if (v instanceof ViewGroup) {
+            cascadeIn((ViewGroup) v, 90, 6);
+        }
     }
 
     /** 就地收起：高度收到 0，结束后转为 GONE */
@@ -349,5 +367,108 @@ public final class Anim {
 
     private static float dp(View v, float value) {
         return value * v.getResources().getDisplayMetrics().density + 0.5f;
+    }
+
+    /* ==================== 数字滚动 ==================== */
+
+    /** 正在跑的滚动动画（每个 TextView 一个，重复触发要先停掉旧的） */
+    private static final java.util.WeakHashMap<View, ValueAnimator> COUNTING =
+            new java.util.WeakHashMap<View, ValueAnimator>();
+
+    /**
+     * 金额从旧值"滚"到新值。
+     *
+     * 比交叉淡入（valueChange）多一层信息：用户能直接看出**涨了还是跌了**、
+     * 差多少 —— 淡入换值只会让人知道"变了"。
+     *
+     * 用 EMPHASIZED（单调曲线）而不是弹簧：数字中途回弹会让人读错数。
+     */
+    public static void countTo(final android.widget.TextView tv,
+                               double from, double to, final String fmt) {
+        if (tv == null) return;
+        /* 没有旧值 / 值没变 / 数值非法 → 直接落，别演 */
+        if (Double.isNaN(from) || Double.isNaN(to) || Math.abs(to - from) < 1e-9) {
+            try { tv.setText(String.format(fmt, to)); } catch (Throwable ignored) { }
+            return;
+        }
+        ValueAnimator old = COUNTING.get(tv);
+        if (old != null) {
+            try { old.cancel(); } catch (Throwable ignored) { }
+        }
+        ValueAnimator va = ValueAnimator.ofFloat((float) from, (float) to);
+        va.setDuration(560);
+        va.setInterpolator(EMPHASIZED);
+        va.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            public void onAnimationUpdate(ValueAnimator a) {
+                Object v = a.getAnimatedValue();
+                if (!(v instanceof Float)) return;
+                try {
+                    tv.setText(String.format(fmt, ((Float) v).doubleValue()));
+                } catch (Throwable ignored) { }
+            }
+        });
+        va.addListener(new AnimatorListenerAdapter() {
+            public void onAnimationEnd(Animator a) {
+                /* 必须移除：COUNTING 的 value（animator）持有监听器，监听器又持有
+                   TextView —— 也就是 key 本身。弱引用 key 永远不回收，
+                   每切一次主题 recreate() 就泄漏一个旧 Activity。 */
+                if (COUNTING.get(tv) == a) COUNTING.remove(tv);
+                try { tv.setText(String.format(fmt, to)); } catch (Throwable ignored) { }
+            }
+        });
+        COUNTING.put(tv, va);
+        va.start();
+    }
+
+    /* ==================== 交错的"瀑布"入场 ==================== */
+
+    /**
+     * 一组子 View 依次从下方滑入 + 淡入。
+     *
+     * 和 stagger() 的区别：stagger 只错开时间，元素自身不动；
+     * 这个是完整的入场（位移 + 缩放 + 淡入），用于"一屏内容整体出现"。
+     *
+     * @param maxCount 最多动几个（后面的直接显示，避免长列表播一分钟）
+     */
+    public static void cascadeIn(ViewGroup box, int startIndex, int maxCount) {
+        if (box == null) return;
+        int n = box.getChildCount();
+        int done = 0;
+        for (int i = 0; i < n; i++) {
+            final View v = box.getChildAt(i);
+            if (v == null) continue;
+            if (done >= maxCount) { v.setAlpha(1f); v.setTranslationY(0f); v.setScaleX(1f); v.setScaleY(1f); continue; }
+            v.setAlpha(0f);
+            v.setTranslationY(dp(v, 14));
+            v.setScaleX(0.97f);
+            v.setScaleY(0.97f);
+            v.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setStartDelay((long) startIndex + (long) done * 36)
+                    .setDuration(280)
+                    .setInterpolator(springDefault())
+                    .start();
+            done++;
+        }
+    }
+
+    /* ==================== 弹窗弹性弹出 ==================== */
+
+    /** 弹窗内容缩放弹出（0.94 → 1，带轻微回弹） */
+    public static void popInDialog(View content) {
+        if (content == null) return;
+        content.setAlpha(0f);
+        content.setScaleX(0.94f);
+        content.setScaleY(0.94f);
+        content.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(240)
+                .setInterpolator(springDefault())
+                .start();
     }
 }

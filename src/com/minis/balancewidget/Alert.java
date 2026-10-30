@@ -38,7 +38,15 @@ public class Alert {
 
     /** 阈值（原币种）。0 表示不预警 */
     public static double threshold(Context c, String id) {
-        return sp(c).getFloat(THR_PREFIX + id, 0f);
+        /* 用 getAll() 取原类型再转：备份恢复后这里可能变成 Integer，
+           直接 getFloat 会抛 ClassCastException —— 而这个异常会从
+           mark() 一路抛到 check()，被两端的 catch 吞掉，
+           等于整轮刷新在预警处中止（不落缓存、不渲染小组件、曲线也停更）。 */
+        try {
+            Object o = sp(c).getAll().get(THR_PREFIX + id);
+            if (o instanceof Number) return ((Number) o).doubleValue();
+        } catch (Throwable ignored) { }
+        return 0;
     }
 
     public static void setThreshold(Context c, String id, double v) {
@@ -110,20 +118,31 @@ public class Alert {
             BalanceFetcher.Item it = lows.get(i);
             if (!p.getBoolean(ALERTED_PREFIX + alertKey(it), false)) fresh.add(it);
         }
-        // 同步告警状态（余额恢复 → 复位，以便下次再低还能提醒）
+        /* 同步告警状态（余额恢复 → 复位，以便下次再低还能提醒）。
+           ⚠️ 复位必须**无条件**落盘：余额恢复时 fresh 必然为空（那正是最常见的情况），
+           原来跟在下面的 `if (fresh.isEmpty() || !canNotify) return;` 后面，
+           复位标记永远写不进去 —— 同一个平台再次跌破阈值就不再提醒了，
+           要等进程重启才恢复。 */
+        boolean anyReset = false;
         for (int i = 0; i < r.items.size(); i++) {
             BalanceFetcher.Item it = r.items.get(i);
             if (!it.ok) continue;
             double thr = it.threshold > 0 ? it.threshold : threshold(c, it.id);
             if (thr <= 0) continue;
-            ed.putBoolean(ALERTED_PREFIX + alertKey(it), it.low);
+            if (!it.low) {
+                ed.putBoolean(ALERTED_PREFIX + alertKey(it), false);
+                anyReset = true;
+            }
         }
-        /* 顺序很关键：**先判断能不能通知，再落标记**。
-           反过来（先 commit 再判断）的话，用户没开通知权限时标记照样写进去了，
-           事后他去开启通知也收不到这次低余额预警 —— 只能等余额回弹再跌一次。 */
-        if (fresh.isEmpty() || !canNotify(c)) return;
+        if (anyReset) ed.commit();
 
-        /* 必须 commit：这是"已经提醒过"的幂等标记，丢了就会对同一批平台重复推送 ——
+        /* 置 true 的标记仍然只在"能通知"时写 —— 否则用户没开通知权限时
+           标记照样写进去了，事后他去开启也收不到这次预警。 */
+        if (fresh.isEmpty() || !canNotify(c)) return;
+        for (int i = 0; i < fresh.size(); i++) {
+            ed.putBoolean(ALERTED_PREFIX + alertKey(fresh.get(i)), true);
+        }
+        /* 必须 commit：这是"已经提醒过"的幂等标记，丢了就会重复推送 ——
            而且推送往往发生在后台刷新刚结束时，正是进程容易被回收的时机。 */
         ed.commit();
 
