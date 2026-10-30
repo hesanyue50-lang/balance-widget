@@ -4,7 +4,9 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/card_bg"
+    android:backgroundTint="?attr/c_card"
     android:padding="31dp"
+    android:tag="card"
     android:layout_marginBottom="11dp">
 
     <LinearLayout
@@ -24,7 +26,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginLeft="9dp"
-            android:textColor="@color/tx2"
+            android:textColor="?attr/c_tx2"
             android:textSize="13sp"
             android:textStyle="bold" />
 
@@ -37,7 +39,7 @@
             android:paddingRight="9dp"
             android:paddingTop="2dp"
             android:paddingBottom="2dp"
-            android:textColor="@color/tx3"
+            android:textColor="?attr/c_tx3"
             android:textSize="10sp" />
     </LinearLayout>
 
@@ -52,7 +54,7 @@
             android:id="@+id/p_amount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/tx"
+            android:textColor="?attr/c_tx"
             android:textSize="27sp"
             android:textStyle="bold" />
 
@@ -63,7 +65,7 @@
             android:layout_height="wrap_content"
             android:layout_marginLeft="3dp"
             android:paddingBottom="3dp"
-            android:textColor="@color/tx3"
+            android:textColor="?attr/c_tx3"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -72,7 +74,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:textColor="@color/tx3"
+        android:textColor="?attr/c_tx3"
         android:textSize="12sp" />
 
     <!-- 剩余百分比：只在有"总额度"概念的平台上显示（积分），钱的平台没有分母 -->
@@ -89,7 +91,7 @@
             android:id="@+id/p_pct_txt"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/tx3"
+            android:textColor="?attr/c_tx3"
             android:textSize="11.5sp" />
 
         <!-- 进度条用纯 View 画：这是个轻量指示条，不值得为它引入 ProgressBar -->
@@ -114,7 +116,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
-        android:textColor="@color/tx3"
+        android:textColor="?attr/c_tx3"
         android:textSize="12sp"
         android:visibility="gone" />
 
@@ -125,6 +127,6 @@
         android:layout_marginTop="9dp"
         android:paddingTop="9dp"
         android:lineSpacingExtra="4dp"
-        android:textColor="@color/tx_detail"
+        android:textColor="?attr/c_tx_detail"
         android:textSize="12sp" />
 </LinearLayout>

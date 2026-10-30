@@ -4,7 +4,7 @@
     android:id="@+id/settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg">
+    android:background="?attr/c_bg">
 
     <ScrollView
         android:id="@+id/settings_scroll"
@@ -54,7 +54,7 @@
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"
                 android:text="API 余额"
-                android:textColor="@color/tx2"
+                android:textColor="?attr/c_tx2"
                 android:textSize="13sp" />
 
             <TextView
@@ -66,7 +66,7 @@
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"
                 android:text="用量统计"
-                android:textColor="@color/tx2"
+                android:textColor="?attr/c_tx2"
                 android:textSize="13sp" />
 
             <TextView
@@ -79,7 +79,7 @@
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"
                 android:text="⚙ 设置"
-                android:textColor="@color/accent"
+                android:textColor="?attr/c_accent"
                 android:textSize="13sp" />
         </LinearLayout>
     </LinearLayout>

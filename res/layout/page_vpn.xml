@@ -43,7 +43,7 @@
                 android:paddingTop="7dp"
                 android:paddingBottom="7dp"
                 android:text="＋ 新增"
-                android:textColor="@color/accent"
+                android:textColor="?attr/c_accent"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -80,7 +80,7 @@
             android:layout_marginTop="6dp"
             android:lineSpacingExtra="3dp"
             android:text="状态：未启动"
-            android:textColor="@color/tx3"
+            android:textColor="?attr/c_tx3"
             android:textSize="12sp" />
 
         <!-- 运行中才有内容：当前节点 / 本次运行 / 代理流量（代码动态填充） -->
@@ -101,7 +101,7 @@
             android:paddingTop="12dp"
             android:paddingBottom="12dp"
             android:text="启动加速"
-            android:textColor="@color/accent"
+            android:textColor="?attr/c_accent"
             android:textSize="14sp" />
     </LinearLayout>
 
@@ -146,7 +146,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="节点"
-                android:textColor="@color/tx"
+                android:textColor="?attr/c_tx"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -161,7 +161,7 @@
                 android:paddingTop="7dp"
                 android:paddingBottom="7dp"
                 android:text="全部测速"
-                android:textColor="@color/accent"
+                android:textColor="?attr/c_accent"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -176,7 +176,7 @@
             android:paddingTop="9dp"
             android:paddingBottom="9dp"
             android:text="策略组：—"
-            android:textColor="@color/tx"
+            android:textColor="?attr/c_tx"
             android:textSize="12sp" />
 
         <TextView

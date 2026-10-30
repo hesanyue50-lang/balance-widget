@@ -93,6 +93,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        /* 主题必须在 setContentView 之前应用：attr 是在 View 创建时解析的 */
+        Theme.apply(this);
         /* 上次崩溃了：先跳提示页，**任何**初始化都不做 ——
            崩溃点可能就在这条链上（页面隐藏后切页崩），继续初始化可能当场又崩，
            提示页就永远弹不出来。提示页自己极轻（只读字符串画 TextView），站得住。 */
@@ -210,6 +212,8 @@ public class MainActivity extends Activity {
         /* skill 铁律：每个可点元素必须有按下反馈。
            整树挂载一次（约 60+ 处点击绑定，手挂必漏）。 */
         Anim.attachGlobalPressFeedback(findViewById(R.id.main_root));
+        /* 形状/字体套皮：Aurora 两套是空操作，其余主题在这里统一改圆角、描边、字体 */
+        Theme.skin(this, findViewById(R.id.main_root));
 
         // 预热设置面板：进入 App 后空闲时先构建一次，用户切到设置时几乎无感
         View sc0 = findViewById(R.id.settings_container);
@@ -318,7 +322,7 @@ public class MainActivity extends Activity {
             targets.add(ak);
             TextView lb = new TextView(this);
             lb.setText(p.name + "  充值额（留空=不改）");
-            lb.setTextColor(getColor(R.color.tx2));
+            lb.setTextColor(Theme.c(this, R.attr.c_tx2));
             lb.setTextSize(12);
             lb.setPadding(0, dp(10), 0, dp(4));
             panel.addView(lb);
@@ -399,6 +403,7 @@ public class MainActivity extends Activity {
             }
         };
         settingsBinder.bind();
+        Theme.skin(this, findViewById(R.id.settings_container));
     }
 
     /** 当前页在**可见页**里的下标。具体对应哪一页由用户设置的顺序决定，
@@ -617,8 +622,8 @@ public class MainActivity extends Activity {
         segSlider.setTranslationX(progress * step);
 
         /* 用当前的标签列表，而不是写死的四个 id —— 隐藏页面后标签会变少 */
-        int on = getColor(R.color.accent);
-        int off = getColor(R.color.tx2);
+        int on = Theme.c(this, R.attr.c_accent);
+        int off = Theme.c(this, R.attr.c_tx2);
         int i = 0;
         for (java.util.Iterator<TextView> it = navTabs.values().iterator(); it.hasNext(); i++) {
             TextView t = it.next();
@@ -1141,7 +1146,7 @@ public class MainActivity extends Activity {
                 if (lines[i].length() == 0) continue;
                 TextView row = new TextView(this);
                 row.setText(lines[i]);
-                row.setTextColor(getColor(R.color.tx));
+                row.setTextColor(Theme.c(this, R.attr.c_tx));
                 row.setTextSize(13);
                 row.setPadding(0, dp(5), 0, dp(5));
                 dbox.addView(row);
@@ -1286,7 +1291,7 @@ public class MainActivity extends Activity {
 
             android.widget.Switch sw = new android.widget.Switch(this);
             sw.setText(name);
-            sw.setTextColor(getColor(R.color.tx));
+            sw.setTextColor(Theme.c(this, R.attr.c_tx));
             sw.setTextSize(13);
             sw.setChecked(on0);
             sw.setTrackTintList(new android.content.res.ColorStateList(
@@ -1342,7 +1347,7 @@ public class MainActivity extends Activity {
 
             final TextView head = new TextView(this);
             head.setTextSize(12);
-            head.setTextColor(getColor(R.color.tx3));
+            head.setTextColor(Theme.c(this, R.attr.c_tx3));
             head.setPadding(dp(6), dp(8), dp(6), dp(8));
             head.setBackgroundResource(R.drawable.mini_btn_border);
             wrap.addView(head);
@@ -1443,7 +1448,7 @@ public class MainActivity extends Activity {
         TextView hint = new TextView(this);
         hint.setText("长按任意一行可调整顺序");
         hint.setTextSize(11.5f);
-        hint.setTextColor(getColor(R.color.tx3));
+        hint.setTextColor(Theme.c(this, R.attr.c_tx3));
         hint.setGravity(android.view.Gravity.CENTER);
         hint.setPadding(dp(6), dp(10), dp(6), dp(4));
         hint.setOnClickListener(new android.view.View.OnClickListener() {
@@ -1681,7 +1686,7 @@ public class MainActivity extends Activity {
         loading = true;
         if (!silent && tSub != null) {
             tSub.setText(R.string.refreshing);
-            tSub.setTextColor(getColor(R.color.tx3));
+            tSub.setTextColor(Theme.c(this, R.attr.c_tx3));
         }
 
         final Context ctx = this;
@@ -2114,7 +2119,7 @@ public class MainActivity extends Activity {
         if (r.configured == 0) {
             tTotal.setText("—");
             tSub.setText(R.string.not_configured);
-            tSub.setTextColor(getColor(R.color.tx2));
+            tSub.setTextColor(Theme.c(this, R.attr.c_tx2));
             return;
         }
 
@@ -2322,7 +2327,7 @@ public class MainActivity extends Activity {
                 if (it.rows != null && it.rows.length() > 0) {
                     rows.setVisibility(View.VISIBLE);
                     rows.setText(it.rows);
-                    rows.setTextColor(getColor(R.color.tx_detail));
+                    rows.setTextColor(Theme.c(this, R.attr.c_tx_detail));
                 } else {
                     rows.setVisibility(View.GONE);
                 }
@@ -2367,7 +2372,7 @@ public class MainActivity extends Activity {
                 }
             } else {
                 amount.setText("—");
-                amount.setTextColor(getColor(R.color.tx3));
+                amount.setTextColor(Theme.c(this, R.attr.c_tx3));
                 unit.setVisibility(View.GONE);
                 conv.setVisibility(View.GONE);
                 hide(v, R.id.p_conv2);
@@ -2377,13 +2382,13 @@ public class MainActivity extends Activity {
                    提示要说清怎么解决，并让点一下就能拉起。 */
                 if (it.gatewayDown) {
                     rows.setText("网关未运行\n点这里拉起网关");
-                    rows.setTextColor(getColor(R.color.danger));
+                    rows.setTextColor(Theme.c(this, R.attr.c_danger));
                     rows.setOnClickListener(new View.OnClickListener() {
                         public void onClick(View x) { showGatewayHelp(it); }
                     });
                 } else {
                     rows.setText(it.error);
-                    rows.setTextColor(getColor(R.color.danger));
+                    rows.setTextColor(Theme.c(this, R.attr.c_danger));
                     rows.setOnClickListener(null);
                 }
             }

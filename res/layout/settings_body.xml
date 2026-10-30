@@ -60,7 +60,7 @@
                         android:paddingTop="12dp"
                         android:paddingBottom="12dp"
                         android:text="@string/autostart_entry"
-                        android:textColor="@color/accent"
+                        android:textColor="?attr/c_accent"
                         android:textSize="13sp" />
 
                     <TextView
@@ -76,7 +76,7 @@
                         android:paddingTop="12dp"
                         android:paddingBottom="12dp"
                         android:text="@string/battery_entry"
-                        android:textColor="@color/accent"
+                        android:textColor="?attr/c_accent"
                         android:textSize="13sp" />
 
                 </LinearLayout>
@@ -93,7 +93,7 @@
                     android:paddingTop="12dp"
                     android:paddingBottom="12dp"
                     android:text="@string/ps_off"
-                    android:textColor="@color/accent"
+                    android:textColor="?attr/c_accent"
                     android:textSize="13sp" />
             </LinearLayout>
 
@@ -114,7 +114,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/sec_keys"
-                    android:textColor="@color/tx"
+                    android:textColor="?attr/c_tx"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -130,7 +130,7 @@
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
                     android:text="展开"
-                    android:textColor="@color/accent"
+                    android:textColor="?attr/c_accent"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -151,13 +151,14 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/card_bg"
+                        android:backgroundTint="?attr/c_card"
                         android:gravity="center"
                         android:paddingLeft="18dp"
                         android:paddingRight="18dp"
                         android:paddingTop="8dp"
                         android:paddingBottom="8dp"
                         android:text="🔍 搜索平台 / Key"
-                        android:textColor="@color/tx"
+                        android:textColor="?attr/c_tx"
                         android:textSize="12sp" />
 
                     <EditText
@@ -166,6 +167,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:background="@drawable/input_bg"
+                        android:backgroundTint="?attr/c_input"
                         android:hint="输入平台名或 Key 关键字，按回车过滤…"
                         android:inputType="text"
                         android:imeOptions="actionSearch"
@@ -174,8 +176,8 @@
                         android:paddingRight="16dp"
                         android:paddingTop="12dp"
                         android:paddingBottom="12dp"
-                        android:textColor="@color/tx"
-                        android:textColorHint="@color/tx3"
+                        android:textColor="?attr/c_tx"
+                        android:textColorHint="?attr/c_tx3"
                         android:textSize="13sp"
                         android:visibility="gone" />
                 </LinearLayout>
@@ -187,13 +189,14 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
                     android:background="@drawable/card_bg"
+                    android:backgroundTint="?attr/c_card"
                     android:gravity="center"
                     android:paddingLeft="22dp"
                     android:paddingRight="22dp"
                     android:paddingTop="20dp"
                     android:paddingBottom="20dp"
                     android:text="@string/notify_off_hint"
-                    android:textColor="@color/warn"
+                    android:textColor="?attr/c_warn"
                     android:textSize="13sp"
                     android:visibility="gone" />
 
@@ -227,7 +230,7 @@
                     android:paddingTop="12dp"
                     android:paddingBottom="12dp"
                     android:text="@string/custom_add"
-                    android:textColor="@color/accent"
+                    android:textColor="?attr/c_accent"
                     android:textSize="13sp" />
 
                 <!-- 高级自定义平台：抓任意网页里的数字 / 文本 -->
@@ -253,7 +256,7 @@
                     android:paddingTop="12dp"
                     android:paddingBottom="12dp"
                     android:text="＋ 添加高级自定义平台"
-                    android:textColor="@color/accent"
+                    android:textColor="?attr/c_accent"
                     android:textSize="13sp" />
 
                 <!-- 平台配置的导出 / 分享 / 导入（.bwp 文件或文本） -->
@@ -273,7 +276,7 @@
                         android:paddingTop="11dp"
                         android:paddingBottom="11dp"
                         android:text="分享"
-                        android:textColor="@color/tx2"
+                        android:textColor="?attr/c_tx2"
                         android:textSize="12sp" />
 
                     <TextView
@@ -287,7 +290,7 @@
                         android:paddingTop="11dp"
                         android:paddingBottom="11dp"
                         android:text="导出文件"
-                        android:textColor="@color/tx2"
+                        android:textColor="?attr/c_tx2"
                         android:textSize="12sp" />
 
                     <TextView
@@ -301,7 +304,7 @@
                         android:paddingTop="11dp"
                         android:paddingBottom="11dp"
                         android:text="导入"
-                        android:textColor="@color/accent"
+                        android:textColor="?attr/c_accent"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -327,7 +330,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="隐藏 API"
-                    android:textColor="@color/tx"
+                    android:textColor="?attr/c_tx"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -343,7 +346,7 @@
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
                     android:text="展开"
-                    android:textColor="@color/accent"
+                    android:textColor="?attr/c_accent"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -379,7 +382,7 @@
                     android:paddingTop="12dp"
                     android:paddingBottom="12dp"
                     android:text="💾 备份到文件"
-                    android:textColor="@color/tx"
+                    android:textColor="?attr/c_tx"
                     android:textSize="13sp" />
 
                 <TextView
@@ -392,7 +395,7 @@
                     android:paddingTop="12dp"
                     android:paddingBottom="12dp"
                     android:text="♻️ 从备份文件恢复"
-                    android:textColor="@color/tx"
+                    android:textColor="?attr/c_tx"
                     android:textSize="13sp" />
 
                 <TextView style="@style/FieldHint"
@@ -434,7 +437,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
                     android:text="本机备份记录"
-                    android:textColor="@color/tx2"
+                    android:textColor="?attr/c_tx2"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -460,7 +463,7 @@
                     android:paddingTop="11dp"
                     android:paddingBottom="11dp"
                     android:text="🗑 清空全部本机备份"
-                    android:textColor="@color/tx2"
+                    android:textColor="?attr/c_tx2"
                     android:textSize="13sp" />
 
             </LinearLayout>
@@ -479,7 +482,7 @@
                 android:paddingTop="13dp"
                 android:paddingBottom="13dp"
                 android:text="📑 页面管理（主页面 / 隐藏 / 排序）"
-                android:textColor="@color/tx"
+                android:textColor="?attr/c_tx"
                 android:textSize="13sp" />
 
             <TextView
@@ -492,7 +495,7 @@
                 android:paddingTop="12dp"
                 android:paddingBottom="12dp"
                 android:text="❓ 使用帮助（快捷手势）"
-                android:textColor="@color/tx"
+                android:textColor="?attr/c_tx"
                 android:textSize="13sp" />
 
             <TextView
@@ -505,7 +508,7 @@
                 android:paddingTop="12dp"
                 android:paddingBottom="12dp"
                 android:text="💥 崩溃日志（保存位置 / 最近记录）"
-                android:textColor="@color/tx"
+                android:textColor="?attr/c_tx"
                 android:textSize="13sp" />
 
             <TextView
@@ -518,12 +521,67 @@
                 android:paddingTop="12dp"
                 android:paddingBottom="12dp"
                 android:text="@string/cfg_pin"
-                android:textColor="@color/tx"
+                android:textColor="?attr/c_tx"
                 android:textSize="13sp" />
 
             <TextView style="@style/FieldHint"
                 android:layout_marginTop="16dp"
                 android:text="@string/cfg_note" />
+
+            <!-- ===== 外观（可折叠：默认收起，展开状态记在 prefs 里）===== -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginLeft="6dp"
+                android:layout_marginBottom="10dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/sec_theme"
+                    android:textColor="?attr/c_tx"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/theme_toggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/mini_btn_border"
+                    android:gravity="center"
+                    android:minWidth="64dp"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/toggle_expand"
+                    android:textColor="?attr/c_accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/theme_box"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView style="@style/FieldHint"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/theme_hint" />
+
+                <LinearLayout
+                    android:id="@+id/theme_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/app_version"

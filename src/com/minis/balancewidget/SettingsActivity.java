@@ -52,8 +52,8 @@ public class SettingsActivity extends Activity {
         et.setHint(hint);
         if (value != null) et.setText(value);
         et.setTextSize(13);
-        et.setTextColor(getColor(R.color.tx));
-        et.setHintTextColor(getColor(R.color.hint_c));
+        et.setTextColor(Theme.c(this, R.attr.c_tx));
+        et.setHintTextColor(Theme.c(this, R.attr.c_hint));
         et.setInputType(type);
         et.setSingleLine(true);
         /* ⚠️ 顺序很重要：setSingleLine() 内部会重设 inputType，
@@ -108,7 +108,7 @@ public class SettingsActivity extends Activity {
     private TextView mkDotLabel(LinearLayout head, String text) {
         TextView name = new TextView(this);
         name.setText(text);
-        name.setTextColor(getColor(R.color.tx));
+        name.setTextColor(Theme.c(this, R.attr.c_tx));
         name.setTextSize(13);
         LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -161,7 +161,7 @@ public class SettingsActivity extends Activity {
         box.addView(mkText(st, getColor(Lock.isSet(this) ? R.color.tx2 : R.color.warn), 12f, 0));
 
         TextView btn = mkText(Lock.isSet(this) ? "重置查看密码" : "设置查看密码",
-                getColor(R.color.accent_tx), 13f, 10);
+                Theme.c(this, R.attr.c_accent_tx), 13f, 10);
         btn.setGravity(Gravity.CENTER);
         btn.setBackgroundResource(R.drawable.btn_primary);
         btn.setPadding(0, dp(12), 0, dp(12));
@@ -354,7 +354,7 @@ public class SettingsActivity extends Activity {
             row.setPadding(0, dp(6), 0, dp(6));
             TextView nm = new TextView(this);
             nm.setText(name);
-            nm.setTextColor(getColor(R.color.tx));
+            nm.setTextColor(Theme.c(this, R.attr.c_tx));
             nm.setTextSize(13);
             nm.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -363,7 +363,7 @@ public class SettingsActivity extends Activity {
             Switch swCard = new Switch(this);
             swCard.setText("卡片");
             swCard.setTextSize(11.5f);
-            swCard.setTextColor(getColor(R.color.tx2));
+            swCard.setTextColor(Theme.c(this, R.attr.c_tx2));
             swCard.setChecked(ak.hideCard);
             swCard.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
@@ -377,7 +377,7 @@ public class SettingsActivity extends Activity {
             Switch swStat = new Switch(this);
             swStat.setText("统计");
             swStat.setTextSize(11.5f);
-            swStat.setTextColor(getColor(R.color.tx2));
+            swStat.setTextColor(Theme.c(this, R.attr.c_tx2));
             swStat.setChecked(!ak.draw);   // 开关语义=「在统计中隐藏」
             swStat.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
@@ -459,7 +459,7 @@ public class SettingsActivity extends Activity {
         for (int i = 0; i < cachedBlocks.size(); i++) box.addView(cachedBlocks.get(i));
         if (noneView == null) {
             noneView = new TextView(this);
-            noneView.setTextColor(getColor(R.color.tx3));
+            noneView.setTextColor(Theme.c(this, R.attr.c_tx3));
             noneView.setTextSize(12);
             noneView.setPadding(0, dp(8), 0, dp(8));
         }
@@ -489,7 +489,7 @@ public class SettingsActivity extends Activity {
         label.setLayoutParams(new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView cfg = mkTextWrap("配置", getColor(R.color.accent), 11f);
+        TextView cfg = mkTextWrap("配置", Theme.c(this, R.attr.c_accent), 11f);
         cfg.setPadding(dp(10), dp(5), dp(10), dp(5));
         cfg.setBackgroundResource(R.drawable.mini_btn_border);
         cfg.setOnClickListener(new View.OnClickListener() {
@@ -497,7 +497,7 @@ public class SettingsActivity extends Activity {
         });
         head.addView(cfg);
 
-        TextView del = mkTextWrap("删除", getColor(R.color.danger), 11f);
+        TextView del = mkTextWrap("删除", Theme.c(this, R.attr.c_danger), 11f);
         del.setPadding(dp(10), dp(5), dp(10), dp(5));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -528,7 +528,7 @@ public class SettingsActivity extends Activity {
 
         List<KeyStore.ApiKey> mine2 = KeyStore.get(this, plat);
         if (mine2.isEmpty()) {
-            wrap.addView(mkText("还没填 Key（点「配置」填）", getColor(R.color.tx3), 11.5f, 8));
+            wrap.addView(mkText("还没填 Key（点「配置」填）", Theme.c(this, R.attr.c_tx3), 11.5f, 8));
         } else {
             for (int i = 0; i < mine2.size(); i++) wrap.addView(keyRow(mine2.get(i)));
         }
@@ -561,7 +561,7 @@ public class SettingsActivity extends Activity {
         int nSites = BalanceFetcher.collectSites(this, platform, siteLabels, siteUrls);
         if (nSites > 0) {
             TextView site = mkTextWrap("控制台",
-                    getColor(R.color.tx2), 11f);
+                    Theme.c(this, R.attr.c_tx2), 11f);
             site.setPadding(dp(10), dp(5), dp(10), dp(5));
             LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -581,7 +581,7 @@ public class SettingsActivity extends Activity {
         // 充值按钮已按用户要求移除（控制台内可充值）
         final BalanceFetcher.Preset pt = BalanceFetcher.presetOf(platform);
 
-        TextView add = mkTextWrap("+ 添加", getColor(R.color.accent), 11f);
+        TextView add = mkTextWrap("+ 添加", Theme.c(this, R.attr.c_accent), 11f);
         add.setPadding(dp(10), dp(5), dp(10), dp(5));
         add.setBackgroundResource(R.drawable.mini_btn_border);
         add.setOnClickListener(new View.OnClickListener() {
@@ -592,11 +592,11 @@ public class SettingsActivity extends Activity {
 
         java.util.List<KeyStore.ApiKey> mine = KeyStore.get(this, platform);
         if (mine.isEmpty()) {
-            wrap.addView(mkText("还没填 Key", getColor(R.color.tx3), 11.5f, 8));
+            wrap.addView(mkText("还没填 Key", Theme.c(this, R.attr.c_tx3), 11.5f, 8));
         } else {
             for (int i = 0; i < mine.size(); i++) wrap.addView(keyRow(mine.get(i)));
         }
-        wrap.addView(mkText(hint, getColor(R.color.tx3), 10.5f, 6));
+        wrap.addView(mkText(hint, Theme.c(this, R.attr.c_tx3), 10.5f, 6));
         return wrap;
     }
 
@@ -610,20 +610,20 @@ public class SettingsActivity extends Activity {
         row.setLayoutParams(rlp);
 
         TextView tag = mkText(k.label.length() == 0 ? "默认" : k.label,
-                getColor(R.color.tx), 12.5f, 0);
+                Theme.c(this, R.attr.c_tx), 12.5f, 0);
         tag.setPadding(0, dp(10), 0, dp(10));
         tag.setLayoutParams(new LinearLayout.LayoutParams(
                 dp(66), LinearLayout.LayoutParams.WRAP_CONTENT));
         row.addView(tag);
 
         TextView kv = mkText(k.isConfigured() ? mask(k.key) : "未填写",
-                getColor(R.color.tx3), 11.5f, 0);
+                Theme.c(this, R.attr.c_tx3), 11.5f, 0);
         kv.setSingleLine(true);
         kv.setLayoutParams(new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         row.addView(kv);
 
-        TextView edit = mkTextWrap("编辑", getColor(R.color.accent), 11f);
+        TextView edit = mkTextWrap("编辑", Theme.c(this, R.attr.c_accent), 11f);
         edit.setPadding(dp(10), dp(5), dp(10), dp(5));
         edit.setBackgroundResource(R.drawable.mini_btn_border);
         edit.setOnClickListener(new View.OnClickListener() {
@@ -631,7 +631,7 @@ public class SettingsActivity extends Activity {
         });
         row.addView(edit);
 
-        TextView del = mkTextWrap("删除", getColor(R.color.danger), 11f);
+        TextView del = mkTextWrap("删除", Theme.c(this, R.attr.c_danger), 11f);
         del.setPadding(dp(10), dp(5), dp(10), dp(5));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -662,16 +662,16 @@ public class SettingsActivity extends Activity {
         card.setPadding(dp(24), dp(24), dp(24), dp(24));
         sc.addView(card);
 
-        TextView title = mkText(isNew ? "添加 Key" : "编辑 Key", getColor(R.color.tx), 17, 0);
+        TextView title = mkText(isNew ? "添加 Key" : "编辑 Key", Theme.c(this, R.attr.c_tx), 17, 0);
         title.setTypeface(null, Typeface.BOLD);
         card.addView(title);
 
-        card.addView(mkText("标签（区分同一平台的多个 Key）", getColor(R.color.tx2), 12, 16));
+        card.addView(mkText("标签（区分同一平台的多个 Key）", Theme.c(this, R.attr.c_tx2), 12, 16));
         final EditText eLabel = mkInput("如：主力 / 备用 / 项目A", src.label,
                 InputType.TYPE_CLASS_TEXT, 6);
         card.addView(eLabel);
 
-        card.addView(mkText("密钥", getColor(R.color.tx2), 12, 14));
+        card.addView(mkText("密钥", Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eKey = mkInput("sk-...", src.key,
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, 6);
         card.addView(eKey);
@@ -681,20 +681,20 @@ public class SettingsActivity extends Activity {
         final android.widget.RadioGroup[] modeRef = new android.widget.RadioGroup[1];
         final android.widget.RadioButton[] subRef = new android.widget.RadioButton[1];
         if ("dashscope".equals(platform)) {
-            card.addView(mkText("阿里云 AccessKeyId（可选，用于查询余额）", getColor(R.color.tx2), 12, 14));
+            card.addView(mkText("阿里云 AccessKeyId（可选，用于查询余额）", Theme.c(this, R.attr.c_tx2), 12, 14));
             final EditText eAccessKeyId = mkInput("LTAI...", src.accessKeyId,
                     InputType.TYPE_CLASS_TEXT, 6);
             card.addView(eAccessKeyId);
             accessKeyInputs[0] = eAccessKeyId;
 
-            card.addView(mkText("阿里云 AccessKeySecret（可选）", getColor(R.color.tx2), 12, 14));
+            card.addView(mkText("阿里云 AccessKeySecret（可选）", Theme.c(this, R.attr.c_tx2), 12, 14));
             final EditText eAccessKeySecret = mkInput("AccessKeySecret", src.accessKeySecret,
                     InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, 6);
             card.addView(eAccessKeySecret);
             accessKeyInputs[1] = eAccessKeySecret;
 
             // 计费模式单选：余额制 / 订阅制
-            card.addView(mkText("计费模式（决定用哪种方式查询）", getColor(R.color.tx2), 12, 14));
+            card.addView(mkText("计费模式（决定用哪种方式查询）", Theme.c(this, R.attr.c_tx2), 12, 14));
             android.widget.RadioGroup rgMode = new android.widget.RadioGroup(this);
             rgMode.setOrientation(android.widget.RadioGroup.HORIZONTAL);
             android.widget.RadioButton rbBal = new android.widget.RadioButton(this);
@@ -715,17 +715,17 @@ public class SettingsActivity extends Activity {
                     ? rbSub.getId() : rbBal.getId());
             card.addView(rgMode);
             card.addView(mkText("余额制：按量付费，查账户余额\n订阅制：Token Plan 套餐，查实例与到期时间（余量见控制台）",
-                    getColor(R.color.tx3), 11, 4));
+                    Theme.c(this, R.attr.c_tx3), 11, 4));
             final android.widget.RadioGroup rgModeRef = rgMode;
             final android.widget.RadioButton rbSubRef = rbSub;
             modeRef[0] = rgModeRef;
             subRef[0] = rbSubRef;
 
             card.addView(mkText("提示：AccessKey 在阿里云控制台 → AccessKey 管理中创建。配置后可自动查询百炼账户余额。",
-                    getColor(R.color.tx3), 11, 8));
+                    Theme.c(this, R.attr.c_tx3), 11, 8));
             
             // 添加"如何配置"帮助按钮
-            TextView helpBtn = mkText("如何配置阿里云 AccessKey？", getColor(R.color.accent), 12, 12);
+            TextView helpBtn = mkText("如何配置阿里云 AccessKey？", Theme.c(this, R.attr.c_accent), 12, 12);
             helpBtn.setGravity(Gravity.CENTER);
             helpBtn.setBackgroundResource(R.drawable.mini_btn_border);
             helpBtn.setPadding(0, dp(10), 0, dp(10));
@@ -738,17 +738,17 @@ public class SettingsActivity extends Activity {
             card.addView(helpBtn);
         }
 
-        card.addView(mkText("备注（可选）", getColor(R.color.tx2), 12, 14));
+        card.addView(mkText("备注（可选）", Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eNote = mkInput("给自己看的说明", src.note, InputType.TYPE_CLASS_TEXT, 6);
         card.addView(eNote);
 
-        card.addView(mkText("低余额预警阈值（0 = 不预警）", getColor(R.color.tx2), 12, 14));
+        card.addView(mkText("低余额预警阈值（0 = 不预警）", Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eThr = mkInput("0",
                 src.threshold > 0 ? String.valueOf(src.threshold) : "",
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL, 6);
         card.addView(eThr);
 
-        card.addView(mkText("预算（消费制用，0 = 不设）", getColor(R.color.tx2), 12, 14));
+        card.addView(mkText("预算（消费制用，0 = 不设）", Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eBudget = mkInput("0",
                 src.budget > 0 ? String.valueOf(src.budget) : "",
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL, 6);
@@ -770,7 +770,7 @@ public class SettingsActivity extends Activity {
         blp.topMargin = dp(20);
         btns.setLayoutParams(blp);
 
-        TextView cancel = mkText("取消", getColor(R.color.tx2), 14f, 0);
+        TextView cancel = mkText("取消", Theme.c(this, R.attr.c_tx2), 14f, 0);
         cancel.setGravity(Gravity.CENTER);
         cancel.setBackgroundResource(R.drawable.mini_btn_border);
         cancel.setPadding(0, dp(12), 0, dp(12));
@@ -783,7 +783,7 @@ public class SettingsActivity extends Activity {
         });
         btns.addView(cancel);
 
-        TextView save = mkText("保存", getColor(R.color.accent_tx), 14f, 0);
+        TextView save = mkText("保存", Theme.c(this, R.attr.c_accent_tx), 14f, 0);
         save.setGravity(Gravity.CENTER);
         save.setTypeface(null, Typeface.BOLD);
         save.setBackgroundResource(R.drawable.btn_primary);
@@ -874,7 +874,7 @@ public class SettingsActivity extends Activity {
         List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(this);
         if (list.isEmpty()) {
             customBox.addView(mkText(getString(R.string.custom_empty),
-                    getColor(R.color.tx3), 11.5f, 8));
+                    Theme.c(this, R.attr.c_tx3), 11.5f, 8));
             return;
         }
         for (int i = 0; i < list.size(); i++) {
@@ -901,7 +901,7 @@ public class SettingsActivity extends Activity {
 
         TextView t1 = new TextView(this);
         t1.setText(c.name.length() > 0 ? c.name : getString(R.string.custom_unnamed));
-        t1.setTextColor(getColor(R.color.tx));
+        t1.setTextColor(Theme.c(this, R.attr.c_tx));
         t1.setTextSize(14);
         col.addView(t1);
 
@@ -912,14 +912,14 @@ public class SettingsActivity extends Activity {
         }
         TextView t2 = new TextView(this);
         t2.setText(sub.toString());
-        t2.setTextColor(getColor(R.color.tx3));
+        t2.setTextColor(Theme.c(this, R.attr.c_tx3));
         t2.setTextSize(11.5f);
         col.addView(t2);
         row.addView(col);
 
         TextView del = new TextView(this);
         del.setText(R.string.custom_delete);
-        del.setTextColor(getColor(R.color.danger));
+        del.setTextColor(Theme.c(this, R.attr.c_danger));
         del.setTextSize(12);
         del.setPadding(dp(14), dp(10), dp(6), dp(10));
         del.setOnClickListener(new View.OnClickListener() {
@@ -975,26 +975,26 @@ public class SettingsActivity extends Activity {
         sc.addView(card);
 
         TextView title = mkText(getString(editing ? R.string.custom_edit_title
-                : R.string.custom_add_title), getColor(R.color.tx), 17, 0);
+                : R.string.custom_add_title), Theme.c(this, R.attr.c_tx), 17, 0);
         title.setTypeface(null, Typeface.BOLD);
         card.addView(title);
 
-        card.addView(mkText(getString(R.string.custom_lbl_name), getColor(R.color.tx2), 12, 18));
+        card.addView(mkText(getString(R.string.custom_lbl_name), Theme.c(this, R.attr.c_tx2), 12, 18));
         final EditText eName = mkInput(getString(R.string.custom_name_ph), src.name,
                 InputType.TYPE_CLASS_TEXT, 6);
         card.addView(eName);
 
-        card.addView(mkText("URL（免费服务可留空）", getColor(R.color.tx2), 12, 14));
+        card.addView(mkText("URL（免费服务可留空）", Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eUrl = mkInput(getString(R.string.custom_url_ph), src.url,
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, 6);
         card.addView(eUrl);
 
-        card.addView(mkText(getString(R.string.custom_lbl_key), getColor(R.color.tx2), 12, 14));
+        card.addView(mkText(getString(R.string.custom_lbl_key), Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eKey = mkInput(getString(R.string.custom_key_ph), src.key,
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, 6);
         card.addView(eKey);
 
-        card.addView(mkText(getString(R.string.custom_lbl_path), getColor(R.color.tx2), 12, 14));
+        card.addView(mkText(getString(R.string.custom_lbl_path), Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText ePath = mkInput(getString(R.string.custom_path_ph), src.path,
                 InputType.TYPE_CLASS_TEXT, 6);
         card.addView(ePath);
@@ -1007,7 +1007,7 @@ public class SettingsActivity extends Activity {
         ulp.topMargin = dp(16);
         unitRow.setLayoutParams(ulp);
 
-        final TextView unitBtn = mkText("币种：" + unit[0], getColor(R.color.tx2), 12, 0);
+        final TextView unitBtn = mkText("币种：" + unit[0], Theme.c(this, R.attr.c_tx2), 12, 0);
         unitBtn.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         unitBtn.setPadding(dp(12), dp(6), dp(12), dp(6));
@@ -1024,20 +1024,20 @@ public class SettingsActivity extends Activity {
         klp.topMargin = dp(10);
         kindRow.setLayoutParams(klp);
 
-        final TextView kindBtn = mkText("制式：" + kindLabel(kind[0]), getColor(R.color.tx2), 12, 0);
+        final TextView kindBtn = mkText("制式：" + kindLabel(kind[0]), Theme.c(this, R.attr.c_tx2), 12, 0);
         kindBtn.setPadding(dp(12), dp(6), dp(12), dp(6));
         kindBtn.setBackgroundResource(R.drawable.mini_btn_border);
         kindRow.addView(kindBtn);
         card.addView(kindRow);
 
         // 静态文本：填了就连 URL 都不用，永远是这几个字（魔搭这种免费服务）
-        card.addView(mkText("显示文字（不填 URL 时用，默认「免费」）", getColor(R.color.tx2), 12, 14));
+        card.addView(mkText("显示文字（不填 URL 时用，默认「免费」）", Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eText = mkInput("例如：免费 / 不限量", src.text == null ? "" : src.text,
                 InputType.TYPE_CLASS_TEXT, 6);
         card.addView(eText);
 
         // 显示后缀（订阅类填 % 或 次；留空则按金额显示）
-        card.addView(mkText("显示后缀（可空，如 % 或 次）", getColor(R.color.tx2), 12, 14));
+        card.addView(mkText("显示后缀（可空，如 % 或 次）", Theme.c(this, R.attr.c_tx2), 12, 14));
         final EditText eSuffix = mkInput("留空＝按金额显示", suffix[0], InputType.TYPE_CLASS_TEXT, 6);
         card.addView(eSuffix);
 
@@ -1067,7 +1067,7 @@ public class SettingsActivity extends Activity {
         thrRow.setLayoutParams(trlp);
 
         final TextView thrLabel = new TextView(this);
-        thrLabel.setTextColor(getColor(R.color.tx2));
+        thrLabel.setTextColor(Theme.c(this, R.attr.c_tx2));
         thrLabel.setTextSize(12);
         thrLabel.setLayoutParams(new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -1076,8 +1076,8 @@ public class SettingsActivity extends Activity {
         final EditText eThr = new EditText(this);
         eThr.setHint("0");
         eThr.setTextSize(13);
-        eThr.setTextColor(getColor(R.color.tx));
-        eThr.setHintTextColor(getColor(R.color.hint_c));
+        eThr.setTextColor(Theme.c(this, R.attr.c_tx));
+        eThr.setHintTextColor(Theme.c(this, R.attr.c_hint));
         eThr.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         eThr.setSingleLine(true);
         eThr.setGravity(Gravity.END);
@@ -1120,7 +1120,7 @@ public class SettingsActivity extends Activity {
 
         TextView cancel = new TextView(this);
         cancel.setText(R.string.custom_cancel);
-        cancel.setTextColor(getColor(R.color.tx2));
+        cancel.setTextColor(Theme.c(this, R.attr.c_tx2));
         cancel.setTextSize(14);
         cancel.setGravity(Gravity.CENTER);
         cancel.setBackgroundResource(R.drawable.mini_btn_border);
@@ -1136,7 +1136,7 @@ public class SettingsActivity extends Activity {
 
         TextView save = new TextView(this);
         save.setText(R.string.custom_save);
-        save.setTextColor(getColor(R.color.accent_tx));
+        save.setTextColor(Theme.c(this, R.attr.c_accent_tx));
         save.setTextSize(14);
         save.setTypeface(null, Typeface.BOLD);
         save.setGravity(Gravity.CENTER);
@@ -1210,6 +1210,8 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        /* 主题必须在 setContentView 之前应用：attr 是在 View 创建时解析的 */
+        Theme.apply(this);
         setContentView(R.layout.activity_settings);
         UiInsets.apply(this, R.id.settings_header, R.id.settings_scroll, 12, 20);
 

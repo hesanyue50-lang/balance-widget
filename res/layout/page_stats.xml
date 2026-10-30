@@ -12,6 +12,8 @@
         android:layout_width="match_parent"
         android:layout_height="260dp"
         android:background="@drawable/card_bg"
+        android:backgroundTint="?attr/c_card"
+        android:tag="card"
         android:padding="18dp" />
 
     <!-- ② 日期颗粒度：表格之外右下角 -->
@@ -25,7 +27,7 @@
             android:layout_height="wrap_content" android:gravity="center"
             android:background="@drawable/mini_btn_border" android:paddingLeft="12dp" android:paddingRight="12dp"
             android:paddingTop="4dp" android:paddingBottom="4dp"
-            android:text="近 7 天 ▽" android:textColor="@color/tx" android:textSize="11.5sp" />
+            android:text="近 7 天 ▽" android:textColor="?attr/c_tx" android:textSize="11.5sp" />
     </LinearLayout>
 
     <!-- ③ 平台数据源开关（圆点+名称+Switch） -->
@@ -42,7 +44,7 @@
         android:layout_height="1dp"
         android:layout_marginTop="12dp"
         android:layout_marginBottom="4dp"
-        android:background="@color/neu_dark" />
+        android:background="?attr/c_neu_dark" />
 
     <!-- ④ 近 N 日 -->
     <TextView
@@ -51,7 +53,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:text="近 7 日"
-        android:textColor="@color/tx"
+        android:textColor="?attr/c_tx"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -74,7 +76,7 @@
         android:paddingTop="6dp"
         android:paddingBottom="6dp"
         android:text="修正充值"
-        android:textColor="@color/tx"
+        android:textColor="?attr/c_tx"
         android:textSize="12sp" />
 
     <!-- ⑥ 总充值 / 总消耗 -->
@@ -83,7 +85,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:textColor="@color/tx"
+        android:textColor="?attr/c_tx"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -94,7 +96,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:lineSpacingExtra="3dp"
-        android:textColor="@color/tx3"
+        android:textColor="?attr/c_tx3"
         android:textSize="11.5sp"
         android:text="@string/stats_sampling_note_default" />
 
@@ -105,5 +107,5 @@
         android:layout_marginBottom="28dp" android:gravity="center"
         android:background="@drawable/mini_btn_border" android:paddingLeft="14dp" android:paddingRight="14dp"
         android:paddingTop="6dp" android:paddingBottom="6dp"
-        android:text="清理数据" android:textColor="@color/danger" android:textSize="12sp" />
+        android:text="清理数据" android:textColor="?attr/c_danger" android:textSize="12sp" />
 </LinearLayout>

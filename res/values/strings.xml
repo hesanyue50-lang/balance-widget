@@ -93,4 +93,11 @@
     <string name="custom_save">保存</string>
     <string name="custom_cancel">取消</string>
     <string name="custom_need_url_key">余额接口 URL 和 API Key 为必填</string>
+
+    <!-- ===== 外观 / 主题 ===== -->
+    <string name="sec_theme">外观</string>
+    <string name="theme_hint">换一套配色，立刻生效。左边四个小方块依次是这套的「底色 · 卡片 · 强调 · 文字」。</string>
+    <string name="theme_applied">已切换到「%1$s」</string>
+    <string name="toggle_expand">展开 ▾</string>
+    <string name="toggle_collapse">收起 ▴</string>
 </resources>

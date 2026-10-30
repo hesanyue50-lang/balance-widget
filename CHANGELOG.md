@@ -1,3 +1,53 @@
+## 26.10.616 · 2026-10-30
+
+### 主题系统：7 套风格，换的不只是颜色
+
+#### 为什么不是"换色"
+
+只换颜色不叫换风格 —— 直角和 20dp 圆角是两种气质，衬线和等宽也是。
+所以每套主题带两组参数：
+
+| 主题 | 圆角 | 字体 | 描边 | 投影 |
+|---|---|---|---|---|
+| Aurora 亮 / 暗 | 20dp | 系统 | 1dp | 无 |
+| Editorial 纸感 | **0（直角）** | **衬线** | 1dp | 无 |
+| Minimal 瑞士 | 4dp | 系统 | 1dp | 无 |
+| Devtool 终端 | 4dp | **等宽** | 1dp | 无 |
+| Brutalism 撞色 | **0（直角）** | 系统 | **2dp 黑边** | 无 |
+| Soft Clay 柔和 | **24dp** | 系统 | **无描边** | 软阴影 |
+
+形状与字体由 `Theme.skin(root)` 在 `setContentView` 之后套到整棵视图树上，
+只动两类东西：`tag="card"` 的容器重画背景、`TextView` 换字体。
+颜色不在这里处理，那是 attr 的活。
+
+#### 颜色体系：从 `R.color` 改成主题 attr
+
+Android 的资源颜色是编译期常量，想换配色只能重装。改用 attr 后，`setTheme()`
+换一套 style，所有 `?attr` 引用立刻跟着变。
+
+- 新增 `res/values/attrs.xml`（33 个颜色 attr，`c_` 前缀避免和系统 attr 撞名）
+- `styles.xml` 里 7 个 style，每个覆盖全部 33 个 attr
+- **174 处** layout/drawable 的 `@color/xxx` → `?attr/cXxx`
+- **94 处** Java 的 `getColor(R.color.xxx)` → `Theme.c(ctx, R.attr.cXxx)`
+- 9-patch PNG 用 `android:backgroundTint` 染色，保住原有的圆角和内边距
+
+#### 设置页：外观独立栏目，默认收起
+
+「外观」单独成块，带展开按钮，状态记在 `prefs.theme_opened` —— 和密钥区
+的折叠是同一套写法。每行显示四个预览色块（底 / 卡片 / 强调 / 文字）
++ 名称 + 一句气质说明 + 选中勾。
+
+切换后 `recreate()`：attr 是 View 创建时解析的，已经建好的控件不会自己换色。
+
+#### 一个已知限制
+
+**桌面小组件不跟随主题**。RemoteViews 由 Launcher 进程渲染，
+`?attr` 指向的是本 App 的主题，在那边解析不到 —— 所以小组件布局保留固定色。
+要跟的话得在每个元素上 `setInt(id, "setBackgroundColor", ...)`，成本大于收益，
+先记着。
+
+---
+
 ## 26.10.607 · 2026-10-29
 
 ### 性能专项第二批：上一轮评估后剩下的 9 项

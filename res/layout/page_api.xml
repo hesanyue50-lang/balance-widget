@@ -13,14 +13,16 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:background="@drawable/total_bg"
+        android:backgroundTint="?attr/c_card"
         android:padding="31dp"
+        android:tag="card"
         android:layout_marginBottom="13dp">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/main_total_label"
-            android:textColor="@color/tx2"
+            android:textColor="?attr/c_tx2"
             android:textSize="12sp" />
 
         <TextView
@@ -29,7 +31,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="—"
-            android:textColor="@color/tx"
+            android:textColor="?attr/c_tx"
             android:textSize="32sp"
             android:textStyle="bold"
             android:letterSpacing="-0.024" />
@@ -40,7 +42,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
             android:text="@string/tap_refresh"
-            android:textColor="@color/tx3"
+            android:textColor="?attr/c_tx3"
             android:textSize="11.5sp" />
     </LinearLayout>
 

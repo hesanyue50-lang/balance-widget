@@ -180,7 +180,7 @@ public class VpnBinder {
 
                 d = new TextView(act);
                 d.setTextSize(11.5f);
-                d.setTextColor(act.getColor(R.color.tx3));
+                d.setTextColor(Theme.c(act, R.attr.c_tx3));
                 d.setPadding(0, dp(2), 0, 0);
                 col.addView(d);
                 row.addView(col);
@@ -331,7 +331,7 @@ public class VpnBinder {
         android.graphics.drawable.GradientDrawable bg =
                 new android.graphics.drawable.GradientDrawable();
         bg.setCornerRadius(dp(3));
-        bg.setColor(act.getColor(R.color.neu_sunken));
+        bg.setColor(Theme.c(act, R.attr.c_neu_sunken));
         bar.setBackground(bg);
 
         android.graphics.drawable.GradientDrawable fg =
@@ -358,7 +358,7 @@ public class VpnBinder {
         if (sub.expire > 0) sb.append("  ·  ").append(fmtExpire(sub.expire)).append(" 到期");
         t.setText(sb.toString());
         t.setTextSize(11.5f);
-        t.setTextColor(act.getColor(R.color.tx3));
+        t.setTextColor(Theme.c(act, R.attr.c_tx3));
         t.setPadding(0, dp(4), 0, 0);
         wrap.addView(t);
         return wrap;
@@ -519,13 +519,13 @@ public class VpnBinder {
 
         TextView kt = new TextView(act);
         kt.setTextSize(12);
-        kt.setTextColor(act.getColor(R.color.tx2));
+        kt.setTextColor(Theme.c(act, R.attr.c_tx2));
         kt.setWidth(dp(72));
         row.addView(kt);
 
         TextView vt = new TextView(act);
         vt.setTextSize(12);
-        vt.setTextColor(act.getColor(R.color.tx));
+        vt.setTextColor(Theme.c(act, R.attr.c_tx));
         row.addView(vt);
 
         return row;
@@ -540,14 +540,14 @@ public class VpnBinder {
         TextView kt = new TextView(act);
         kt.setText(k);
         kt.setTextSize(12);
-        kt.setTextColor(act.getColor(R.color.tx2));
+        kt.setTextColor(Theme.c(act, R.attr.c_tx2));
         kt.setWidth(dp(72));
         row.addView(kt);
 
         TextView vt = new TextView(act);
         vt.setText(v);
         vt.setTextSize(12);
-        vt.setTextColor(act.getColor(R.color.tx));
+        vt.setTextColor(Theme.c(act, R.attr.c_tx));
         row.addView(vt);
 
         box.addView(row);
@@ -606,7 +606,7 @@ public class VpnBinder {
         if (subs.isEmpty()) {
             TextView t = new TextView(act);
             t.setText("还没有订阅，点右上角「＋ 新增」添加");
-            t.setTextColor(act.getColor(R.color.tx3));
+            t.setTextColor(Theme.c(act, R.attr.c_tx3));
             t.setTextSize(12);
             box.addView(t);
             return;
@@ -643,7 +643,7 @@ public class VpnBinder {
             TextView meta = new TextView(act);
             meta.setText(sub.summary());
             meta.setTextSize(11.5f);
-            meta.setTextColor(act.getColor(R.color.tx3));
+            meta.setTextColor(Theme.c(act, R.attr.c_tx3));
             meta.setPadding(0, dp(2), 0, 0);
             col.addView(meta);
             /* 机场给了流量才知道已用多少，没给就不显示（别摆一个空条） */
@@ -653,7 +653,7 @@ public class VpnBinder {
             TextView upd = new TextView(act);
             upd.setText("更新");
             upd.setTextSize(11.5f);
-            upd.setTextColor(act.getColor(R.color.accent));
+            upd.setTextColor(Theme.c(act, R.attr.c_accent));
             upd.setPadding(dp(10), dp(6), dp(10), dp(6));
             upd.setBackgroundResource(R.drawable.mini_btn_border);
             upd.setOnClickListener(new View.OnClickListener() {
@@ -867,7 +867,7 @@ public class VpnBinder {
     private void bindDelay(TextView tv, Clash.Node n) {
         if (testing.contains(n.name)) {
             tv.setText("…");
-            tv.setTextColor(act.getColor(R.color.tx3));
+            tv.setTextColor(Theme.c(act, R.attr.c_tx3));
             return;
         }
         if (n.delay > 0) {
@@ -878,11 +878,11 @@ public class VpnBinder {
         }
         if (timedOut.contains(n.name)) {
             tv.setText("超时");
-            tv.setTextColor(act.getColor(R.color.danger));
+            tv.setTextColor(Theme.c(act, R.attr.c_danger));
             return;
         }
         tv.setText("测速");
-        tv.setTextColor(act.getColor(R.color.tx3));
+        tv.setTextColor(Theme.c(act, R.attr.c_tx3));
     }
 
     private void renderPlatforms() {
@@ -935,7 +935,7 @@ public class VpnBinder {
         if (plats.isEmpty()) {
             TextView t = new TextView(act);
             t.setText("还没有添加任何平台");
-            t.setTextColor(act.getColor(R.color.tx3));
+            t.setTextColor(Theme.c(act, R.attr.c_tx3));
             t.setTextSize(12);
             box.addView(t);
             return;
@@ -955,7 +955,7 @@ public class VpnBinder {
 
             TextView nm = new TextView(act);
             nm.setText(en.getValue() + (p != null && p.foreign ? "  (境外)" : ""));
-            nm.setTextColor(act.getColor(R.color.tx));
+            nm.setTextColor(Theme.c(act, R.attr.c_tx));
             nm.setTextSize(13);
             nm.setLayoutParams(new LinearLayout.LayoutParams(0,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -1025,7 +1025,7 @@ public class VpnBinder {
 
         TextView l1 = new TextView(act);
         l1.setText("名称（给自己看的，比如「主力机场」）");
-        l1.setTextColor(act.getColor(R.color.tx2));
+        l1.setTextColor(Theme.c(act, R.attr.c_tx2));
         l1.setTextSize(12);
         panel.addView(l1);
         final EditText eName = new EditText(act);
@@ -1034,7 +1034,7 @@ public class VpnBinder {
 
         TextView l2 = new TextView(act);
         l2.setText("Clash 订阅链接");
-        l2.setTextColor(act.getColor(R.color.tx2));
+        l2.setTextColor(Theme.c(act, R.attr.c_tx2));
         l2.setTextSize(12);
         l2.setPadding(0, dp(10), 0, 0);
         panel.addView(l2);
@@ -1100,7 +1100,7 @@ public class VpnBinder {
         TextView l1 = new TextView(act);
         l1.setText("名称");
         l1.setTextSize(12);
-        l1.setTextColor(act.getColor(R.color.tx3));
+        l1.setTextColor(Theme.c(act, R.attr.c_tx3));
         p.addView(l1);
 
         final EditText eName = new EditText(act);
@@ -1111,14 +1111,14 @@ public class VpnBinder {
         TextView l2 = new TextView(act);
         l2.setText("订阅链接（长按可复制）");
         l2.setTextSize(12);
-        l2.setTextColor(act.getColor(R.color.tx3));
+        l2.setTextColor(Theme.c(act, R.attr.c_tx3));
         l2.setPadding(0, dp(14), 0, 0);
         p.addView(l2);
 
         TextView url = new TextView(act);
         url.setText(sub.url == null || sub.url.length() == 0 ? "（没有填写链接）" : sub.url);
         url.setTextSize(12);
-        url.setTextColor(act.getColor(R.color.tx2));
+        url.setTextColor(Theme.c(act, R.attr.c_tx2));
         url.setTextIsSelectable(true);          // 可选中 / 长按复制
         url.setPadding(0, dp(4), 0, 0);
         p.addView(url);
@@ -1133,7 +1133,7 @@ public class VpnBinder {
         TextView note = new TextView(act);
         note.setText("开启后，打开应用时会自动检查并更新（最快每 6 小时一次）");
         note.setTextSize(11.5f);
-        note.setTextColor(act.getColor(R.color.tx3));
+        note.setTextColor(Theme.c(act, R.attr.c_tx3));
         p.addView(note);
 
         new AlertDialog.Builder(act)
@@ -1420,7 +1420,7 @@ public class VpnBinder {
         testing.add(node);
         timedOut.remove(node);
         tv.setText("…");
-        tv.setTextColor(act.getColor(R.color.tx3));
+        tv.setTextColor(Theme.c(act, R.attr.c_tx3));
         new Thread(new Runnable() {
             public void run() {
                 final int d = Clash.testDelay(node, 3000);

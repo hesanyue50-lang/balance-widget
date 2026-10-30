@@ -47,7 +47,7 @@ public final class LockDialog {
 
         TextView t = new TextView(ctx);
         t.setText(title);
-        t.setTextColor(ctx.getColor(R.color.tx));
+        t.setTextColor(Theme.c(ctx, R.attr.c_tx));
         t.setTextSize(16);
         t.setTypeface(null, Typeface.BOLD);
         card.addView(t);
@@ -68,7 +68,7 @@ public final class LockDialog {
     private static TextView label(Context ctx, String s) {
         TextView t = new TextView(ctx);
         t.setText(s);
-        t.setTextColor(ctx.getColor(R.color.tx2));
+        t.setTextColor(Theme.c(ctx, R.attr.c_tx2));
         t.setTextSize(12);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -81,8 +81,8 @@ public final class LockDialog {
         EditText e = new EditText(ctx);
         e.setHint(hint);
         e.setTextSize(14);
-        e.setTextColor(ctx.getColor(R.color.tx));
-        e.setHintTextColor(ctx.getColor(R.color.hint_c));
+        e.setTextColor(Theme.c(ctx, R.attr.c_tx));
+        e.setHintTextColor(Theme.c(ctx, R.attr.c_hint));
         e.setInputType(type);
         e.setSingleLine(true);
         /* 同上：遮罩要在 setSingleLine 之后，否则会被冲掉 */
@@ -340,7 +340,7 @@ public final class LockDialog {
 
         TextView kv = new TextView(ctx);
         kv.setText(key);
-        kv.setTextColor(ctx.getColor(R.color.tx));
+        kv.setTextColor(Theme.c(ctx, R.attr.c_tx));
         kv.setTextSize(14);
         kv.setTypeface(Typeface.MONOSPACE);
         kv.setTextIsSelectable(true);               // 也能长按手动选
@@ -434,7 +434,7 @@ public final class LockDialog {
 
         card.addView(label(ctx, "方式二：回答密保问题"));
         final TextView qLabel = new TextView(ctx);
-        qLabel.setTextColor(ctx.getColor(R.color.tx));
+        qLabel.setTextColor(Theme.c(ctx, R.attr.c_tx));
         qLabel.setTextSize(13);
         qLabel.setText(Lock.hasQuestion(ctx) ? ("问题：" + Lock.question(ctx)) : "（没有设过密保问题）");
         card.addView(qLabel);
@@ -452,7 +452,7 @@ public final class LockDialog {
 
         TextView forgot = new TextView(ctx);
         forgot.setText("忘记密保问题了？");
-        forgot.setTextColor(ctx.getColor(R.color.accent));
+        forgot.setTextColor(Theme.c(ctx, R.attr.c_accent));
         forgot.setTextSize(12);
         LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);

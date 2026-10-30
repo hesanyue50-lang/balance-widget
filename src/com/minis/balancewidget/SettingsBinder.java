@@ -27,7 +27,7 @@ import java.util.List;
 public class SettingsBinder {
 
     private final Activity act;
-    private final View root;
+    final View root;
     private EditText eFg, eBg;
     private final Handler h = new Handler();
     private final Runnable saveTask = new Runnable() {
@@ -58,6 +58,107 @@ public class SettingsBinder {
     }
 
     private int dp(float v) { return (int) (v * act.getResources().getDisplayMetrics().density + 0.5f); }
+
+    /**
+     * 一行主题选项：四个预览色块（底/卡片/强调/文字）+ 名称 + 一句气质说明 + 选中勾。
+     *
+     * 为什么用 4 个色块而不是一张缩略图：真正决定"气质"的就是这四个值，
+     * 而缩略图要随窗口尺寸缩放、还要维护 7 张图，成本高且容易过期。
+     */
+    private View themeRow(final int idx, boolean checked) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(13), dp(11), dp(13), dp(11));
+
+        android.graphics.drawable.GradientDrawable bg =
+                new android.graphics.drawable.GradientDrawable();
+        bg.setColor(Theme.c(act, R.attr.c_card));
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(checked ? 2 : 1),
+                Theme.c(act, checked ? R.attr.c_accent : R.attr.c_line));
+        row.setBackground(bg);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        if (idx > 0) lp.topMargin = dp(8);
+        row.setLayoutParams(lp);
+
+        int[] pv = Theme.PREVIEW[idx];
+        LinearLayout sw = new LinearLayout(act);
+        sw.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < 4; i++) {
+            View b = new View(act);
+            android.graphics.drawable.GradientDrawable d =
+                    new android.graphics.drawable.GradientDrawable();
+            d.setColor(pv[i]);
+            d.setCornerRadius(dp(4));
+            d.setStroke(dp(1), Theme.c(act, R.attr.c_line));
+            b.setBackground(d);
+            LinearLayout.LayoutParams bp =
+                    new LinearLayout.LayoutParams(dp(15), dp(15));
+            if (i > 0) bp.leftMargin = dp(3);
+            b.setLayoutParams(bp);
+            sw.addView(b);
+        }
+        row.addView(sw);
+
+        LinearLayout col = new LinearLayout(act);
+        col.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        clp.leftMargin = dp(12);
+        col.setLayoutParams(clp);
+
+        TextView nm = new TextView(act);
+        nm.setText(Theme.NAMES[idx]);
+        nm.setTextSize(14.5f);
+        nm.setTextColor(Theme.c(act, R.attr.c_tx));
+        nm.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        col.addView(nm);
+
+        TextView ds = new TextView(act);
+        ds.setText(Theme.DESCS[idx]);
+        ds.setTextSize(11.5f);
+        ds.setTextColor(Theme.c(act, R.attr.c_tx3));
+        ds.setPadding(0, dp(2), 0, 0);
+        col.addView(ds);
+        row.addView(col);
+
+        if (checked) {
+            TextView ok = new TextView(act);
+            ok.setText("\u2713");
+            ok.setTextSize(17f);
+            ok.setTextColor(Theme.c(act, R.attr.c_accent));
+            ok.setPadding(dp(8), 0, dp(2), 0);
+            row.addView(ok);
+        }
+
+        row.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                if (Theme.index(act) == idx) return;
+                Theme.setIndex(act, idx);
+                android.widget.Toast.makeText(act,
+                        act.getString(R.string.theme_applied, Theme.NAMES[idx]),
+                        android.widget.Toast.LENGTH_SHORT).show();
+                /* 必须重建：attr 是 View 创建时解析的，已经建好的控件不会自己换色 */
+                act.recreate();
+            }
+        });
+        return row;
+    }
+
+    /** 渲染外观区块 */
+    private void renderThemes() {
+        LinearLayout box = (LinearLayout) root.findViewById(R.id.theme_list);
+        if (box == null) return;
+        box.removeAllViews();
+        int cur = Theme.index(act);
+        for (int i = 0; i < Theme.IDS.length; i++) {
+            box.addView(themeRow(i, i == cur));
+        }
+    }
     private int color(int id) { return act.getColor(id); }
     private SharedPreferences prefs() {
         return act.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
@@ -113,6 +214,30 @@ public class SettingsBinder {
                 };
         if (eFg != null) eFg.setOnFocusChangeListener(fc);
         if (eBg != null) eBg.setOnFocusChangeListener(fc);
+
+        // ---- 外观区折叠（默认收起，状态记 prefs）----
+        final View themeBox = root.findViewById(R.id.theme_box);
+        final TextView themeToggle = (TextView) root.findViewById(R.id.theme_toggle);
+        final boolean themeOpened = prefs().getBoolean("theme_opened", false);
+        if (themeBox != null) themeBox.setVisibility(themeOpened ? View.VISIBLE : View.GONE);
+        if (themeToggle != null) {
+            themeToggle.setText(themeOpened
+                    ? act.getString(R.string.toggle_collapse)
+                    : act.getString(R.string.toggle_expand));
+            themeToggle.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (themeBox == null) return;
+                    boolean now = themeBox.getVisibility() != View.VISIBLE;
+                    prefs().edit().putBoolean("theme_opened", now).apply();
+                    themeToggle.setText(now
+                            ? act.getString(R.string.toggle_collapse)
+                            : act.getString(R.string.toggle_expand));
+                    if (now) Anim.expand(themeBox);
+                    else Anim.collapse(themeBox);
+                }
+            });
+        }
+        renderThemes();
 
         View autostart = root.findViewById(R.id.btn_autostart);
         if (autostart != null) autostart.setOnClickListener(new View.OnClickListener() {
@@ -529,7 +654,11 @@ public class SettingsBinder {
     private final java.util.List<String> keyBlockKeys = new java.util.ArrayList<String>();
 
     /** 供宿主在外部状态变化后（如 MiMo 登录回来）重画密钥列表 */
-    public void refreshKeys() { renderKeys(); }
+    public void refreshKeys() {
+        renderKeys();
+        /* 卡片是运行时新建的，不在 onCreate 那次 skin 的覆盖范围内 —— 补一次 */
+        Theme.skin(act, root);
+    }
 
     /**
      * 清理孤儿 Key：平台已被删除（custom:N / web:N 越界）但 Key 还挂着的条目。

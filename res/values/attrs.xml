@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      主题化颜色 token。
+
+      为什么要有这一层：Android 的资源颜色是编译期常量，改了 colors.xml 就得重装；
+      而用 attr 取值，只要 setTheme() 换一套 style，所有 ?attr 引用立刻跟着变。
+      代价是 layout / drawable 里不能写 @color/xxx，Java 里不能写 getColor(R.color.xxx)
+      —— 全部改成 ?attr/cXxx 和 Theme.c(ctx, R.attr.cXxx)。
+
+      命名用 c_ 前缀，避免和系统 attr（colorBackground / textColorPrimary 等）撞名。
+    -->
+    <attr name="c_bg" format="color"/>              <!-- 页面底 -->
+    <attr name="c_card" format="color"/>            <!-- 卡片面 -->
+    <attr name="c_line" format="color"/>            <!-- 描边 / 分隔线 -->
+    <attr name="c_tx" format="color"/>              <!-- 主文字 -->
+    <attr name="c_tx2" format="color"/>             <!-- 次文字 -->
+    <attr name="c_tx3" format="color"/>             <!-- 三级 / 占位 -->
+    <attr name="c_tx_conv" format="color"/>         <!-- 换算值等辅助数字 -->
+    <attr name="c_tx_detail" format="color"/>       <!-- 明细行 -->
+    <attr name="c_hint" format="color"/>            <!-- 输入提示 -->
+    <attr name="c_accent" format="color"/>          <!-- 强调 -->
+    <attr name="c_accent_tx" format="color"/>       <!-- 强调上的文字 -->
+    <attr name="c_danger" format="color"/>
+    <attr name="c_warn" format="color"/>
+    <attr name="c_btn" format="color"/>             <!-- 次按钮底 -->
+    <attr name="c_input" format="color"/>           <!-- 输入框底 -->
+    <attr name="c_btn_border" format="color"/>      <!-- 按钮描边 -->
+    <attr name="c_div_line" format="color"/>        <!-- 分档分隔线 -->
+    <attr name="c_header_bg" format="color"/>       <!-- 顶栏玻璃 -->
+    <attr name="c_total_start" format="color"/>     <!-- 总额卡渐变起 -->
+    <attr name="c_total_end" format="color"/>       <!-- 总额卡渐变止 -->
+    <attr name="c_neu_surface" format="color"/>
+    <attr name="c_neu_dark" format="color"/>
+    <attr name="c_neu_sunken" format="color"/>
+    <!-- 玻璃浮层文字（弹窗 / 抽屉里恒为浅色底或深色底，随主题走） -->
+    <attr name="c_glass_tx" format="color"/>
+    <attr name="c_glass_tx2" format="color"/>
+    <attr name="c_glass_tx3" format="color"/>
+
+    <!-- 桌面小组件自成一套，但要跟着主题走，否则桌面和 App 像两个产品 -->
+    <attr name="c_w_card" format="color"/>
+    <attr name="c_w_tx" format="color"/>
+    <attr name="c_w_tx2" format="color"/>
+    <attr name="c_w_tx3" format="color"/>
+    <attr name="c_w_div" format="color"/>
+    <attr name="c_w_accent" format="color"/>
+    <attr name="c_w_danger" format="color"/>
+</resources>

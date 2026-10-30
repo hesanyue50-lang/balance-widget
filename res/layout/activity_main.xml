@@ -8,7 +8,7 @@
     android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="?attr/c_bg"
     android:focusable="true"
     android:focusableInTouchMode="true">
 
@@ -106,7 +106,7 @@
             android:id="@+id/pull_spin"
             android:layout_width="16dp"
             android:layout_height="16dp"
-            android:indeterminateTint="@color/accent" />
+            android:indeterminateTint="?attr/c_accent" />
 
         <TextView
             android:id="@+id/pull_text"
@@ -114,7 +114,7 @@
             android:layout_height="wrap_content"
             android:layout_marginLeft="8dp"
             android:text="下拉刷新"
-            android:textColor="@color/tx2"
+            android:textColor="?attr/c_tx2"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -165,7 +165,7 @@
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
                     android:text="API 余额"
-                    android:textColor="@color/accent"
+                    android:textColor="?attr/c_accent"
                     android:textSize="12sp" />
 
                 <TextView
@@ -177,7 +177,7 @@
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
                     android:text="用量统计"
-                    android:textColor="@color/tx2"
+                    android:textColor="?attr/c_tx2"
                     android:textSize="12sp" />
 
                 <TextView
@@ -189,7 +189,7 @@
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
                     android:text="网络加速"
-                    android:textColor="@color/tx2"
+                    android:textColor="?attr/c_tx2"
                     android:textSize="12sp" />
 
                 <TextView
@@ -201,7 +201,7 @@
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
                     android:text="⚙ 设置"
-                    android:textColor="@color/tx2"
+                    android:textColor="?attr/c_tx2"
                     android:textSize="12sp" />
             </LinearLayout>
         </FrameLayout>
@@ -226,6 +226,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/card_bg"
+            android:backgroundTint="?attr/c_card"
             android:gravity="center"
             android:minWidth="180dp"
             android:orientation="vertical"
@@ -238,7 +239,7 @@
                 android:id="@+id/busy_spin"
                 android:layout_width="30dp"
                 android:layout_height="30dp"
-                android:indeterminateTint="@color/accent" />
+                android:indeterminateTint="?attr/c_accent" />
 
             <TextView
                 android:id="@+id/busy_text"
@@ -246,7 +247,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="正在加载…"
-                android:textColor="@color/tx2"
+                android:textColor="?attr/c_tx2"
                 android:textSize="13sp" />
 
             <!-- 横向进度条：活儿没进度可报时按不确定态来回滚，比干等一个圈更有反馈 -->
@@ -257,7 +258,7 @@
                 android:layout_height="4dp"
                 android:layout_marginTop="12dp"
                 android:indeterminate="true"
-                android:indeterminateTint="@color/accent" />
+                android:indeterminateTint="?attr/c_accent" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

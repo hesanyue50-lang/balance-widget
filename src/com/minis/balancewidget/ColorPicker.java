@@ -79,7 +79,7 @@ public class ColorPicker {
         /* ---------------- 分隔 ---------------- */
         TextView sep = new TextView(act);
         sep.setText("自定义颜色");
-        sep.setTextColor(act.getColor(R.color.tx2));
+        sep.setTextColor(Theme.c(act, R.attr.c_tx2));
         sep.setTextSize(12);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

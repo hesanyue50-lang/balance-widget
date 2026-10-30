@@ -30,7 +30,7 @@
             android:layout_weight="1"
             android:singleLine="true"
             android:text="@string/widget_title"
-            android:textColor="@color/tx2"
+            android:textColor="@color/w2_tx2"
             android:textSize="11.5sp"
             android:textStyle="bold" />
 
@@ -50,7 +50,7 @@
             android:gravity="center"
             android:includeFontPadding="false"
             android:text=""
-            android:textColor="@color/tx3"
+            android:textColor="@color/w2_tx3"
             android:textSize="10sp" />
 
         <ImageView
@@ -85,7 +85,7 @@
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
             android:text="—"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="23sp"
             android:textStyle="bold" />
 
@@ -100,7 +100,7 @@
             android:ellipsize="end"
             android:includeFontPadding="false"
             android:text=""
-            android:textColor="@color/tx3"
+            android:textColor="@color/w2_tx3"
             android:textSize="9sp" />
     </LinearLayout>
 
@@ -129,7 +129,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -139,7 +139,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -152,7 +152,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>
@@ -181,7 +181,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -191,7 +191,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -204,7 +204,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>
@@ -233,7 +233,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -243,7 +243,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -256,7 +256,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>
@@ -285,7 +285,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -295,7 +295,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -308,7 +308,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>
@@ -337,7 +337,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -347,7 +347,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -360,7 +360,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>
@@ -389,7 +389,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -399,7 +399,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -412,7 +412,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>
@@ -441,7 +441,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -451,7 +451,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -464,7 +464,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>
@@ -493,7 +493,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/tx2"
+                android:textColor="@color/w2_tx2"
                 android:textSize="10sp" />
 
         <TextView
@@ -503,7 +503,7 @@
             android:layout_marginLeft="5dp"
             android:singleLine="true"
             android:includeFontPadding="false"
-            android:textColor="@color/tx"
+            android:textColor="@color/w2_tx"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -516,7 +516,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/tx_conv"
+            android:textColor="@color/w2_tx2"
             android:textSize="9sp" />
     </LinearLayout>
     </LinearLayout>

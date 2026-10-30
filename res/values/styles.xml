@@ -1,16 +1,306 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Aurora Glass 亮 -->
     <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
-        <item name="android:windowBackground">@color/bg</item>
-        <item name="android:colorBackground">@color/bg</item>
+        <item name="android:windowBackground">#F6F7F9</item>
+        <item name="android:colorBackground">#F6F7F9</item>
         <item name="android:fitsSystemWindows">false</item>
-        <item name="android:textColorPrimary">@color/tx</item>
-        <item name="android:textColorSecondary">@color/tx2</item>
-        <!-- 全应用的 AlertDialog 都走这一套主题（含出现/消失动画）。
-             挂在主题上比在每个 show() 后面手动设 windowAnimations 可靠 ——
-             后者漏掉一处就少一个动画，而且新写的弹窗很容易忘。 -->
+        <item name="android:textColorPrimary">#0B0E14</item>
+        <item name="android:textColorSecondary">#414A5C</item>
         <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="c_bg">#F6F7F9</item>
+        <item name="c_card">#FFFFFF</item>
+        <item name="c_line">#14090C14</item>
+        <item name="c_tx">#0B0E14</item>
+        <item name="c_tx2">#414A5C</item>
+        <item name="c_tx3">#55606F</item>
+        <item name="c_tx_conv">#687283</item>
+        <item name="c_tx_detail">#39424F</item>
+        <item name="c_hint">#7C8698</item>
+        <item name="c_accent">#4166F5</item>
+        <item name="c_accent_tx">#FFFFFF</item>
+        <item name="c_danger">#E5484D</item>
+        <item name="c_warn">#B4690E</item>
+        <item name="c_btn">#E3EAF9</item>
+        <item name="c_input">#EEF0F4</item>
+        <item name="c_btn_border">#AEBEDF</item>
+        <item name="c_div_line">#26A8B4C6</item>
+        <item name="c_header_bg">#F0F4F7FB</item>
+        <item name="c_total_start">#EDF1FB</item>
+        <item name="c_total_end">#E4EAF8</item>
+        <item name="c_neu_surface">#FFFFFF</item>
+        <item name="c_neu_dark">#E5E9EF</item>
+        <item name="c_neu_sunken">#EEF0F4</item>
+        <item name="c_glass_tx">#1A1F28</item>
+        <item name="c_glass_tx2">#3D4653</item>
+        <item name="c_glass_tx3">#69738A</item>
+        <item name="c_w_card">#FFFFFF</item>
+        <item name="c_w_tx">#0B0E14</item>
+        <item name="c_w_tx2">#5A6472</item>
+        <item name="c_w_tx3">#656F7F</item>
+        <item name="c_w_div">#2E9AA6B2</item>
+        <item name="c_w_accent">#4166F5</item>
+        <item name="c_w_danger">#E5484D</item>
     </style>
+
+    <!-- Aurora Glass 暗 -->
+    <style name="ThemeAuroraDark" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#0A0B0F</item>
+        <item name="android:colorBackground">#0A0B0F</item>
+        <item name="android:fitsSystemWindows">false</item>
+        <item name="android:textColorPrimary">#F5F7FA</item>
+        <item name="android:textColorSecondary">#9AA3B2</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="c_bg">#0A0B0F</item>
+        <item name="c_card">#14161C</item>
+        <item name="c_line">#1F232B</item>
+        <item name="c_tx">#F5F7FA</item>
+        <item name="c_tx2">#9AA3B2</item>
+        <item name="c_tx3">#6B7382</item>
+        <item name="c_tx_conv">#7D8798</item>
+        <item name="c_tx_detail">#B4BDCB</item>
+        <item name="c_hint">#6B7382</item>
+        <item name="c_accent">#6C8CFF</item>
+        <item name="c_accent_tx">#FFFFFF</item>
+        <item name="c_danger">#FF5C5C</item>
+        <item name="c_warn">#F5A524</item>
+        <item name="c_btn">#1C1F27</item>
+        <item name="c_input">#16191F</item>
+        <item name="c_btn_border">#2A2F3A</item>
+        <item name="c_div_line">#26FFFFFF</item>
+        <item name="c_header_bg">#E60A0B0F</item>
+        <item name="c_total_start">#14171F</item>
+        <item name="c_total_end">#1A1E28</item>
+        <item name="c_neu_surface">#14161C</item>
+        <item name="c_neu_dark">#0E1015</item>
+        <item name="c_neu_sunken">#191C24</item>
+        <item name="c_glass_tx">#F5F7FA</item>
+        <item name="c_glass_tx2">#9AA3B2</item>
+        <item name="c_glass_tx3">#6B7382</item>
+        <item name="c_w_card">#14161C</item>
+        <item name="c_w_tx">#F5F7FA</item>
+        <item name="c_w_tx2">#9AA3B2</item>
+        <item name="c_w_tx3">#6B7382</item>
+        <item name="c_w_div">#26FFFFFF</item>
+        <item name="c_w_accent">#6C8CFF</item>
+        <item name="c_w_danger">#FF5C5C</item>
+    </style>
+
+    <!-- Editorial 纸感 -->
+    <style name="ThemeEditorial" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">#FAF7F2</item>
+        <item name="android:colorBackground">#FAF7F2</item>
+        <item name="android:fitsSystemWindows">false</item>
+        <item name="android:textColorPrimary">#1A1614</item>
+        <item name="android:textColorSecondary">#574E45</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="c_bg">#FAF7F2</item>
+        <item name="c_card">#FFFFFF</item>
+        <item name="c_line">#2A1F1810</item>
+        <item name="c_tx">#1A1614</item>
+        <item name="c_tx2">#574E45</item>
+        <item name="c_tx3">#7A6E62</item>
+        <item name="c_tx_conv">#8A7D6E</item>
+        <item name="c_tx_detail">#3A322B</item>
+        <item name="c_hint">#8A7D6E</item>
+        <item name="c_accent">#9A3412</item>
+        <item name="c_accent_tx">#FFFFFF</item>
+        <item name="c_danger">#B91C1C</item>
+        <item name="c_warn">#A16207</item>
+        <item name="c_btn">#F0E9DF</item>
+        <item name="c_input">#F5F0E8</item>
+        <item name="c_btn_border">#D6CBB8</item>
+        <item name="c_div_line">#22201A12</item>
+        <item name="c_header_bg">#F0FAF7F2</item>
+        <item name="c_total_start">#F5EFE6</item>
+        <item name="c_total_end">#EDE4D6</item>
+        <item name="c_neu_surface">#FFFFFF</item>
+        <item name="c_neu_dark">#E8DFD2</item>
+        <item name="c_neu_sunken">#F2ECE3</item>
+        <item name="c_glass_tx">#2A2019</item>
+        <item name="c_glass_tx2">#5A4C3E</item>
+        <item name="c_glass_tx3">#8A7A68</item>
+        <item name="c_w_card">#FFFDF9</item>
+        <item name="c_w_tx">#1A1614</item>
+        <item name="c_w_tx2">#6B5D4F</item>
+        <item name="c_w_tx3">#8A7D6E</item>
+        <item name="c_w_div">#2E6B5D4F</item>
+        <item name="c_w_accent">#9A3412</item>
+        <item name="c_w_danger">#B91C1C</item>
+    </style>
+
+    <!-- Minimal 瑞士 -->
+    <style name="ThemeSwiss" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:fitsSystemWindows">false</item>
+        <item name="android:textColorPrimary">#0A0A0A</item>
+        <item name="android:textColorSecondary">#555555</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="c_bg">#FFFFFF</item>
+        <item name="c_card">#FFFFFF</item>
+        <item name="c_line">#E5E5E5</item>
+        <item name="c_tx">#0A0A0A</item>
+        <item name="c_tx2">#555555</item>
+        <item name="c_tx3">#808080</item>
+        <item name="c_tx_conv">#6B6B6B</item>
+        <item name="c_tx_detail">#2E2E2E</item>
+        <item name="c_hint">#808080</item>
+        <item name="c_accent">#0A0A0A</item>
+        <item name="c_accent_tx">#FFFFFF</item>
+        <item name="c_danger">#D92D20</item>
+        <item name="c_warn">#B45309</item>
+        <item name="c_btn">#F5F5F5</item>
+        <item name="c_input">#FAFAFA</item>
+        <item name="c_btn_border">#D4D4D4</item>
+        <item name="c_div_line">#1A000000</item>
+        <item name="c_header_bg">#F2FFFFFF</item>
+        <item name="c_total_start">#FAFAFA</item>
+        <item name="c_total_end">#F0F0F0</item>
+        <item name="c_neu_surface">#FFFFFF</item>
+        <item name="c_neu_dark">#E8E8E8</item>
+        <item name="c_neu_sunken">#F5F5F5</item>
+        <item name="c_glass_tx">#0A0A0A</item>
+        <item name="c_glass_tx2">#4A4A4A</item>
+        <item name="c_glass_tx3">#7A7A7A</item>
+        <item name="c_w_card">#FFFFFF</item>
+        <item name="c_w_tx">#0A0A0A</item>
+        <item name="c_w_tx2">#555555</item>
+        <item name="c_w_tx3">#808080</item>
+        <item name="c_w_div">#1F000000</item>
+        <item name="c_w_accent">#0A0A0A</item>
+        <item name="c_w_danger">#D92D20</item>
+    </style>
+
+    <!-- Devtool 终端 -->
+    <style name="ThemeDevtool" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#0A0A0A</item>
+        <item name="android:colorBackground">#0A0A0A</item>
+        <item name="android:fitsSystemWindows">false</item>
+        <item name="android:textColorPrimary">#E6E6E6</item>
+        <item name="android:textColorSecondary">#8A8A8A</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="c_bg">#0A0A0A</item>
+        <item name="c_card">#141414</item>
+        <item name="c_line">#262626</item>
+        <item name="c_tx">#E6E6E6</item>
+        <item name="c_tx2">#8A8A8A</item>
+        <item name="c_tx3">#5C5C5C</item>
+        <item name="c_tx_conv">#7A7A7A</item>
+        <item name="c_tx_detail">#C4C4C4</item>
+        <item name="c_hint">#5C5C5C</item>
+        <item name="c_accent">#3ECF8E</item>
+        <item name="c_accent_tx">#07130D</item>
+        <item name="c_danger">#F05252</item>
+        <item name="c_warn">#E3A008</item>
+        <item name="c_btn">#1A1A1A</item>
+        <item name="c_input">#111111</item>
+        <item name="c_btn_border">#333333</item>
+        <item name="c_div_line">#26FFFFFF</item>
+        <item name="c_header_bg">#E60A0A0A</item>
+        <item name="c_total_start">#121212</item>
+        <item name="c_total_end">#171717</item>
+        <item name="c_neu_surface">#141414</item>
+        <item name="c_neu_dark">#0D0D0D</item>
+        <item name="c_neu_sunken">#181818</item>
+        <item name="c_glass_tx">#E6E6E6</item>
+        <item name="c_glass_tx2">#8A8A8A</item>
+        <item name="c_glass_tx3">#5C5C5C</item>
+        <item name="c_w_card">#141414</item>
+        <item name="c_w_tx">#E6E6E6</item>
+        <item name="c_w_tx2">#8A8A8A</item>
+        <item name="c_w_tx3">#5C5C5C</item>
+        <item name="c_w_div">#26FFFFFF</item>
+        <item name="c_w_accent">#3ECF8E</item>
+        <item name="c_w_danger">#F05252</item>
+    </style>
+
+    <!-- Neo-Brutalism 撞色 -->
+    <style name="ThemeBrutal" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF8E7</item>
+        <item name="android:colorBackground">#FFF8E7</item>
+        <item name="android:fitsSystemWindows">false</item>
+        <item name="android:textColorPrimary">#000000</item>
+        <item name="android:textColorSecondary">#333333</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="c_bg">#FFF8E7</item>
+        <item name="c_card">#FFFFFF</item>
+        <item name="c_line">#000000</item>
+        <item name="c_tx">#000000</item>
+        <item name="c_tx2">#333333</item>
+        <item name="c_tx3">#555555</item>
+        <item name="c_tx_conv">#444444</item>
+        <item name="c_tx_detail">#111111</item>
+        <item name="c_hint">#666666</item>
+        <item name="c_accent">#FF5C5C</item>
+        <item name="c_accent_tx">#FFFFFF</item>
+        <item name="c_danger">#DC2626</item>
+        <item name="c_warn">#D97706</item>
+        <item name="c_btn">#FFE4A3</item>
+        <item name="c_input">#FFFFFF</item>
+        <item name="c_btn_border">#000000</item>
+        <item name="c_div_line">#33000000</item>
+        <item name="c_header_bg">#F2FFF8E7</item>
+        <item name="c_total_start">#FFE4A3</item>
+        <item name="c_total_end">#FFD166</item>
+        <item name="c_neu_surface">#FFFFFF</item>
+        <item name="c_neu_dark">#E8DCC0</item>
+        <item name="c_neu_sunken">#FFF1D0</item>
+        <item name="c_glass_tx">#000000</item>
+        <item name="c_glass_tx2">#333333</item>
+        <item name="c_glass_tx3">#555555</item>
+        <item name="c_w_card">#FFFFFF</item>
+        <item name="c_w_tx">#000000</item>
+        <item name="c_w_tx2">#333333</item>
+        <item name="c_w_tx3">#555555</item>
+        <item name="c_w_div">#26000000</item>
+        <item name="c_w_accent">#FF5C5C</item>
+        <item name="c_w_danger">#DC2626</item>
+    </style>
+
+    <!-- Soft Clay 柔和 -->
+    <style name="ThemeClay" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">#EEF1F6</item>
+        <item name="android:colorBackground">#EEF1F6</item>
+        <item name="android:fitsSystemWindows">false</item>
+        <item name="android:textColorPrimary">#2B3446</item>
+        <item name="android:textColorSecondary">#5A6B85</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="c_bg">#EEF1F6</item>
+        <item name="c_card">#F7F9FC</item>
+        <item name="c_line">#0FFFFFFF</item>
+        <item name="c_tx">#2B3446</item>
+        <item name="c_tx2">#5A6B85</item>
+        <item name="c_tx3">#8394AC</item>
+        <item name="c_tx_conv">#7889A3</item>
+        <item name="c_tx_detail">#3D4A60</item>
+        <item name="c_hint">#8394AC</item>
+        <item name="c_accent">#7C9CFF</item>
+        <item name="c_accent_tx">#FFFFFF</item>
+        <item name="c_danger">#E57373</item>
+        <item name="c_warn">#D9A05B</item>
+        <item name="c_btn">#E5EBF5</item>
+        <item name="c_input">#E9EEF6</item>
+        <item name="c_btn_border">#D3DCEA</item>
+        <item name="c_div_line">#1A5A6B85</item>
+        <item name="c_header_bg">#F2EEF1F6</item>
+        <item name="c_total_start">#E9EEF8</item>
+        <item name="c_total_end">#DFE7F3</item>
+        <item name="c_neu_surface">#F7F9FC</item>
+        <item name="c_neu_dark">#DCE3EE</item>
+        <item name="c_neu_sunken">#E8EDF5</item>
+        <item name="c_glass_tx">#2B3446</item>
+        <item name="c_glass_tx2">#5A6B85</item>
+        <item name="c_glass_tx3">#8394AC</item>
+        <item name="c_w_card">#F7F9FC</item>
+        <item name="c_w_tx">#2B3446</item>
+        <item name="c_w_tx2">#5A6B85</item>
+        <item name="c_w_tx3">#8394AC</item>
+        <item name="c_w_div">#1A5A6B85</item>
+        <item name="c_w_accent">#7C9CFF</item>
+        <item name="c_w_danger">#E57373</item>
+    </style>
+
 
     <!-- 弹窗统一外观 + 动画 -->
     <style name="AppDialogTheme" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
@@ -44,6 +334,8 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">vertical</item>
         <item name="android:background">@drawable/card_aurora</item>
+        <!-- tag=card：非 Aurora 主题下由 Theme.skin 重绘背景（直角 / 大圆角） -->
+        <item name="android:tag">card</item>
         <!-- 8pt 网格：27 → 24，对齐 skill 的固定间距集合 -->
         <item name="android:padding">24dp</item>
     </style>

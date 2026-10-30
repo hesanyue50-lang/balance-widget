@@ -5,5 +5,5 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners android:radius="999dp" />
-    <solid android:color="@color/btn_c" />
+    <solid android:color="?attr/c_btn" />
 </shape>

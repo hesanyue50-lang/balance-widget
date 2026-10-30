@@ -70,6 +70,8 @@ public class MimoLoginActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        /* 主题必须在 setContentView 之前应用：attr 是在 View 创建时解析的 */
+        Theme.apply(this);
         t0 = System.currentTimeMillis();
 
         LinearLayout root = new LinearLayout(this);
