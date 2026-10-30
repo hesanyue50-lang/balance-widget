@@ -1269,7 +1269,17 @@ public class VpnBinder {
                     if (!Clash.looksLikeClash(yaml)) {
                         err = "不是 Clash 格式（可能是 SS/V2Ray 链接集，或需在机场换用 Clash 订阅）";
                     } else {
-                        cnt = Clash.countProxies(yaml);
+                        /* 残缺内容绝不覆盖好配置：机场限流时会正常回 200 但只发一部分 body，
+                           照单全收的结果就是内核起不来（yaml 解析到一半 unexpected end of stream）。 */
+                        SubStore.Sub prev = SubStore.byId(act, sub.id);
+                        if (prev != null && Clash.suspiciouslyShorter(prev.yaml, yaml)) {
+                            err = "下载不完整（" + yaml.length() + " 字节，上次是 "
+                                    + prev.yaml.length() + " 字节）——可能是节点抖动或机场限流，"
+                                    + "已保留原配置，请稍后重试";
+                            yaml = null;
+                        } else {
+                            cnt = Clash.countProxies(yaml);
+                        }
                     }
                 } catch (Throwable t) {
                     err = String.valueOf(t.getMessage());

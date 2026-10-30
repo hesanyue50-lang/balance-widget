@@ -791,6 +791,12 @@ public final class Clash {
                             BalanceFetcher.diag(c, "自动更新失败（内容不是 Clash 配置）：" + s.name);
                             continue;
                         }
+                        /* 残缺内容不要覆盖：宁可留着旧的能用，也不要换成起不来的 */
+                        if (suspiciouslyShorter(s.yaml, info.yaml)) {
+                            BalanceFetcher.diag(c, "自动更新跳过（内容明显不完整："
+                                    + info.yaml.length() + " vs " + s.yaml.length() + "）：" + s.name);
+                            continue;
+                        }
                         SubStore.Sub fresh = SubStore.byId(c, s.id);
                         if (fresh == null) continue;
                         fresh.yaml = info.yaml;
@@ -963,6 +969,21 @@ public final class Clash {
         boolean hasRules = t.indexOf("rules:") >= 0;
         boolean hasGroup = t.indexOf("proxy-groups:") >= 0;
         return hasProxy || (hasRules && hasGroup);
+    }
+
+    /**
+     * 新下载的内容是否明显比上一份残缺。
+     *
+     * 实测：机场在节点抖动/限流时会**正常回 200 但只发一部分 body**（28533 字节变 7819，
+     * 553 行变 47 行），而我们原来会照单全收并覆盖好配置 —— 内核随即报
+     * "Parse config error: yaml: line 52: found unexpected end of stream"，
+     * 用户看到的就是「点更新之后反而起不来了」。长度骤降是最可靠的信号。
+     */
+    public static boolean suspiciouslyShorter(String oldYaml, String newYaml) {
+        if (oldYaml == null || newYaml == null) return false;
+        if (oldYaml.length() < 1000) return false;          // 旧的不够长，无从比较
+        if (newYaml.length() == 0) return true;
+        return newYaml.length() < oldYaml.length() * 0.6;
     }
 
     /** 粗数一下订阅里有多少个节点（给用户一个「导入成功」的直观反馈） */

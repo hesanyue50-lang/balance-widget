@@ -52,6 +52,8 @@ if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete \
         --exclude='build/' --exclude='*.apk' --exclude='*.idsig' \
         --exclude='.git/' --exclude='.buildcount' --exclude='tools/probe.jar' \
+        --exclude='.aaptcache/' \
+        --exclude='docs/' \
         "$SRC/" "$REPO/"
 else
     echo "⚠️ 没有 rsync：只能覆盖、不能同步删除（删掉的文件会残留在仓库里）"
