@@ -2142,7 +2142,7 @@ public class MainActivity extends Activity {
         sb.append("  ·  ").append(new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date()));
         if (r.failed > 0) sb.append("  ·  ").append(r.failed).append(" 项失败");
         tSub.setText(sb.toString());
-        tSub.setTextColor(getColor(r.failed > 0 ? R.color.warn : R.color.tx3));
+        tSub.setTextColor(Theme.c(this, r.failed > 0 ? R.attr.c_warn : R.attr.c_tx3));
 
         LayoutInflater inf = LayoutInflater.from(this);
         /* 按用户排好的顺序渲染（没排过就是原始顺序） */
@@ -2297,7 +2297,7 @@ public class MainActivity extends Activity {
                 }
                 amount.setTextSize(amtSize);
                 // 低于预警阈值 → 标红
-                amount.setTextColor(getColor(it.low ? R.color.danger : R.color.tx));
+                amount.setTextColor(Theme.c(this, it.low ? R.attr.c_danger : R.attr.c_tx));
                 /* 单位挂在数字右下角：网关是「积分」，其他平台是货币（¥/$ 已在 amount 里，
                    这里留空即可，别重复显示） */
                 if (it.unitOverride != null && it.unitOverride.length() > 0) {

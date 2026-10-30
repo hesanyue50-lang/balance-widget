@@ -97,7 +97,7 @@ public final class LockDialog {
     private static TextView button(Context ctx, String s, boolean primary, View.OnClickListener l) {
         TextView b = new TextView(ctx);
         b.setText(s);
-        b.setTextColor(ctx.getColor(primary ? R.color.accent_tx : R.color.tx));
+        b.setTextColor(Theme.c(ctx, primary ? R.attr.c_accent_tx : R.attr.c_tx));
         b.setTextSize(13);
         b.setGravity(Gravity.CENTER);
         // 等大统一：固定最小高度 + 统一描边背景（主按钮保留主色）
@@ -309,7 +309,7 @@ public final class LockDialog {
                                        View.OnClickListener l) {
         TextView b = new TextView(ctx);
         b.setText(s);
-        b.setTextColor(ctx.getColor(primary ? R.color.accent_tx : R.color.tx));
+        b.setTextColor(Theme.c(ctx, primary ? R.attr.c_accent_tx : R.attr.c_tx));
         b.setTextSize(12);
         b.setGravity(Gravity.CENTER);
         b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.mini_btn_border);

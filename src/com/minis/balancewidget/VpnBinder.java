@@ -209,9 +209,9 @@ public class VpnBinder {
             }
 
             mark.setText(sel ? "◉" : "○");
-            mark.setTextColor(act.getColor(sel ? R.color.accent : R.color.tx3));
+            mark.setTextColor(Theme.c(act, sel ? R.attr.c_accent : R.attr.c_tx3));
             t.setText(titles[i]);
-            t.setTextColor(act.getColor(sel ? R.color.accent : R.color.tx));
+            t.setTextColor(Theme.c(act, sel ? R.attr.c_accent : R.attr.c_tx));
             t.setTypeface(null, sel ? Typeface.BOLD : Typeface.NORMAL);
             d.setText(descs[i]);
         }
@@ -338,8 +338,8 @@ public class VpnBinder {
                 new android.graphics.drawable.GradientDrawable();
         fg.setCornerRadius(dp(3));
         /* 用满 → 红；接近用满 → 橙；正常 → 主题蓝 */
-        fg.setColor(act.getColor(frac >= 0.9f ? R.color.danger
-                : (frac >= 0.7f ? R.color.warn : R.color.accent)));
+        fg.setColor(Theme.c(act, frac >= 0.9f ? R.attr.c_danger
+                : (frac >= 0.7f ? R.attr.c_warn : R.attr.c_accent)));
         View fill = new View(act);
         fill.setBackground(fg);
 
@@ -624,7 +624,7 @@ public class VpnBinder {
             TextView mark = new TextView(act);
             mark.setText(on ? "◉" : "○");
             mark.setTextSize(14);
-            mark.setTextColor(act.getColor(on ? R.color.accent : R.color.tx3));
+            mark.setTextColor(Theme.c(act, on ? R.attr.c_accent : R.attr.c_tx3));
             mark.setWidth(dp(22));
             row.addView(mark);
 
@@ -636,7 +636,7 @@ public class VpnBinder {
             TextView nm = new TextView(act);
             nm.setText(sub.name + (on ? "   使用中" : ""));
             nm.setTextSize(14);
-            nm.setTextColor(act.getColor(on ? R.color.accent : R.color.tx));
+            nm.setTextColor(Theme.c(act, on ? R.attr.c_accent : R.attr.c_tx));
             if (on) nm.setTypeface(null, Typeface.BOLD);
             col.addView(nm);
 
@@ -714,12 +714,12 @@ public class VpnBinder {
             if (a == null || !a.ready()) sb.append("\n先在下面添加并更新一个订阅");
         }
         st.setText(sb.toString());
-        st.setTextColor(act.getColor(running ? R.color.tx2 : R.color.tx3));
+        st.setTextColor(Theme.c(act, running ? R.attr.c_tx2 : R.attr.c_tx3));
         renderRunInfo(running);
 
         if (run != null) {
             run.setText(running ? "停止加速" : "启动加速");
-            run.setTextColor(act.getColor(running ? R.color.danger : R.color.accent));
+            run.setTextColor(Theme.c(act, running ? R.attr.c_danger : R.attr.c_accent));
         }
     }
 
@@ -816,14 +816,14 @@ public class VpnBinder {
             TextView mark = new TextView(act);
             mark.setText(current ? "●" : "○");
             mark.setTextSize(12);
-            mark.setTextColor(act.getColor(current ? R.color.accent : R.color.tx3));
+            mark.setTextColor(Theme.c(act, current ? R.attr.c_accent : R.attr.c_tx3));
             mark.setWidth(dp(20));
             row.addView(mark);
 
             TextView nm = new TextView(act);
             nm.setText(n.name);
             nm.setTextSize(13);
-            nm.setTextColor(act.getColor(current ? R.color.accent : R.color.tx));
+            nm.setTextColor(Theme.c(act, current ? R.attr.c_accent : R.attr.c_tx));
             if (current) nm.setTypeface(null, Typeface.BOLD);
             nm.setSingleLine(true);
             nm.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);

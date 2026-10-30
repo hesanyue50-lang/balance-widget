@@ -159,7 +159,8 @@ public class SettingsBinder {
             box.addView(themeRow(i, i == cur));
         }
     }
-    private int color(int id) { return act.getColor(id); }
+    /** 读主题色。参数是 R.attr.cXxx，不是 R.color.Xxx —— R.color 不随主题变 */
+    private int color(int attr) { return Theme.c(act, attr); }
     private SharedPreferences prefs() {
         return act.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
     }
@@ -605,7 +606,7 @@ public class SettingsBinder {
         btn.setGravity(Gravity.CENTER);
         btn.setMinWidth(dp(64));
         btn.setPadding(dp(14), dp(8), dp(14), dp(8));
-        btn.setTextColor(color(R.color.accent));
+        btn.setTextColor(color(R.attr.c_accent));
         btn.setTextSize(13);
         btn.setTypeface(null, Typeface.BOLD);
         row.addView(btn);
@@ -761,7 +762,7 @@ public class SettingsBinder {
         if (q.length() > 0 && keyBlocks.isEmpty()) {
             TextView none = new TextView(act);
             none.setText("没有匹配「" + search + "」的平台或 Key");
-            none.setTextColor(color(R.color.tx3));
+            none.setTextColor(color(R.attr.c_tx3));
             none.setTextSize(12);
             box.addView(none);
         }
@@ -799,14 +800,14 @@ public class SettingsBinder {
 
         TextView label = new TextView(act);
         label.setText(name);
-        label.setTextColor(color(R.color.tx));
+        label.setTextColor(color(R.attr.c_tx));
         label.setTextSize(14);
         label.setTypeface(null, Typeface.BOLD);
         label.setLayoutParams(new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         head.addView(label);
 
-        TextView add = mkBtn("+ 添加", color(R.color.accent));
+        TextView add = mkBtn("+ 添加", color(R.attr.c_accent));
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(plat, null); }
         });
@@ -815,7 +816,7 @@ public class SettingsBinder {
         BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
         if (p != null && p.console != null && p.console.length() > 0) {
             final String url = p.console;
-            TextView site = mkBtn("控制台", color(R.color.tx2));
+            TextView site = mkBtn("控制台", color(R.attr.c_tx2));
             site.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     try {
@@ -832,7 +833,7 @@ public class SettingsBinder {
         if (mine.isEmpty()) {
             TextView t = new TextView(act);
             t.setText("还没填 Key（点「添加」）");
-            t.setTextColor(color(R.color.tx3));
+            t.setTextColor(color(R.attr.c_tx3));
             t.setTextSize(11.5f);
             t.setPadding(0, dp(6), 0, 0);
             wrap.addView(t);
@@ -851,13 +852,13 @@ public class SettingsBinder {
         TextView t = new TextView(act);
         String lb = k.label == null || k.label.length() == 0 ? "默认" : k.label;
         t.setText(lb + "   " + mask(k.key));
-        t.setTextColor(k.isConfigured() ? color(R.color.tx2) : color(R.color.tx3));
+        t.setTextColor(k.isConfigured() ? color(R.attr.c_tx2) : color(R.attr.c_tx3));
         t.setTextSize(12);
         t.setLayoutParams(new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         row.addView(t);
 
-        TextView edit = mkBtn("编辑", color(R.color.accent));
+        TextView edit = mkBtn("编辑", color(R.attr.c_accent));
         edit.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { editKey(k.platform, k); }
         });
@@ -880,7 +881,7 @@ public class SettingsBinder {
             }
         });
 
-        TextView del = mkBtn("删除", color(R.color.danger));
+        TextView del = mkBtn("删除", color(R.attr.c_danger));
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 Busy.run(act, "正在删除…", new Runnable() {
@@ -941,7 +942,7 @@ public class SettingsBinder {
 
         TextView l1 = new TextView(act);
         l1.setText("标签（区分同平台多个 Key）");
-        l1.setTextColor(color(R.color.tx2));
+        l1.setTextColor(color(R.attr.c_tx2));
         l1.setTextSize(12);
         panel.addView(l1);
         final EditText eLabel = new EditText(act);
@@ -951,7 +952,7 @@ public class SettingsBinder {
 
         TextView l2 = new TextView(act);
         l2.setText("密钥");
-        l2.setTextColor(color(R.color.tx2));
+        l2.setTextColor(color(R.attr.c_tx2));
         l2.setTextSize(12);
         l2.setPadding(0, dp(10), 0, 0);
         panel.addView(l2);
@@ -976,7 +977,7 @@ public class SettingsBinder {
            现在补到真正生效的这套界面里。 */
         TextView lThr = new TextView(act);
         lThr.setText("低余额预警阈值（0 = 不预警）");
-        lThr.setTextColor(color(R.color.tx2));
+        lThr.setTextColor(color(R.attr.c_tx2));
         lThr.setTextSize(12);
         lThr.setPadding(0, dp(12), 0, 0);
         panel.addView(lThr);
@@ -986,7 +987,7 @@ public class SettingsBinder {
                 + "　例：填 5　→　余额低于 5 元时提醒\n"
                 + "订阅制平台填的是「提前几天提醒」，填 3 就是到期前 3 天提醒。\n"
                 + "留空或填 0 = 不预警。阈值只有后台刷新时才判断，前台刷新不打扰你。");
-        tipThr.setTextColor(color(R.color.tx3));
+        tipThr.setTextColor(color(R.attr.c_tx3));
         tipThr.setTextSize(11.5f);
         tipThr.setLineSpacing(dp(2), 1f);
         tipThr.setPadding(0, dp(4), 0, 0);
@@ -1013,7 +1014,7 @@ public class SettingsBinder {
         if ("dashscope".equals(platform)) {
             TextView l3 = new TextView(act);
             l3.setText("阿里云 AccessKeyId（查余额用，LTAI 开头，可留空）");
-            l3.setTextColor(color(R.color.tx2));
+            l3.setTextColor(color(R.attr.c_tx2));
             l3.setTextSize(12);
             l3.setPadding(0, dp(12), 0, 0);
             panel.addView(l3);
@@ -1026,7 +1027,7 @@ public class SettingsBinder {
 
             TextView l4 = new TextView(act);
             l4.setText("阿里云 AccessKeySecret（可留空）");
-            l4.setTextColor(color(R.color.tx2));
+            l4.setTextColor(color(R.attr.c_tx2));
             l4.setTextSize(12);
             l4.setPadding(0, dp(12), 0, 0);
             panel.addView(l4);
@@ -1044,7 +1045,7 @@ public class SettingsBinder {
             modeRow.setPadding(0, dp(12), 0, 0);
             TextView l5 = new TextView(act);
             l5.setText("计费模式");
-            l5.setTextColor(color(R.color.tx2));
+            l5.setTextColor(color(R.attr.c_tx2));
             l5.setTextSize(12);
             modeRow.addView(l5);
             android.widget.RadioGroup rg = new android.widget.RadioGroup(act);
@@ -1076,7 +1077,7 @@ public class SettingsBinder {
                     + "订阅制＝查 Token Plan 实例与到期时间。"
                     + "AccessKey 在阿里云控制台创建，RAM 用户给只读权限即可。"
                     + "两项都填才会发起查询，否则卡片显示「见控制台」。");
-            tip.setTextColor(color(R.color.tx3));
+            tip.setTextColor(color(R.attr.c_tx3));
             tip.setTextSize(11.5f);
             tip.setPadding(0, dp(6), 0, 0);
             panel.addView(tip);
@@ -1092,14 +1093,14 @@ public class SettingsBinder {
                否则一进来只看到"网关地址"四个字，不知道背后是什么东西。 */
             TextView src1 = new TextView(act);
             src1.setText("本功能对接的是开源网关项目：");
-            src1.setTextColor(color(R.color.tx2));
+            src1.setTextColor(color(R.attr.c_tx2));
             src1.setTextSize(12);
             src1.setPadding(0, dp(4), 0, 0);
             panel.addView(src1);
 
             TextView lnk = new TextView(act);
             lnk.setText(GATEWAY_REPO);
-            lnk.setTextColor(color(R.color.accent));   // 走 token，暗色下才够亮
+            lnk.setTextColor(color(R.attr.c_accent));   // 走 token，暗色下才够亮
             lnk.setTextSize(12);
             lnk.setPaintFlags(lnk.getPaintFlags()
                     | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
@@ -1113,7 +1114,7 @@ public class SettingsBinder {
 
             TextView lw = new TextView(act);
             lw.setText("网关地址（必填）");
-            lw.setTextColor(color(R.color.tx2));
+            lw.setTextColor(color(R.attr.c_tx2));
             lw.setTextSize(12);
             lw.setPadding(0, dp(12), 0, 0);
             panel.addView(lw);
@@ -1131,7 +1132,7 @@ public class SettingsBinder {
                     + "点提示可复制启动命令。\n"
                     + "端口不是 7863 就改成实际端口；网关在别的机器上就填它的局域网地址。\n"
                     + "卡片菜单里的「控制台」会打开这个地址下的 /panel/ 页面。");
-            tipw.setTextColor(color(R.color.tx3));
+            tipw.setTextColor(color(R.attr.c_tx3));
             tipw.setTextSize(11.5f);
             tipw.setPadding(0, dp(6), 0, 0);
             panel.addView(tipw);
@@ -1186,7 +1187,7 @@ public class SettingsBinder {
             st.setText(hasSession
                     ? "登录状态：已登录（会话音已保存在本机）"
                     : "登录状态：未登录 —— 余额必须登录后才有（官方无 API Key 余额接口）");
-            st.setTextColor(color(hasSession ? R.color.tx2 : R.color.tx3));
+            st.setTextColor(color(hasSession ? R.attr.c_tx2 : R.attr.c_tx3));
             st.setTextSize(12);
             st.setPadding(0, dp(10), 0, 0);
             panel.addView(st);
@@ -1195,7 +1196,7 @@ public class SettingsBinder {
             btn.setText(hasSession ? "重新登录小米账号" : "登录小米账号（用于查余额）");
             btn.setGravity(Gravity.CENTER);
             btn.setTextSize(13);
-            btn.setTextColor(color(R.color.accent));
+            btn.setTextColor(color(R.attr.c_accent));
             btn.setPadding(0, dp(10), 0, dp(10));
             btn.setBackgroundResource(R.drawable.mini_btn_border);
             btn.setOnClickListener(new View.OnClickListener() {
@@ -1274,7 +1275,7 @@ public class SettingsBinder {
             row.setGravity(Gravity.CENTER_VERTICAL);
             TextView nm = new TextView(act);
             nm.setText(name);
-            nm.setTextColor(color(R.color.tx));
+            nm.setTextColor(color(R.attr.c_tx));
             nm.setTextSize(13);
             nm.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -1283,7 +1284,7 @@ public class SettingsBinder {
             Switch swCard = new Switch(act);
             swCard.setText("卡片");
             swCard.setTextSize(11.5f);
-            swCard.setTextColor(color(R.color.tx2));
+            swCard.setTextColor(color(R.attr.c_tx2));
             swCard.setChecked(hideCard);
             swCard.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
@@ -1307,7 +1308,7 @@ public class SettingsBinder {
             Switch swStat = new Switch(act);
             swStat.setText("统计");
             swStat.setTextSize(11.5f);
-            swStat.setTextColor(color(R.color.tx2));
+            swStat.setTextColor(color(R.attr.c_tx2));
             swStat.setChecked(drawOff);
             swStat.setTrackTintList(new android.content.res.ColorStateList(
                     new int[][] { { android.R.attr.state_checked }, { -android.R.attr.state_checked } },
@@ -1347,7 +1348,7 @@ public class SettingsBinder {
 
         TextView info = new TextView(act);
         info.setText("当前保存位置：" + curDesc);
-        info.setTextColor(color(R.color.tx));
+        info.setTextColor(color(R.attr.c_tx));
         info.setTextSize(13);
         panel.addView(info);
 
@@ -1355,7 +1356,7 @@ public class SettingsBinder {
         tip.setText("发生崩溃时会自动在这里保存一份日志，并发通知提醒你。\n"
                 + "把日志文件发给开发者就能快速定位问题。\n"
                 + "不设置就用系统的「下载」文件夹。");
-        tip.setTextColor(color(R.color.tx3));
+        tip.setTextColor(color(R.attr.c_tx3));
         tip.setTextSize(11.5f);
         tip.setLineSpacing(dp(3), 1f);
         tip.setPadding(0, dp(6), 0, 0);
@@ -1597,19 +1598,19 @@ public class SettingsBinder {
             else if ("between".equals(w.mode)) modeDesc = "区间";
             else modeDesc = "文本";
             t.setText(w.name + "  ·  " + modeDesc);
-            t.setTextColor(color(R.color.tx));
+            t.setTextColor(color(R.attr.c_tx));
             t.setTextSize(13);
             t.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             row.addView(t);
 
-            TextView test = mkBtn("测试", color(R.color.tx2));
+            TextView test = mkBtn("测试", color(R.attr.c_tx2));
             test.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { testWeb(idx); }
             });
             row.addView(test);
 
-            TextView share = mkBtn("分享", color(R.color.tx2));
+            TextView share = mkBtn("分享", color(R.attr.c_tx2));
             share.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     String json = PlatformPack.exportOneWeb(act, idx);
@@ -1633,13 +1634,13 @@ public class SettingsBinder {
             });
             row.addView(share);
 
-            TextView edit = mkBtn("编辑", color(R.color.accent));
+            TextView edit = mkBtn("编辑", color(R.attr.c_accent));
             edit.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { webDialog(idx); }
             });
             row.addView(edit);
 
-            TextView del = mkBtn("删除", color(R.color.danger));
+            TextView del = mkBtn("删除", color(R.attr.c_danger));
             del.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     List<WebCustom> list = WebCustom.loadAll(act);
@@ -1676,7 +1677,7 @@ public class SettingsBinder {
         if (ws.isEmpty()) {
             TextView t = new TextView(act);
             t.setText("还没有添加。适合监控任意网页上的一串数字 —— 比如自己搭的服务、公司内部面板、论坛积分。");
-            t.setTextColor(color(R.color.tx3));
+            t.setTextColor(color(R.attr.c_tx3));
             t.setTextSize(12);
             box.addView(t);
         }
@@ -1779,7 +1780,7 @@ public class SettingsBinder {
                 eKey);
 
         /* ---------- 网页登录 ---------- */
-        final TextView loginBtn = mkBtn("🌐 打开网页登录", color(R.color.accent));
+        final TextView loginBtn = mkBtn("🌐 打开网页登录", color(R.attr.c_accent));
         addField(panel, "④ 网页登录（需要登录才能看到数据时用）",
                 "很多平台的余额页面要先登录才显示。点下面的按钮，\n"
                         + "App 会内置打开这个网址 —— 你在里面正常登录（输账号、\n"
@@ -1850,7 +1851,7 @@ public class SettingsBinder {
             final int bi = i;
             TextView cap = new TextView(act);
             cap.setText("按钮 " + (i + 1));
-            cap.setTextColor(color(R.color.tx));
+            cap.setTextColor(color(R.attr.c_tx));
             cap.setTextSize(12);
             cap.setTypeface(null, Typeface.BOLD);
             cap.setPadding(0, i == 0 ? 0 : dp(14), 0, 0);
@@ -1890,7 +1891,7 @@ public class SettingsBinder {
         String[] quickVals = { "app:refresh", "app:home", "app:settings", "app:stats" };
         for (int qi = 0; qi < quickNames.length; qi++) {
             final String qv = quickVals[qi];
-            TextView q = mkBtn(quickNames[qi], color(R.color.tx2));
+            TextView q = mkBtn(quickNames[qi], color(R.attr.c_tx2));
             q.setPadding(dp(6), dp(4), dp(6), dp(4));
             /* 填到第一个还空着的地址框里 */
             q.setOnClickListener(new View.OnClickListener() {
@@ -1928,7 +1929,7 @@ public class SettingsBinder {
         advBox.setOrientation(LinearLayout.VERTICAL);
         advBox.setVisibility(View.GONE);
 
-        final TextView advToggle = mkBtn("▸ 高级选项（识别不准时再展开）", color(R.color.tx2));
+        final TextView advToggle = mkBtn("▸ 高级选项（识别不准时再展开）", color(R.attr.c_tx2));
         advToggle.setOnClickListener(new View.OnClickListener() {
             boolean open = false;
             public void onClick(View v) {
@@ -1947,7 +1948,7 @@ public class SettingsBinder {
 
         TextView advIntro = new TextView(act);
         advIntro.setText("下面这些全部有默认值，按需修改；");
-        advIntro.setTextColor(color(R.color.tx3));
+        advIntro.setTextColor(color(R.attr.c_tx3));
         advIntro.setTextSize(11.5f);
         LinearLayout.LayoutParams lpI = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1960,7 +1961,7 @@ public class SettingsBinder {
         final String[] modeNames = { "自动识别", "JSON 路径", "正则表达式", "区间截取", "整页文本" };
         final int[] modeIdx = { idxOf(w0.mode, modeVals) };
         final TextView modePick = mkLabel(modeNames[modeIdx[0]]);
-        modePick.setTextColor(color(R.color.accent));
+        modePick.setTextColor(color(R.attr.c_accent));
         modePick.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 modeIdx[0] = (modeIdx[0] + 1) % modeVals.length;
@@ -2115,7 +2116,7 @@ public class SettingsBinder {
         final String[] unitNames = { "人民币 ¥", "美元 $", "纯数值" };
         final int[] unitIdx = { idxOf(w0.unit, unitVals) };
         final TextView unitPick = mkLabel(unitNames[unitIdx[0]]);
-        unitPick.setTextColor(color(R.color.accent));
+        unitPick.setTextColor(color(R.attr.c_accent));
         unitPick.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 unitIdx[0] = (unitIdx[0] + 1) % unitVals.length;
@@ -2135,7 +2136,7 @@ public class SettingsBinder {
         final String[] kindNames = { "余额制（计入总资产）", "额度制（只展示）" };
         final int[] kindIdx = { idxOf(w0.kind, kindVals) };
         final TextView kindPick = mkLabel(kindNames[kindIdx[0]]);
-        kindPick.setTextColor(color(R.color.accent));
+        kindPick.setTextColor(color(R.attr.c_accent));
         kindPick.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 kindIdx[0] = (kindIdx[0] + 1) % kindVals.length;
@@ -2150,7 +2151,7 @@ public class SettingsBinder {
         /* ---------- 境外开关 ---------- */
         final TextView foreignPick = mkLabel(
                 w0.foreign ? "🌐 境外网站（走代理）" : "中国网站（直连）");
-        foreignPick.setTextColor(color(R.color.accent));
+        foreignPick.setTextColor(color(R.attr.c_accent));
         foreignPick.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 w0.foreign = !w0.foreign;
@@ -2315,7 +2316,7 @@ public class SettingsBinder {
     private void addField(LinearLayout box, String title, String desc, View control) {
         TextView t = new TextView(act);
         t.setText(title);
-        t.setTextColor(color(R.color.tx));
+        t.setTextColor(color(R.attr.c_tx));
         t.setTextSize(14);
         t.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams lp0 = new LinearLayout.LayoutParams(
@@ -2327,7 +2328,7 @@ public class SettingsBinder {
         if (desc != null && desc.length() > 0) {
             TextView d = new TextView(act);
             d.setText(desc);
-            d.setTextColor(color(R.color.tx3));
+            d.setTextColor(color(R.attr.c_tx3));
             d.setTextSize(11.5f);
             d.setLineSpacing(dp(3), 1f);
             LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(
@@ -2350,7 +2351,7 @@ public class SettingsBinder {
     private TextView mkLabel(String s) {
         TextView t = new TextView(act);
         t.setText(s);
-        t.setTextColor(color(R.color.tx2));
+        t.setTextColor(color(R.attr.c_tx2));
         t.setTextSize(12);
         t.setPadding(0, dp(8), 0, dp(2));
         return t;
@@ -2471,7 +2472,7 @@ public class SettingsBinder {
             String fn = it.fileLabel();
             if (fn != null) line += "\n📄 " + fn;
             t.setText(line);
-            t.setTextColor(ok ? color(R.color.tx) : color(R.color.tx2));
+            t.setTextColor(ok ? color(R.attr.c_tx) : color(R.attr.c_tx2));
             t.setTextSize(13);
             t.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -2479,14 +2480,14 @@ public class SettingsBinder {
 
             /* 损坏的就不给"恢复"按钮了，但保留"删除" —— 用户总得能清掉它 */
             if (ok) {
-                TextView rest = mkBtn("恢复", color(R.color.accent));
+                TextView rest = mkBtn("恢复", color(R.attr.c_accent));
                 rest.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) { askRestoreBackup(it); }
                 });
                 row.addView(rest);
             }
 
-            TextView del = mkBtn("删除", color(R.color.danger));
+            TextView del = mkBtn("删除", color(R.attr.c_danger));
             del.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { askDeleteBackup(it); }
             });
@@ -2593,17 +2594,17 @@ public class SettingsBinder {
             row.setGravity(Gravity.CENTER_VERTICAL);
             TextView t = new TextView(act);
             t.setText(cs.get(i).name);
-            t.setTextColor(color(R.color.tx));
+            t.setTextColor(color(R.attr.c_tx));
             t.setTextSize(13);
             t.setLayoutParams(new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             row.addView(t);
-            TextView edit = mkBtn("编辑", color(R.color.accent));
+            TextView edit = mkBtn("编辑", color(R.attr.c_accent));
             edit.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { customDialog(idx); }
             });
             row.addView(edit);
-            TextView del = mkBtn("删除", color(R.color.danger));
+            TextView del = mkBtn("删除", color(R.attr.c_danger));
             del.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
@@ -2802,7 +2803,7 @@ public class SettingsBinder {
            **确定的信息**，端点让用户按官方文档确认 —— 比盲加内置平台诚实得多。 */
         if (!isEdit) {
             /* 文案要点：说清"给什么"和"不给什么"，避免用户以为选了就能自动查 */
-            final TextView tpl = mkBtn("📋 从常见平台模板开始", color(R.color.accent));
+            final TextView tpl = mkBtn("📋 从常见平台模板开始", color(R.attr.c_accent));
             tpl.setPadding(dp(12), dp(8), dp(12), dp(8));
             tpl.setTextSize(13);
             tpl.setOnClickListener(new View.OnClickListener() {
@@ -2818,7 +2819,7 @@ public class SettingsBinder {
             tplTip.setText("自动填好名称、币种、控制台地址。\n"
                     + "不会自动查余额 —— 多数平台没有公开的余额接口，\n"
                     + "选「仅记录」会显示「余额见控制台」，点卡片跳过去看。");
-            tplTip.setTextColor(color(R.color.tx3));
+            tplTip.setTextColor(color(R.attr.c_tx3));
             tplTip.setTextSize(11.5f);
             tplTip.setLineSpacing(dp(2), 1f);
             tplTip.setPadding(dp(4), dp(6), dp(4), dp(10));
@@ -2922,8 +2923,13 @@ public class SettingsBinder {
 
     /** 安全与密码区块（与设置页原实现等价，内联在密钥区同层之后） */
     private void buildSecuritySection() {
-        View keyCard = root.findViewById(R.id.key_card);
-        ViewGroup parent = keyCard == null ? null : (ViewGroup) keyCard.getParent();
+        /* 挂进「其他」折叠容器：安全设置属于低频入口，和其它未分类项放一起。
+           more_box 取不到（老布局）时退回原来的位置，不至于整块消失。 */
+        ViewGroup parent = (ViewGroup) root.findViewById(R.id.more_box);
+        if (parent == null) {
+            View keyCard = root.findViewById(R.id.key_card);
+            parent = keyCard == null ? null : (ViewGroup) keyCard.getParent();
+        }
         if (parent == null) return;
 
         LinearLayout box = new LinearLayout(act);
@@ -2935,13 +2941,13 @@ public class SettingsBinder {
 
         TextView title = new TextView(act);
         title.setText("安全");
-        title.setTextColor(color(R.color.tx));      // 与其它分区标题一致（14sp + 主文字色）
+        title.setTextColor(color(R.attr.c_tx));      // 与其它分区标题一致（14sp + 主文字色）
         title.setTextSize(14);
         title.setTypeface(null, Typeface.BOLD);
         box.addView(title);
 
         final TextView btn = mkBtn(Lock.isSet(act) ? "密码保护已开启（点击修改或清除）" : "设置密码保护",
-                color(R.color.accent));
+                color(R.attr.c_accent));
         btn.setPadding(dp(12), dp(8), dp(12), dp(8));
         btn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -3003,7 +3009,7 @@ public class SettingsBinder {
         panel.setPadding(dp(20), dp(8), dp(20), 0);
         TextView q = new TextView(act);
         q.setText("密保问题：" + Lock.question(act));
-        q.setTextColor(color(R.color.tx2));
+        q.setTextColor(color(R.attr.c_tx2));
         q.setTextSize(13);
         panel.addView(q);
         panel.addView(ans);
@@ -3085,7 +3091,7 @@ public class SettingsBinder {
         boolean on = RefreshScheduler.powerSave(ctx);
         ps.setText(on ? ctx.getString(R.string.ps_on) : ctx.getString(R.string.ps_off));
         try {
-            ps.setTextColor(ctx.getColor(on ? R.color.accent : R.color.tx3));
+            ps.setTextColor(Theme.c(ctx, on ? R.attr.c_accent : R.attr.c_tx3));
         } catch (Throwable ignored) { }
     }
 }

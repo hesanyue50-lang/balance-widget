@@ -158,7 +158,7 @@ public class SettingsActivity extends Activity {
                 ? "🔒 已启用密码保护 · 点小组件上的卡片看密钥需验证"
                     + (Lock.hasQuestion(this) ? " · 已设密保" : " · 未设密保问题")
                 : "⚠️ 还没设查看密码 —— 设了以后，查看 API 密钥都要先验证";
-        box.addView(mkText(st, getColor(Lock.isSet(this) ? R.color.tx2 : R.color.warn), 12f, 0));
+        box.addView(mkText(st, Theme.c(this, Lock.isSet(this) ? R.attr.c_tx2 : R.attr.c_warn), 12f, 0));
 
         TextView btn = mkText(Lock.isSet(this) ? "重置查看密码" : "设置查看密码",
                 Theme.c(this, R.attr.c_accent_tx), 13f, 10);
