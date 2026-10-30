@@ -215,6 +215,34 @@ public class SettingsBinder {
         if (eFg != null) eFg.setOnFocusChangeListener(fc);
         if (eBg != null) eBg.setOnFocusChangeListener(fc);
 
+        // ---- 「其他」区折叠（默认收起，状态记 prefs）----
+        final View moreBox = root.findViewById(R.id.more_box);
+        final TextView moreToggle = (TextView) root.findViewById(R.id.more_toggle);
+        final boolean moreOpened = prefs().getBoolean("more_opened", false);
+        if (moreBox != null) moreBox.setVisibility(moreOpened ? View.VISIBLE : View.GONE);
+        if (moreToggle != null) {
+            moreToggle.setText(moreOpened
+                    ? act.getString(R.string.toggle_collapse)
+                    : act.getString(R.string.toggle_expand));
+            moreToggle.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (moreBox == null) return;
+                    boolean now = moreBox.getVisibility() != View.VISIBLE;
+                    prefs().edit().putBoolean("more_opened", now).apply();
+                    moreToggle.setText(now
+                            ? act.getString(R.string.toggle_collapse)
+                            : act.getString(R.string.toggle_expand));
+                    if (now) {
+                        Anim.expand(moreBox);
+                        /* 里面有运行时重建的卡片（备份列表等），补一次套皮 */
+                        Theme.skin(act, moreBox);
+                    } else {
+                        Anim.collapse(moreBox);
+                    }
+                }
+            });
+        }
+
         // ---- 外观区折叠（默认收起，状态记 prefs）----
         final View themeBox = root.findViewById(R.id.theme_box);
         final TextView themeToggle = (TextView) root.findViewById(R.id.theme_toggle);
