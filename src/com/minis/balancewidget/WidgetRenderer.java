@@ -346,7 +346,10 @@ public final class WidgetRenderer {
      *                 同时塞进 extra，让连击计数能按实例分开。
      */
     private static PendingIntent pi(Context ctx, String action, int code, int widgetId) {
-        Intent it = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(ctx.getPackageName());
+        /* 定向单播给主 Provider，**不能**用 setPackage 广播：
+           ACTION_TAP 会被 8 个 Provider 各收一次，一次单击被记成 8 下，
+           单击直接判成三击。连击计数只该有一个地方做。 */
+        Intent it = new Intent(ctx, BalanceWidgetProvider.class);
         it.setAction(action);
         it.putExtra("widgetId", widgetId);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;

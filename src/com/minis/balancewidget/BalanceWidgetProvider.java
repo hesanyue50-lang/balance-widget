@@ -258,9 +258,13 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                 } else if (n == 2) {
                     openApp(ctx);
                 } else {
-                    /* 单击 = 老行为：用缓存重画一次 */
+                    /* 单击 = 刷新一次：真的联网取最新，别只重画缓存 ——
+                       用户点一下就是想看新数字，转圈不转数据等于没反应。
+                       受 MIN_GAP_MS 节流保护，连点不会打爆接口；
+                       想跳过闸门立刻重拉，就三击。 */
+                    BalanceFetcher.diag(ctx, "小组件单击 → 联网刷新");
                     Intent it = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
-                    it.setAction(ACTION_FORCE_REDRAW);
+                    it.setAction(ACTION_REFRESH);
                     ctx.sendBroadcast(it);
                 }
             }
