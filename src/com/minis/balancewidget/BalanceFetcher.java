@@ -3049,7 +3049,7 @@ public class BalanceFetcher {
             } else if (looksLikeCookie(k)) {
                 String body;
                 try {
-                    body = get(OPENAI_CREDITS_URL, null, openaiCookie(k), Math.max(t, 12000));
+                    body = get(OPENAI_CREDITS_URL, null, openaiCookie(k), Math.max(Math.min(t, 12000), 3000));
                 } catch (StatusException se) {
                     /* 401/403 多半是会话过期或 Cloudflare 拦了 */
                     it.ok = true;
@@ -3400,7 +3400,7 @@ public class BalanceFetcher {
             }
             String body;
             try {
-                body = get(MIMO_BALANCE_URL, null, ck, Math.max(t, 9000));
+                body = get(MIMO_BALANCE_URL, null, ck, Math.max(Math.min(t, 9000), 3000));
             } catch (StatusException se) {
                 /* 401/302 基本都是登录态过期（小米账号会话有有效期） */
                 diag(ctx, "MiMo 余额被拒 " + se.getMessage());
@@ -3476,7 +3476,7 @@ public class BalanceFetcher {
             String url = "https://api.qnaigc.com/v3/stat/usage/apikey/cost-detail"
                     + "?start_date=" + td.substring(0, 8) + "01&end_date=" + td;
             // 七牛账单接口间歇性慢（实测 0.2s~9s 抖动），给足预算 + get() 内超时重试兜底
-            JSONObject root = new JSONObject(get(url, key, Math.max(t, 9000)));
+            JSONObject root = new JSONObject(get(url, key, Math.max(Math.min(t, 9000), 3000)));
             if (!root.optBoolean("status", true)) {
                 JSONObject err = root.optJSONObject("error");
                 throw new Exception(err != null ? err.optString("message", "查询失败") : "查询失败");

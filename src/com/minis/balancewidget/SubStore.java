@@ -149,11 +149,41 @@ public final class SubStore {
         return new ArrayList<Sub>(out);
     }
 
+    /**
+     * 必须返回**副本**。
+     *
+     * all() 命中缓存时只复制了 List 外壳，元素还是缓存里那一批实例；
+     * 调用方（Clash / VpnBinder）的用法是「byId 取出来 → 改 yaml → update 回去」，
+     * 拿到的若就是缓存实例，update() 里 `old.yaml.equals(sub.yaml)` 永远成立，
+     * prevYaml 永远存不下上一版，rollback() 于是恒返回 false ——
+     * 整个「残缺配置自动回滚」是死代码。
+     */
     public static Sub byId(Context c, String id) {
-        if (id == null) return null;
-        List<Sub> l = all(c);
-        for (int i = 0; i < l.size(); i++) if (id.equals(l.get(i).id)) return l.get(i);
+        java.util.List<Sub> l = all(c);
+        for (int i = 0; i < l.size(); i++) {
+            Sub s = l.get(i);
+            if (s != null && s.id != null && s.id.equals(id)) return copyOf(s);
+        }
         return null;
+    }
+
+    /** Sub 的浅层深拷贝（全是值类型字段，逐字段抄一遍即可） */
+    private static Sub copyOf(Sub s) {
+        Sub d = new Sub();
+        d.id = s.id;
+        d.name = s.name;
+        d.url = s.url;
+        d.yaml = s.yaml;
+        d.prevYaml = s.prevYaml;
+        d.updatedAt = s.updatedAt;
+        d.nodeCount = s.nodeCount;
+        d.up = s.up;
+        d.down = s.down;
+        d.total = s.total;
+        d.expire = s.expire;
+        d.trafficAt = s.trafficAt;
+        d.autoUpdate = s.autoUpdate;
+        return d;
     }
 
     /** 当前启用的订阅 id（没有则空串） */

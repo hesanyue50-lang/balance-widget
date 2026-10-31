@@ -720,13 +720,13 @@ public class SettingsBinder {
                         int pi = Integer.parseInt(pf.substring(7));
                         List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(act);
                         orphan = pi < 0 || pi >= cs.size();
-                    } catch (Throwable ig) { orphan = true; }
+                    } catch (Throwable ig) { orphan = false; }   // 读不出来就保留，别当孤儿删掉
                 } else if (pf.startsWith("web:")) {
                     try {
                         int pi = Integer.parseInt(pf.substring(4));
                         List<WebCustom> ws = WebCustom.loadAll(act);
                         orphan = pi < 0 || pi >= ws.size();
-                    } catch (Throwable ig) { orphan = true; }
+                    } catch (Throwable ig) { orphan = false; }   // 同理
                 }
                 if (orphan) {
                     changed = true;
@@ -1181,6 +1181,16 @@ public class SettingsBinder {
                         ? "subscription"
                         : (eAkId[0] != null ? "balance" : src.planMode);
                 k.hideCard = src.hideCard;
+                /* 密文本体原样带过去。
+                   换机／刷机／清 Keystore 之后 KeyVault.dec() 会返回空串，
+                   此时 src.key 是空的，但 src.rawKey 里还留着磁盘上的原密文。
+                   不拷的话 KeyStore.save() 那条"key 空就写回原密文"的保护条件
+                   永远不成立，用户改一下备注就把这个 Key 的密文永久覆盖成空。 */
+                if (k.key.length() == 0) {
+                    k.rawKey = src.rawKey;
+                    k.rawAccessKeyId = src.rawAccessKeyId;
+                    k.rawAccessKeySecret = src.rawAccessKeySecret;
+                }
                 k.baseUrl = (eBase[0] != null)
                         ? BalanceFetcher.normalizeBase(eBase[0].getText().toString())
                         : src.baseUrl;
@@ -3102,7 +3112,7 @@ public class SettingsBinder {
 
     private void kick() {
         try {
-            Intent it = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(act.getPackageName());
+            Intent it = new Intent(act, BalanceWidgetProvider.class);
             it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             act.sendBroadcast(it);
         } catch (Throwable ignored) { }

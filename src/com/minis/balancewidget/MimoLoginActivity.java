@@ -197,7 +197,7 @@ public class MimoLoginActivity extends Activity {
     /** 让桌面小组件立刻重刷一次，不用等下一个周期 */
     private void kickWidget() {
         try {
-            Intent it = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(getPackageName());
+            Intent it = new Intent(this, BalanceWidgetProvider.class);
             it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             sendBroadcast(it);
         } catch (Throwable ignored) { }

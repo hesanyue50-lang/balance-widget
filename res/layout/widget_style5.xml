@@ -16,13 +16,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="left">
             android:background="#FF000000"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
-
+            android:gravity="left">
             <TextView
                 android:id="@+id/w2_title"
                 android:layout_width="0dp"
@@ -55,7 +54,7 @@
                 android:layout_height="22dp"
                 android:layout_marginStart="2dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_chevron_left"
+                android:src="@drawable/ic_chevron_left_dark"
                 android:contentDescription="上一页" />
 
             <ImageView
@@ -65,7 +64,7 @@
                 android:layout_width="22dp"
                 android:layout_height="22dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_chevron_right"
+                android:src="@drawable/ic_chevron_right_dark"
                 android:contentDescription="下一页" />
 
             <ImageView
@@ -76,7 +75,7 @@
                 android:layout_height="22dp"
                 android:layout_marginStart="6dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_refresh"
+                android:src="@drawable/ic_refresh_dark"
                 android:contentDescription="刷新" />
         </LinearLayout>
 
@@ -137,10 +136,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot1"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name1"
@@ -177,10 +179,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot2"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name2"
@@ -213,7 +218,7 @@
                 android:layout_height="2dp"
                 android:layout_marginTop="1dp"
                 android:visibility="gone"
-                android:background="#FF000000" />
+                android:background="@color/ws5_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row2"
@@ -234,10 +239,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot3"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name3"
@@ -274,10 +282,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot4"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name4"
@@ -310,7 +321,7 @@
                 android:layout_height="2dp"
                 android:layout_marginTop="1dp"
                 android:visibility="gone"
-                android:background="#FF000000" />
+                android:background="@color/ws5_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row3"
@@ -331,10 +342,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot5"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name5"
@@ -371,10 +385,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot6"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name6"
@@ -407,7 +424,7 @@
                 android:layout_height="2dp"
                 android:layout_marginTop="1dp"
                 android:visibility="gone"
-                android:background="#FF000000" />
+                android:background="@color/ws5_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row4"
@@ -428,10 +445,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot7"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name7"
@@ -468,10 +488,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot8"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws5_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws5_accent" />
 
                     <TextView
                         android:id="@+id/w2_name8"

@@ -213,7 +213,7 @@ public class OpenAILoginActivity extends Activity {
 
     private void kickWidget() {
         try {
-            android.content.Intent it = new android.content.Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(getPackageName());
+            android.content.Intent it = new android.content.Intent(this, BalanceWidgetProvider.class);
             it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             sendBroadcast(it);
         } catch (Throwable ignored) { }

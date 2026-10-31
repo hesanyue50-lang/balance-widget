@@ -78,6 +78,16 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             new java.util.HashMap<Integer, Long>();
     private static final Object TAP_LOCK = new Object();
 
+    /**
+     * 连击序列号：每开一个新序列 +1，已排队的回调只认自己那一代。
+     *
+     * 光靠"计数值仍等于 n"认领是不够的：用户在第二次点击后又隔了超过窗口
+     * 再点第三下时，计数器会被重置成 1，于是前两次排队的回调全部作废 ——
+     * 一次合法的双击被吞掉，表现就是"双击有时打开有时不打开"。
+     */
+    private static final java.util.HashMap<Integer, Integer> TAP_GEN =
+            new java.util.HashMap<Integer, Integer>();
+
     /** 后台抓取的超时预算（毫秒）。数组里的平台会并发抓，总耗时≈最慢的那个 */
     private static final int FETCH_TIMEOUT_MS = 8000;
 
@@ -103,6 +113,37 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
      */
     public int fixedStyle() {
         return -1;
+    }
+
+    /** 组件被移除：清掉它的连击状态，别让静态 Map 一直挂着 */
+    @Override
+    public void onDeleted(Context ctx, int[] ids) {
+        if (ids == null) return;
+        synchronized (TAP_LOCK) {
+            for (int i = 0; i < ids.length; i++) {
+                Integer k = Integer.valueOf(ids[i]);
+                TAPS.remove(k);
+                TAP_AT.remove(k);
+                TAP_GEN.remove(k);
+            }
+        }
+    }
+
+    /**
+     * 用户缩放组件后重画。
+     *
+     * 容器一变，capacityFor() 算出的每页行数就变了，但系统不会因此调 onUpdate ——
+     * 不重画的话，组件还按旧尺寸排着内容：大了留白、小了被裁，
+     * 当前页码在新尺寸下越界时还会整片空白。
+     */
+    @Override
+    public void onAppWidgetOptionsChanged(Context ctx, AppWidgetManager mgr,
+                                          int id, android.os.Bundle newOptions) {
+        try {
+            safeRedraw(ctx);
+        } catch (Throwable t) {
+            BalanceFetcher.diag(ctx, "缩放重绘异常: " + t);
+        }
     }
 
     @Override
@@ -142,7 +183,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         if (ACTION_FORCE_REDRAW.equals(a)) {
             safeRedraw(ctx);
             /* 重画完立刻排一次联网取数，把数字换成最新的 */
-            Intent nxt = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
+            Intent nxt = new Intent(ctx, BalanceWidgetProvider.class);
             nxt.setAction(ACTION_REFRESH);
             ctx.sendBroadcast(nxt);
             return;
@@ -150,7 +191,8 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
 
         /* 点组件本体：按连击次数分派 —— 单击同步缓存 / 双击打开应用 / 三击强制重拉 */
         if (ACTION_TAP.equals(a)) {
-            handleTap(ctx, intent == null ? -1 : intent.getIntExtra("widgetId", -1));
+            handleTap(ctx, intent == null ? -1 : intent.getIntExtra("widgetId", -1),
+                      intent == null ? 10 : intent.getIntExtra("tapCode", 10));
             return;
         }
 
@@ -219,8 +261,20 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
      * 为什么要等一小会儿再执行：收到第 1 击时不知道后面还有没有第 2 击，
      * 只能等连击窗口过去再判定。窗口取 500ms —— 再长用户会觉得点了没反应。
      */
-    private void handleTap(final Context ctx, final int widgetId) {
+    private void handleTap(final Context ctx, final int widgetId, final int code) {
+        /* 刷新按钮不参与连击判定。
+           两者共用同一个 TAPS 计数器时，用户点一下刷新觉得没反应、再点一下，
+           计数就成 2 → 直接跳去打开应用，而不是再刷一次。 */
+        if (code == 11) {
+            BalanceFetcher.diag(ctx, "小组件刷新按钮 → 刷新");
+            Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+            it.setAction(ACTION_REFRESH);
+            ctx.sendBroadcast(it);
+            return;
+        }
+
         final int n;
+        final int gen;
         synchronized (TAP_LOCK) {
             long now = System.currentTimeMillis();
             Long last = TAP_AT.get(widgetId);
@@ -228,44 +282,72 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             if (cnt == null || last == null || now - last.longValue() > MULTI_TAP_GAP_MS) {
                 cnt = new int[] { 0 };
                 TAPS.put(widgetId, cnt);
+                /* 每开一个新序列就 +1。回调只认自己那一代 ——
+                   原来靠"计数值仍等于 n"认领，第三下（距第二下已超窗口）会把
+                   计数器重置成 1，于是前面排队的两次回调全部作废，
+                   合法的双击被吞掉，表现就是"双击有时打开有时不打开"。 */
+                Integer g0 = TAP_GEN.get(widgetId);
+                TAP_GEN.put(widgetId, Integer.valueOf(g0 == null ? 1 : g0.intValue() + 1));
             }
             cnt[0]++;
             TAP_AT.put(widgetId, Long.valueOf(now));
             n = cnt[0];
-            /* 实例数防膨胀（卸载小组件后对应条目没人清） */
-            if (TAPS.size() > 8) {
-                TAPS.clear();
-                TAP_AT.clear();
-                TAPS.put(widgetId, new int[] { 1 });
-                TAP_AT.put(widgetId, Long.valueOf(now));
+            gen = TAP_GEN.get(widgetId).intValue();
+
+            /* 防膨胀：只淘汰 30 秒没动过的实例。
+               原来 >8 就整表 clear()：桌面放满 8 个组件后每次点击都把计数清回 1，
+               双击永远打不开应用，被清掉的其他实例连单击都没反应。 */
+            if (TAPS.size() > 16) {
+                java.util.Iterator<java.util.Map.Entry<Integer, Long>> itr =
+                        TAP_AT.entrySet().iterator();
+                while (itr.hasNext()) {
+                    java.util.Map.Entry<Integer, Long> e = itr.next();
+                    if (now - e.getValue().longValue() > 30000L) {
+                        Integer k = e.getKey();
+                        itr.remove();
+                        TAPS.remove(k);
+                        TAP_GEN.remove(k);
+                    }
+                }
             }
         }
         BalanceFetcher.diag(ctx, "小组件点击 第 " + n + " 下");
+
+        /* onReceive 马上就要返回。不 goAsync 撑住的话，这 560ms 里进程随时可能被
+           系统回收 —— 表现就是"点了没反应"，连 diag 都留不下一条。 */
+        final android.content.BroadcastReceiver.PendingResult pr = goAsync();
 
         /* 等连击窗口过去再动手；期间后续点击会继续累加 tapCount。
            用主线程 postDelayed 而不是 new Thread + sleep：这只是个延时，
            连点 5 下就是 5 个线程（每个 1MB 栈），完全没必要。 */
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
             public void run() {
-                synchronized (TAP_LOCK) {
-                    int[] cnt = TAPS.get(widgetId);
-                    /* 窗口内又点了 → 说明是多击，交给那一次的处理去执行 */
-                    if (cnt == null || cnt[0] != n) return;
-                    cnt[0] = 0;
-                }
-                if (n >= 3) {
-                    forceFetch(ctx);
-                } else if (n == 2) {
-                    openApp(ctx);
-                } else {
-                    /* 单击 = 刷新一次：真的联网取最新，别只重画缓存 ——
-                       用户点一下就是想看新数字，转圈不转数据等于没反应。
-                       受 MIN_GAP_MS 节流保护，连点不会打爆接口；
-                       想跳过闸门立刻重拉，就三击。 */
-                    BalanceFetcher.diag(ctx, "小组件单击 → 联网刷新");
-                    Intent it = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
-                    it.setAction(ACTION_REFRESH);
-                    ctx.sendBroadcast(it);
+                try {
+                    synchronized (TAP_LOCK) {
+                        int[] cnt = TAPS.get(widgetId);
+                        Integer g = TAP_GEN.get(widgetId);
+                        /* 只认自己那一代：期间开了新序列就说明这次是旧的，作废 */
+                        if (cnt == null || g == null || g.intValue() != gen || cnt[0] != n) return;
+                        cnt[0] = 0;
+                    }
+                    if (n >= 3) {
+                        forceFetch(ctx);
+                    } else if (n == 2) {
+                        openApp(ctx);
+                    } else {
+                        /* 单击 = 刷新一次：真的联网取最新，别只重画缓存 ——
+                           用户点一下就是想看新数字，转圈不转数据等于没反应。
+                           受 MIN_GAP_MS 节流保护，连点不会打爆接口；
+                           想跳过闸门立刻重拉，就三击。 */
+                        BalanceFetcher.diag(ctx, "小组件单击 → 联网刷新");
+                        Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+                        it.setAction(ACTION_REFRESH);
+                        ctx.sendBroadcast(it);
+                    }
+                } catch (Throwable t) {
+                    BalanceFetcher.diag(ctx, "连击判定异常: " + t);
+                } finally {
+                    try { pr.finish(); } catch (Throwable ignored) { }
                 }
             }
         }, MULTI_TAP_GAP_MS + 60);
@@ -282,7 +364,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                     try { Thread.sleep(wait[i]); } catch (InterruptedException ig) { return; }
                     if (!FETCHING.get()) {
                         FORCE_ONCE.set(true);
-                        Intent it = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
+                        Intent it = new Intent(ctx, BalanceWidgetProvider.class);
                         it.setAction(ACTION_REFRESH);
                         ctx.sendBroadcast(it);
                         return;
@@ -319,7 +401,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
            请求会挤在一起反而都超时，交给 retryForceLater 排队重试。 */
         FORCE_ONCE.set(true);
         try {
-            Intent it = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
+            Intent it = new Intent(ctx, BalanceWidgetProvider.class);
             it.setAction(ACTION_REFRESH);
             ctx.sendBroadcast(it);
         } catch (Throwable t) {
@@ -446,9 +528,10 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                             BalanceFetcher.diag(ctx, "本轮 " + r.configured + " 个平台全失败，保留缓存");
                             Alert.check(ctx, r);
                             if (hasWidget) {
-                                int pg = clampPage(ctx, mgr, old, ids[0]);
-                                for (int i = 0; i < ids.length; i++) {
-                                    WidgetRenderer.renderResult(ctx, mgr, ids[i], old, pg);
+                                int pg = clampPage(ctx, mgr, old, ids);
+                                int[] allOld = allWidgetIds(ctx, mgr);
+                                for (int i = 0; i < allOld.length; i++) {
+                                    WidgetRenderer.renderResult(ctx, mgr, allOld[i], old, pg);
                                 }
                             }
                             return;
@@ -463,13 +546,15 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                     BalanceFetcher.sampleIfDue(ctx, r);
 
                     int page = 0;
-                    if (hasWidget) page = clampPage(ctx, mgr, r, ids[0]);
+                    if (hasWidget) page = clampPage(ctx, mgr, r, ids);
                     WidgetCache.save(ctx, r, page);
 
-                    if (hasWidget) {
-                        for (int i = 0; i < ids.length; i++) {
-                            WidgetRenderer.renderResult(ctx, mgr, ids[i], r, page);
-                        }
+                    /* 用 allWidgetIds 而不是入参 ids：onUpdate 传进来的 ids 只含
+                       "当前这个 Provider"的实例，另外 7 个风格的组件永远等不到
+                       这一轮的结果，会一直停在「正在刷新」。 */
+                    int[] all = allWidgetIds(ctx, mgr);
+                    for (int i = 0; i < all.length; i++) {
+                        WidgetRenderer.renderResult(ctx, mgr, all[i], r, page);
                     }
                     BalanceFetcher.diag(ctx, "刷新完成 hasWidget=" + hasWidget
                             + " 成功 " + WidgetCache.okCount(r) + "/" + r.items.size()
@@ -486,16 +571,27 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
 
     /** 当前页码不能超出实际页数（条目变少时要收回来） */
     private static int clampPage(Context ctx, AppWidgetManager mgr,
-                                 BalanceFetcher.Result r, int widgetId) {
-        int perPage = WidgetStyle.capacityFor(mgr, widgetId);
+                                 BalanceFetcher.Result r, int[] ids) {
         /* 必须和渲染器用同一套算法（groupByKind + computeSlots 补行后的槽位数）。
            以前这里用 r.items.size()，而槽位数 ≥ 条目数 —— 算出的页数偏小，
            刷新/后台闹钟一回就把页码夹到少一页以上，最后几页永远到不了。
-           （注释里自己记着实测 items=6 但槽位=9。） */
-        int cols = WidgetStyle.colsFor(mgr, widgetId);
+           （注释里自己记着实测 items=6 但槽位=9。）
+
+           页数是**全局**的（WidgetCache.page），所以必须按所有实例里最小的容量算：
+           只取 ids[0] 的话，用户翻到第 2 页后一刷新，页码会被容纳量大的那个实例
+           夹回去，另一个实例显示又对不上。 */
         java.util.List<BalanceFetcher.Item> grouped = BalanceFetcher.groupByKind(r.items);
-        int slots = WidgetRenderer.computeSlots(grouped, cols, null, null);
-        int pages = Math.max(1, (slots + perPage - 1) / perPage);
-        return Math.min(WidgetCache.page(ctx), pages - 1);
+        int minPages = Integer.MAX_VALUE;
+        if (ids != null) {
+            for (int i = 0; i < ids.length; i++) {
+                int perPage = WidgetStyle.capacityFor(mgr, ids[i]);
+                int cols = WidgetStyle.colsFor(mgr, ids[i]);
+                int slots = WidgetRenderer.computeSlots(grouped, cols, null, null);
+                int pages = Math.max(1, (slots + perPage - 1) / perPage);
+                if (pages < minPages) minPages = pages;
+            }
+        }
+        if (minPages == Integer.MAX_VALUE) minPages = 1;
+        return Math.max(0, Math.min(WidgetCache.page(ctx), minPages - 1));
     }
 }

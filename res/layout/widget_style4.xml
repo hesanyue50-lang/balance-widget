@@ -17,7 +17,6 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="left">
-
             <TextView
                 android:id="@+id/w2_title"
                 android:layout_width="0dp"
@@ -125,10 +124,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot1"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name1"
@@ -163,10 +165,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot2"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name2"
@@ -198,7 +203,7 @@
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
                 android:visibility="gone"
-                android:background="#FF22331F" />
+                android:background="@color/ws4_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row2"
@@ -218,10 +223,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot3"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name3"
@@ -256,10 +264,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot4"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name4"
@@ -291,7 +302,7 @@
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
                 android:visibility="gone"
-                android:background="#FF22331F" />
+                android:background="@color/ws4_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row3"
@@ -311,10 +322,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot5"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name5"
@@ -349,10 +363,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot6"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name6"
@@ -384,7 +401,7 @@
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
                 android:visibility="gone"
-                android:background="#FF22331F" />
+                android:background="@color/ws4_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row4"
@@ -404,10 +421,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot7"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name7"
@@ -442,10 +462,13 @@
 
                     <TextView
                         android:id="@+id/w2_dot8"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="5dp"
-                        android:background="@color/ws4_accent" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/ws4_accent" />
 
                     <TextView
                         android:id="@+id/w2_name8"

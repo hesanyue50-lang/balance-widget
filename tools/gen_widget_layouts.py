@@ -112,21 +112,21 @@ def header_row(c):
     bg = ''
     tpad = '        '
     if c['header_bg']:
-        bg = ('            android:background="%s"\n'
-              '            android:paddingStart="8dp"\n'
-              '            android:paddingEnd="8dp"\n'
-              '            android:paddingTop="4dp"\n'
-              '            android:paddingBottom="4dp"\n') % c['header_bg']
+        bg = ('\n            android:background="%s"'
+              '\n            android:paddingStart="8dp"'
+              '\n            android:paddingEnd="8dp"'
+              '\n            android:paddingTop="4dp"'
+              '\n            android:paddingBottom="4dp"') % c['header_bg']
     caps = '            android:textAllCaps="true"\n' if c['title_caps'] else ''
     sp = ('            android:letterSpacing="%s"\n' % c['title_spacing']) if c['title_spacing'] else ''
     fam = ('            android:fontFamily="%s"\n' % c['font']) if c['font'] else ''
+    icn = '_dark' if c['idx'] in (0, 2, 3, 5, 6) else ''
     return '''
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:orientation="horizontal"{bg}
             android:gravity="{grav}">
-{bg}
             <TextView
                 android:id="@+id/w2_title"
                 android:layout_width="0dp"
@@ -158,7 +158,7 @@ def header_row(c):
                 android:layout_height="22dp"
                 android:layout_marginStart="2dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_chevron_left"
+                android:src="@drawable/ic_chevron_left{icn}"
                 android:contentDescription="上一页" />
 
             <ImageView
@@ -168,7 +168,7 @@ def header_row(c):
                 android:layout_width="22dp"
                 android:layout_height="22dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_chevron_right"
+                android:src="@drawable/ic_chevron_right{icn}"
                 android:contentDescription="下一页" />
 
             <ImageView
@@ -179,11 +179,11 @@ def header_row(c):
                 android:layout_height="22dp"
                 android:layout_marginStart="6dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_refresh"
+                android:src="@drawable/ic_refresh{icn}"
                 android:contentDescription="刷新" />
         </LinearLayout>
 '''.format(grav=c['title_grav'], bg=bg, fam=fam, caps=caps, sp=sp,
-           hcolor=c['header_text'], tsize=c['title'])
+           hcolor=c['header_text'], tsize=c['title'], icn=icn)
 
 
 def deco(c):
@@ -235,10 +235,13 @@ def slot(n, c):
 
                     <TextView
                         android:id="@+id/w2_dot{n}"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="{dgap}dp"
-                        android:background="@color/{accent}" />
+                        android:includeFontPadding="false"
+                        android:text="●"
+                        android:textSize="9sp"
+                        android:textColor="@color/{accent}" />
 
                     <TextView
                         android:id="@+id/w2_name{n}"
@@ -299,8 +302,8 @@ def div(n, c):
                 android:layout_height="{h}dp"
                 android:layout_marginTop="1dp"
                 android:visibility="gone"
-                android:background="{col}" />
-'''.format(n=n, h=c['div_h'], col=c['div_color'])
+                android:background="@color/ws{di}_div" />
+'''.format(n=n, h=c['div_h'], di=c['idx'])
 
 
 def gen(c):
@@ -311,7 +314,6 @@ def gen(c):
     <ImageView
         android:id="@+id/w2_frost"
         android:scaleType="fitXY"
-        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="72dp"
         android:layout_gravity="top"

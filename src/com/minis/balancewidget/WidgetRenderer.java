@@ -244,11 +244,13 @@ public final class WidgetRenderer {
            组件一片空白，而且 pages==1 时翻页箭头也被藏掉，用户没法翻回来。 */
         if (page >= pages) page = pages - 1;
         if (page < 0) page = 0;
+        /* 顺序要紧：先全清，再按需点亮。
+           RemoteViews 的 action 是顺序执行的，hideAll 里也会把 prev/next 置 GONE ——
+           放在后面写就会把刚设好的 VISIBLE 覆盖掉，翻页箭头永远不出现。 */
+        hideAll(v);
         v.setTextViewText(R.id.w2_page, pages > 1 ? (page + 1) + "/" + pages : "");
         v.setViewVisibility(R.id.w2_prev, pages > 1 ? View.VISIBLE : View.GONE);
         v.setViewVisibility(R.id.w2_next, pages > 1 ? View.VISIBLE : View.GONE);
-
-        hideAll(v);
 
         // ---- 填格子 ----
         int base = page * perPage;
@@ -266,7 +268,7 @@ public final class WidgetRenderer {
             int color = BalanceFetcher.colorOf(it.platform);
             if (color == 0xFF94A3B8) color = PALETTE[i % PALETTE.length];
             try {
-                v.setInt(DOT[s], "setBackgroundColor", color);
+                v.setTextColor(DOT[s], color);
             } catch (Throwable ignored) { }
 
             if (!it.ok) {
@@ -352,6 +354,7 @@ public final class WidgetRenderer {
         Intent it = new Intent(ctx, BalanceWidgetProvider.class);
         it.setAction(action);
         it.putExtra("widgetId", widgetId);
+        it.putExtra("tapCode", code);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (android.os.Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
         /* 不能写成 code*1000 + (widgetId % 1000)：两个 appWidgetId 相差 1000 的倍数时

@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
         /* 打开应用顺手把小组件催一遍（带节流，重复调用不会造成风暴）。
            刚更新完 App 时小组件常显示不出东西，这样至少开一次应用就能恢复。 */
         try {
-            Intent kick = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(getPackageName());
+            Intent kick = new Intent(this, BalanceWidgetProvider.class);
             kick.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             sendBroadcast(kick);
         } catch (Throwable ignored) { }
@@ -2123,9 +2123,19 @@ public class MainActivity extends Activity {
     /** 隐藏开关改动后：先按本地 KeyStore 立即过滤已显示卡片，再后台刷新（即时反馈） */
     private void applyHideLocally() {
         if (lastResult == null) return;
+        /* key 必须用 platform，不能用 Key 的 id。
+           fetchInner 合并后已经把 it.id 覆盖成 it.platform，
+           拿 Key id 去查永远查不到 → 开关点了卡片不消失，要等下一轮联网刷新。
+           同平台可能有多个 Key：只要有一个没隐藏就显示。 */
         java.util.HashMap<String, Boolean> hid = new java.util.HashMap<String, Boolean>();
         java.util.List<KeyStore.ApiKey> aks = KeyStore.all(this);
-        for (int i = 0; i < aks.size(); i++) hid.put(aks.get(i).id, Boolean.valueOf(aks.get(i).hideCard));
+        for (int i = 0; i < aks.size(); i++) {
+            String pf = aks.get(i).platform;
+            if (pf == null) continue;
+            Boolean prev = hid.get(pf);
+            boolean hide = (prev == null || prev.booleanValue()) && aks.get(i).hideCard;
+            hid.put(pf, Boolean.valueOf(hide));
+        }
         for (int i = lastResult.items.size() - 1; i >= 0; i--) {
             BalanceFetcher.Item it = lastResult.items.get(i);
             Boolean h = hid.get(it.id);
