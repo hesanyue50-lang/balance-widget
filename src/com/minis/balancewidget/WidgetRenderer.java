@@ -54,7 +54,28 @@ public final class WidgetRenderer {
         R.id.w2_div1, R.id.w2_div2, R.id.w2_div3
     };
 
-    private static final int LAYOUT = R.layout.widget_balance2;
+    /** 兜底布局（Aurora 亮）。实际用哪个由 {@link #layoutFor} 按主题决定。 */
+    private static final int LAYOUT = R.layout.widget_style0;
+
+    /**
+     * 按当前主题选小组件布局。
+     *
+     * 每套主题一份独立 layout，而不是"一份布局换资源" —— 后者改不了字体和间距，
+     * 效果就是所有主题长一个样、只有颜色不同（试过，确实差）。
+     * 七份的成本主要在维护，所以它们都是由 widget_balance2 生成的，
+     * **视图 id 完全一致**，渲染代码一行都不用分叉。
+     */
+    private static int layoutFor(Context ctx) {
+        switch (Theme.index(ctx)) {
+            case 1:  return R.layout.widget_style1;   // Aurora 暗
+            case 2:  return R.layout.widget_style2;   // Editorial 衬线
+            case 3:  return R.layout.widget_style3;   // Minimal 瑞士
+            case 4:  return R.layout.widget_style4;   // Devtool 等宽
+            case 5:  return R.layout.widget_style5;   // Brutalism
+            case 6:  return R.layout.widget_style6;   // Soft Clay
+            default: return R.layout.widget_style0;   // Aurora 亮
+        }
+    }
 
     /**
      * 计算每个条目落在哪个格子，返回**总共需要多少格子**。
@@ -101,32 +122,14 @@ public final class WidgetRenderer {
     // ---------- 两个入口 ----------
 
     public static void renderLoading(Context ctx, AppWidgetManager mgr, int id) {
-        RemoteViews v = new RemoteViews(ctx.getPackageName(), LAYOUT);
+        RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx));
         boolean darkL = WallpaperTint.useDark(ctx);
         v.setTextColor(R.id.w2_title, Theme.wTx2(ctx));
         v.setTextColor(R.id.w2_total, Theme.wTx(ctx));
 
-        /* ---- 换风格：背景整份换、字号按主题调 ----
-           这两样是 RemoteViews 里**唯一**能表达"风格差异"的手段：
-           背景必须 setBackgroundResource（setBackgroundColor 会丢圆角），
-           字号用 setTextViewTextSize。字体本身改不了（没有对应 action）。 */
-        try {
-            v.setInt(R.id.w2_root, "setBackgroundResource", Theme.widgetBgRes(ctx));
-        } catch (Throwable ignored) { }
-        try {
-            v.setTextViewTextSize(R.id.w2_total,
-                    android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetTotalSp(ctx));
-            v.setTextViewTextSize(R.id.w2_sub,
-                    android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetNameSp(ctx));
-        } catch (Throwable ignored) { }
-        for (int i = 0; i < VAL.length; i++) {
-            try {
-                v.setTextViewTextSize(VAL[i],
-                        android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetRowSp(ctx));
-                v.setTextViewTextSize(NAME[i],
-                        android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetNameSp(ctx));
-            } catch (Throwable ignored) { }
-        }
+        /* 样式（背景 / 字号 / 字体 / 间距）已经写在各自主题的 layout 里，
+           这里不再 setBackgroundResource / setTextViewTextSize ——
+           两套机制同时存在迟早会不同步。 */
         v.setTextViewText(R.id.w2_title, "API 管理助手");
         v.setTextViewText(R.id.w2_total, "…");
         v.setTextViewText(R.id.w2_sub, "正在刷新");
@@ -140,7 +143,7 @@ public final class WidgetRenderer {
                                     BalanceFetcher.Result r, int page) {
         int cols = 2;                       // 新布局固定两列（窄屏靠缩小字号自适应）
         int perPage = WidgetStyle.capacityFor(mgr, id);
-        RemoteViews v = new RemoteViews(ctx.getPackageName(), LAYOUT);
+        RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx));
         bind(ctx, v, id);
 
         /* 从壁纸吸色挑一套预设（亮壁纸 → 浅玻璃+深字，暗壁纸 → 深玻璃+浅字）。
