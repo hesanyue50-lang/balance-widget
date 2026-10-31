@@ -65,8 +65,35 @@ public final class WidgetRenderer {
      * 七份的成本主要在维护，所以它们都是由 widget_balance2 生成的，
      * **视图 id 完全一致**，渲染代码一行都不用分叉。
      */
-    private static int layoutFor(Context ctx) {
-        switch (Theme.index(ctx)) {
+    /**
+     * 这个实例属于哪个固定风格。
+     *
+     * -1 = 主 Provider（跟随应用主题）；0~6 = 七个固定风格子类。
+     * 用 Provider 的类名判断，不反射实例化 —— 拿得到、开销小、不会因为
+     * 某个子类构造失败把整个刷新搞崩。
+     */
+    private static int styleOf(AppWidgetManager mgr, int id) {
+        try {
+            android.appwidget.AppWidgetProviderInfo info = mgr.getAppWidgetInfo(id);
+            if (info == null || info.provider == null) return -1;
+            String cn = info.provider.getClassName();
+            if (cn.endsWith(".WidgetAuroraDark"))  return 1;
+            if (cn.endsWith(".WidgetEditorial"))   return 2;
+            if (cn.endsWith(".WidgetSwiss"))       return 3;
+            if (cn.endsWith(".WidgetDevtool"))     return 4;
+            if (cn.endsWith(".WidgetBrutal"))      return 5;
+            if (cn.endsWith(".WidgetClay"))        return 6;
+            if (cn.endsWith(".WidgetAuroraLight")) return 0;
+            return -1;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /** @param style 固定风格 0~6；-1 = 跟随应用主题 */
+    private static int layoutFor(Context ctx, int style) {
+        int i = style >= 0 ? style : Theme.index(ctx);
+        switch (i) {
             case 1:  return R.layout.widget_style1;   // Aurora 暗
             case 2:  return R.layout.widget_style2;   // Editorial 衬线
             case 3:  return R.layout.widget_style3;   // Minimal 瑞士
@@ -122,7 +149,8 @@ public final class WidgetRenderer {
     // ---------- 两个入口 ----------
 
     public static void renderLoading(Context ctx, AppWidgetManager mgr, int id) {
-        RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx));
+        final int style = styleOf(mgr, id);
+        RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx, style));
         boolean darkL = WallpaperTint.useDark(ctx);
         v.setTextColor(R.id.w2_title, Theme.wTx2(ctx));
         v.setTextColor(R.id.w2_total, Theme.wTx(ctx));
@@ -143,7 +171,8 @@ public final class WidgetRenderer {
                                     BalanceFetcher.Result r, int page) {
         int cols = 2;                       // 新布局固定两列（窄屏靠缩小字号自适应）
         int perPage = WidgetStyle.capacityFor(mgr, id);
-        RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx));
+        final int style = styleOf(mgr, id);
+        RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx, style));
         bind(ctx, v, id);
 
         /* 从壁纸吸色挑一套预设（亮壁纸 → 浅玻璃+深字，暗壁纸 → 深玻璃+浅字）。
@@ -295,7 +324,7 @@ public final class WidgetRenderer {
      *                 同时塞进 extra，让连击计数能按实例分开。
      */
     private static PendingIntent pi(Context ctx, String action, int code, int widgetId) {
-        Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+        Intent it = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(ctx.getPackageName());
         it.setAction(action);
         it.putExtra("widgetId", widgetId);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;

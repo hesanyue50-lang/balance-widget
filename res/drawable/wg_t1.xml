@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 小组件背景（wg_t1）：由 WidgetRenderer 按当前主题 setBackgroundResource 切过来。
-     RemoteViews 不能用 ?attr，所以每套主题各准备一份，代码里选资源 id。 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
+<!-- Aurora 暗：近黑底 + 顶部冷紫光晕，玻璃感 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:startColor="#FF1B1F2B" android:endColor="#FF12141A" android:angle="270" />
     <corners android:radius="20dp" />
-    <solid android:color="#F214161C" />
-    <stroke android:width="1dp" android:color="#1F232B" />
+    <stroke android:width="1dp" android:color="#26FFFFFF" />
 </shape>

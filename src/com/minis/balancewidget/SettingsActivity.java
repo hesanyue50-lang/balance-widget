@@ -219,7 +219,7 @@ public class SettingsActivity extends Activity {
 
     private void kickWidget() {
         try {
-            Intent k = new Intent(this, BalanceWidgetProvider.class);
+            Intent k = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(getPackageName());
             k.setAction(BalanceWidgetProvider.ACTION_FORCE_REDRAW);
             sendBroadcast(k);
         } catch (Throwable ignored) { }
@@ -1202,7 +1202,7 @@ public class SettingsActivity extends Activity {
 
     /** 自定义平台改动后立刻刷新小组件 */
     private void refreshWidget() {
-        Intent it = new Intent(this, BalanceWidgetProvider.class);
+        Intent it = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(getPackageName());
         it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
         sendBroadcast(it);
     }
@@ -1289,7 +1289,7 @@ public class SettingsActivity extends Activity {
         }
 
         Context c = SettingsActivity.this;
-        Intent it = new Intent(c, BalanceWidgetProvider.class);
+        Intent it = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(c.getPackageName());
         it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
         c.sendBroadcast(it);
 

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 七套小组件各自的调色板：layout 结构相同，颜色彻底分开 -->
+    <color name="ws0_tx">#FF0B0E14</color>
+    <color name="ws0_tx2">#FF5A6472</color>
+    <color name="ws0_tx3">#FF7A8492</color>
+    <color name="ws0_accent">#FF4166F5</color>
+    <color name="ws0_div">#2E9AA6B2</color>
+    <color name="ws1_tx">#FFF2F5FA</color>
+    <color name="ws1_tx2">#FF9AA6B8</color>
+    <color name="ws1_tx3">#FF6B7686</color>
+    <color name="ws1_accent">#FF7C8CFF</color>
+    <color name="ws1_div">#33FFFFFF</color>
+    <color name="ws2_tx">#FF14110E</color>
+    <color name="ws2_tx2">#FF6B6359</color>
+    <color name="ws2_tx3">#FF9A9186</color>
+    <color name="ws2_accent">#FFB4472E</color>
+    <color name="ws2_div">#331F1810</color>
+    <color name="ws3_tx">#FF000000</color>
+    <color name="ws3_tx2">#FF4D4D4D</color>
+    <color name="ws3_tx3">#FF8C8C8C</color>
+    <color name="ws3_accent">#FFFF3B30</color>
+    <color name="ws3_div">#FFE5E5E5</color>
+    <color name="ws4_tx">#FFC8FACC</color>
+    <color name="ws4_tx2">#FF6E8F72</color>
+    <color name="ws4_tx3">#FF445C47</color>
+    <color name="ws4_accent">#FF4ADE80</color>
+    <color name="ws4_div">#FF262626</color>
+    <color name="ws5_tx">#FF000000</color>
+    <color name="ws5_tx2">#FF1A1A00</color>
+    <color name="ws5_tx3">#FF3A3A00</color>
+    <color name="ws5_accent">#FFFF0000</color>
+    <color name="ws5_div">#FF000000</color>
+    <color name="ws6_tx">#FF2B2B2B</color>
+    <color name="ws6_tx2">#FF767676</color>
+    <color name="ws6_tx3">#FFA0A0A0</color>
+    <color name="ws6_accent">#FFE8A87C</color>
+    <color name="ws6_div">#1A000000</color>
+</resources>

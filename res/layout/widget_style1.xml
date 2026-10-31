@@ -55,7 +55,7 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:textColor="@color/w2_tx2"
+            android:textColor="@color/ws1_tx2"
             android:textSize="11.5sp"
             android:text="API 余额" />
 
@@ -66,7 +66,7 @@
             android:layout_marginStart="4dp"
             android:minWidth="0dp"
             android:includeFontPadding="false"
-            android:textColor="@color/w2_tx3"
+            android:textColor="@color/ws1_tx3"
             android:textSize="11.5sp" />
 
         <!-- 上一页 / 下一页：紧挨放，属于"翻页"这一组 -->
@@ -114,7 +114,7 @@
         android:layout_marginTop="10dp"
         android:singleLine="true"
         android:includeFontPadding="false"
-        android:textColor="@color/w2_tx"
+        android:textColor="@color/ws1_tx"
         android:textSize="23sp"
         android:textStyle="bold" />
 
@@ -126,7 +126,7 @@
         android:singleLine="true"
         android:ellipsize="end"
         android:includeFontPadding="false"
-        android:textColor="@color/w2_tx3"
+        android:textColor="@color/ws1_tx3"
         android:textSize="10sp" />
 
     <!-- ===== 数据区：4 行 × 2 列，行间可插分档线 ===== -->
@@ -154,7 +154,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name1"
@@ -164,7 +164,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -174,7 +174,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -193,7 +193,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name2"
@@ -203,7 +203,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -213,7 +213,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -225,7 +225,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="9dp"
-        android:background="@color/w2_div"
+        android:background="@color/ws1_div"
         android:visibility="gone" />
 
     <!-- 第 2 行 -->
@@ -251,7 +251,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name3"
@@ -261,7 +261,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -271,7 +271,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -290,7 +290,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name4"
@@ -300,7 +300,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -310,7 +310,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -322,7 +322,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="9dp"
-        android:background="@color/w2_div"
+        android:background="@color/ws1_div"
         android:visibility="gone" />
 
     <!-- 第 3 行 -->
@@ -348,7 +348,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name5"
@@ -358,7 +358,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -368,7 +368,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -387,7 +387,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name6"
@@ -397,7 +397,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -407,7 +407,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -419,7 +419,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="9dp"
-        android:background="@color/w2_div"
+        android:background="@color/ws1_div"
         android:visibility="gone" />
 
     <!-- 第 4 行 -->
@@ -445,7 +445,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name7"
@@ -455,7 +455,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -465,7 +465,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -484,7 +484,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp"
-                android:background="@color/w2_accent" />
+                android:background="@color/ws1_accent" />
 
             <TextView
                 android:id="@+id/w2_name8"
@@ -494,7 +494,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx2"
+                android:textColor="@color/ws1_tx2"
                 android:textSize="11.5sp" />
 
             <TextView
@@ -504,7 +504,7 @@
                 android:layout_marginStart="8dp"
                 android:singleLine="true"
                 android:includeFontPadding="false"
-                android:textColor="@color/w2_tx"
+                android:textColor="@color/ws1_tx"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>

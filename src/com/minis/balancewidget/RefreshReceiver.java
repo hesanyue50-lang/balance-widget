@@ -31,7 +31,7 @@ public class RefreshReceiver extends BroadcastReceiver {
                 || "android.intent.action.PACKAGE_REPLACED".equals(action)) {
             Context ac = context.getApplicationContext();
             BalanceFetcher.diag(ac, "收到 App 更新广播，强制重绘小组件");
-            Intent redraw = new Intent(ac, BalanceWidgetProvider.class);
+            Intent redraw = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(ac.getPackageName());
             redraw.setAction(BalanceWidgetProvider.ACTION_FORCE_REDRAW);
             ac.sendBroadcast(redraw);
             if (hasKeys(ac)) RefreshScheduler.schedule(ac);
@@ -50,7 +50,7 @@ public class RefreshReceiver extends BroadcastReceiver {
 
         // 交给小组件那条链路统一处理：取数 → 阈值判定/发通知 → 渲染
         // （即使当前没有小组件，Provider 内部也会取数并做预警）
-        Intent refresh = new Intent(app, BalanceWidgetProvider.class);
+        Intent refresh = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(app.getPackageName());
         refresh.setAction(BalanceWidgetProvider.ACTION_REFRESH);
         /* 打上"来自后台闹钟"的标记：Provider 据此走精简模式
            （跳过汇率、失败不重试），减少后台耗电。 */

@@ -27,6 +27,33 @@ import android.widget.RemoteViews;
 public class BalanceWidgetProvider extends AppWidgetProvider {
 
     public static final String ACTION_REFRESH = "com.minis.balancewidget.ACTION_REFRESH";
+
+    /**
+     * 全部小组件 Provider：本体（跟随主题）+ 七个固定风格。
+     *
+     * 凡是"对所有实例做点什么"的地方（刷新、重绘、空闲清理）都必须遍历这个数组 ——
+     * 只认 BalanceWidgetProvider.class 的话，用户加的那七个固定风格组件会一直不刷新。
+     */
+    public static final Class<?>[] ALL_PROVIDERS = {
+            BalanceWidgetProvider.class,
+            WidgetAuroraLight.class, WidgetAuroraDark.class, WidgetEditorial.class,
+            WidgetSwiss.class, WidgetDevtool.class, WidgetBrutal.class, WidgetClay.class,
+    };
+
+    /** 汇总所有 Provider 的实例 id（去重） */
+    public static int[] allWidgetIds(Context ctx, AppWidgetManager mgr) {
+        java.util.LinkedHashSet<Integer> set = new java.util.LinkedHashSet<Integer>();
+        for (int i = 0; i < ALL_PROVIDERS.length; i++) {
+            try {
+                int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, ALL_PROVIDERS[i]));
+                if (ids != null) for (int id : ids) set.add(Integer.valueOf(id));
+            } catch (Throwable ignored) { }
+        }
+        int[] out = new int[set.size()];
+        int i = 0;
+        for (Integer v : set) out[i++] = v.intValue();
+        return out;
+    }
     /** 标记这次刷新来自后台闹钟（走精简模式，省电） */
     public static final String EXTRA_BG = "from_background_alarm";
     /** 不联网，直接用缓存把所有实例重画一遍（App 更新后救场用） */
@@ -65,6 +92,19 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
 
     // ---------- 生命周期 ----------
 
+    /**
+     * 这个 Provider 固定用哪套风格。
+     *
+     * -1 = 跟随应用主题（这是 {@code BalanceWidgetProvider} 本体的行为）；
+     * 0~6 = 七个固定风格的子类各自的取值。
+     *
+     * 子类靠这个值把"风格"钉死，不再随用户换主题而变 —— 系统「添加小组件」
+     * 列表里能看到七个独立条目，加哪个就是哪个样子。
+     */
+    public int fixedStyle() {
+        return -1;
+    }
+
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
         try {
@@ -95,14 +135,14 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         }
 
         final AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
-        final int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, BalanceWidgetProvider.class));
+        final int[] ids = allWidgetIds(ctx, mgr);
 
         /* App 更新后救场：系统重建小组件时常常不调 onUpdate，桌面就一直挂着旧的
            RemoteViews（甚至空白），用户只能删掉重加。这里不联网，先把缓存画上去。 */
         if (ACTION_FORCE_REDRAW.equals(a)) {
             safeRedraw(ctx);
             /* 重画完立刻排一次联网取数，把数字换成最新的 */
-            Intent nxt = new Intent(ctx, BalanceWidgetProvider.class);
+            Intent nxt = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
             nxt.setAction(ACTION_REFRESH);
             ctx.sendBroadcast(nxt);
             return;
@@ -219,7 +259,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                     openApp(ctx);
                 } else {
                     /* 单击 = 老行为：用缓存重画一次 */
-                    Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+                    Intent it = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
                     it.setAction(ACTION_FORCE_REDRAW);
                     ctx.sendBroadcast(it);
                 }
@@ -238,7 +278,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                     try { Thread.sleep(wait[i]); } catch (InterruptedException ig) { return; }
                     if (!FETCHING.get()) {
                         FORCE_ONCE.set(true);
-                        Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+                        Intent it = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
                         it.setAction(ACTION_REFRESH);
                         ctx.sendBroadcast(it);
                         return;
@@ -275,7 +315,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
            请求会挤在一起反而都超时，交给 retryForceLater 排队重试。 */
         FORCE_ONCE.set(true);
         try {
-            Intent it = new Intent(ctx, BalanceWidgetProvider.class);
+            Intent it = new Intent(ACTION_REFRESH).setPackage(ctx.getPackageName());
             it.setAction(ACTION_REFRESH);
             ctx.sendBroadcast(it);
         } catch (Throwable t) {
@@ -287,7 +327,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     private void safeRedraw(Context ctx) {
         try {
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
-            int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, BalanceWidgetProvider.class));
+            int[] ids = allWidgetIds(ctx, mgr);
             if (ids == null || ids.length == 0) return;
             BalanceFetcher.Result cached = WidgetCache.read(ctx);
             int pg = WidgetCache.page(ctx);

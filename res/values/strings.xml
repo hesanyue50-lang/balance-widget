@@ -101,4 +101,12 @@
     <string name="toggle_expand">展开 ▾</string>
     <string name="toggle_collapse">收起 ▴</string>
     <string name="sec_other">其他</string>
+    <!-- ===== 桌面小组件（每个固定风格一个条目）===== -->
+    <string name="wg_aurora_light">余额 · Aurora 亮</string>
+    <string name="wg_aurora_dark">余额 · Aurora 暗</string>
+    <string name="wg_editorial">余额 · Editorial 纸感</string>
+    <string name="wg_swiss">余额 · Minimal 瑞士</string>
+    <string name="wg_devtool">余额 · Devtool 终端</string>
+    <string name="wg_brutal">余额 · Brutalism 撞色</string>
+    <string name="wg_clay">余额 · Soft Clay 柔和</string>
 </resources>

@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
         /* 打开应用顺手把小组件催一遍（带节流，重复调用不会造成风暴）。
            刚更新完 App 时小组件常显示不出东西，这样至少开一次应用就能恢复。 */
         try {
-            Intent kick = new Intent(this, BalanceWidgetProvider.class);
+            Intent kick = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(getPackageName());
             kick.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             sendBroadcast(kick);
         } catch (Throwable ignored) { }

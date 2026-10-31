@@ -3102,7 +3102,7 @@ public class SettingsBinder {
 
     private void kick() {
         try {
-            Intent it = new Intent(act, BalanceWidgetProvider.class);
+            Intent it = new Intent(BalanceWidgetProvider.ACTION_REFRESH).setPackage(act.getPackageName());
             it.setAction(BalanceWidgetProvider.ACTION_REFRESH);
             act.sendBroadcast(it);
         } catch (Throwable ignored) { }
