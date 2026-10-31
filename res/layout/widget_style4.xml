@@ -9,14 +9,14 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="start">
+            android:gravity="left">
 
             <TextView
                 android:id="@+id/w2_title"
@@ -81,7 +81,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:includeFontPadding="false"
-            android:gravity="start"
+            android:gravity="left"
         android:fontFamily="monospace"
         android:textStyle="bold"
             android:textColor="@color/ws4_tx"
@@ -96,7 +96,7 @@
             android:includeFontPadding="false"
             android:singleLine="true"
             android:ellipsize="end"
-            android:gravity="start"
+            android:gravity="left"
             android:textColor="@color/ws4_tx3"
             android:textSize="10sp" />
 
@@ -192,11 +192,12 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div1"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
+                android:visibility="gone"
                 android:background="#FF22331F" />
 
             <LinearLayout
@@ -284,11 +285,12 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div2"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
+                android:visibility="gone"
                 android:background="#FF22331F" />
 
             <LinearLayout
@@ -376,11 +378,12 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div3"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
+                android:visibility="gone"
                 android:background="#FF22331F" />
 
             <LinearLayout

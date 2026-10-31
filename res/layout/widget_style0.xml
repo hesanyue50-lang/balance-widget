@@ -8,8 +8,10 @@
     android:padding="16dp">
 
     <!-- 玻璃高光：背景之上、内容之下，只在顶部露出淡淡一层白 -->
-    <View
+    <ImageView
         android:id="@+id/w2_frost"
+        android:scaleType="fitXY"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="72dp"
         android:layout_gravity="top"
@@ -17,14 +19,14 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="start">
+            android:gravity="left">
 
             <TextView
                 android:id="@+id/w2_title"
@@ -200,10 +202,11 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div1"
                 android:layout_width="match_parent"
-                android:layout_height="0dp" />
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/w2_row2"
@@ -292,10 +295,11 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div2"
                 android:layout_width="match_parent"
-                android:layout_height="0dp" />
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/w2_row3"
@@ -384,10 +388,11 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div3"
                 android:layout_width="match_parent"
-                android:layout_height="0dp" />
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/w2_row4"

@@ -20,7 +20,7 @@ CFG = [
     dict(idx=0, name="Aurora 亮", desc="玻璃柔光 · 双列胶囊",
          font=None, orient="horizontal", pad=16, gap=5,
          total=34, total_bold=True, total_grav="center", total_top=6,
-         title=11.5, title_caps=False, title_spacing=0, title_grav="start",
+         title=11.5, title_caps=False, title_spacing=0, title_grav="left",
          sub=10, sub_grav="center", sub_top=2,
          div_h=0, div_color="#00000000",
          slot_pad=6, slot_bg="@drawable/wslot_pill", slot_gap=5,
@@ -29,7 +29,7 @@ CFG = [
     dict(idx=1, name="Aurora 暗", desc="玻璃柔光 · 深色双列胶囊",
          font=None, orient="horizontal", pad=16, gap=5,
          total=34, total_bold=True, total_grav="center", total_top=6,
-         title=11.5, title_caps=False, title_spacing=0, title_grav="start",
+         title=11.5, title_caps=False, title_spacing=0, title_grav="left",
          sub=10, sub_grav="center", sub_top=2,
          div_h=0, div_color="#00000000",
          slot_pad=6, slot_bg="@drawable/wslot_pill_dark", slot_gap=5,
@@ -37,36 +37,36 @@ CFG = [
          frost=True, deco=None, header_bg=None, header_text="#FF9AA6B8"),
     dict(idx=2, name="Editorial", desc="衬线杂志 · 单栏细线",
          font="serif", orient="vertical", pad=18, gap=0,
-         total=30, total_bold=False, total_grav="start", total_top=10,
-         title=21, title_caps=False, title_spacing=0, title_grav="start",
-         sub=10.5, sub_grav="start", sub_top=4,
+         total=30, total_bold=False, total_grav="left", total_top=10,
+         title=21, title_caps=False, title_spacing=0, title_grav="left",
+         sub=10.5, sub_grav="left", sub_top=4,
          div_h=1, div_color="#FFD8D2C8",
          slot_pad=7, slot_bg=None, slot_gap=0,
          nsize=13, val=15, val_bold=False,
          frost=False, deco="rule2", header_bg=None, header_text="#FF14110E"),
     dict(idx=3, name="Swiss", desc="海报极简 · 超细巨型数字",
          font="sans-serif-light", orient="vertical", pad=15, gap=0,
-         total=52, total_bold=False, total_grav="start", total_top=14,
-         title=9, title_caps=True, title_spacing=0.32, title_grav="start",
-         sub=9.5, sub_grav="start", sub_top=2,
+         total=52, total_bold=False, total_grav="left", total_top=14,
+         title=9, title_caps=True, title_spacing=0.32, title_grav="left",
+         sub=9.5, sub_grav="left", sub_top=2,
          div_h=0, div_color="#00000000",
          slot_pad=4, slot_bg=None, slot_gap=1,
          nsize=11, val=12.5, val_bold=False,
          frost=False, deco="bar3", header_bg=None, header_text="#FF000000"),
     dict(idx=4, name="Devtool", desc="终端等宽 · 命令行输出",
          font="monospace", orient="vertical", pad=14, gap=0,
-         total=26, total_bold=True, total_grav="start", total_top=8,
-         title=11, title_caps=False, title_spacing=0, title_grav="start",
-         sub=10, sub_grav="start", sub_top=3,
+         total=26, total_bold=True, total_grav="left", total_top=8,
+         title=11, title_caps=False, title_spacing=0, title_grav="left",
+         sub=10, sub_grav="left", sub_top=3,
          div_h=1, div_color="#FF22331F",
          slot_pad=4, slot_bg=None, slot_gap=0,
          nsize=11.5, val=13, val_bold=False,
          frost=False, deco=None, header_bg=None, header_text="#FF6E8F72"),
     dict(idx=5, name="Brutalism", desc="野兽派 · 黑粗线 + 荧光黄",
          font="sans-serif-black", orient="horizontal", pad=13, gap=3,
-         total=48, total_bold=True, total_grav="start", total_top=10,
-         title=12, title_caps=False, title_spacing=0, title_grav="start",
-         sub=10.5, sub_grav="start", sub_top=3,
+         total=48, total_bold=True, total_grav="left", total_top=10,
+         title=12, title_caps=False, title_spacing=0, title_grav="left",
+         sub=10.5, sub_grav="left", sub_top=3,
          div_h=2, div_color="#FF000000",
          slot_pad=5, slot_bg=None, slot_gap=3,
          nsize=12, val=16, val_bold=True,
@@ -74,7 +74,7 @@ CFG = [
     dict(idx=6, name="Soft Clay", desc="柔和陶土 · 大圆角胶囊",
          font=None, orient="horizontal", pad=15, gap=7,
          total=32, total_bold=False, total_grav="center", total_top=8,
-         title=12, title_caps=False, title_spacing=0, title_grav="start",
+         title=12, title_caps=False, title_spacing=0, title_grav="left",
          sub=10, sub_grav="center", sub_top=2,
          div_h=0, div_color="#00000000",
          slot_pad=9, slot_bg="@drawable/wslot_clay", slot_gap=7,
@@ -93,7 +93,7 @@ HEADER = '''<?xml version="1.0" encoding="utf-8"?>
 {frost}
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical">
 '''
 
@@ -191,7 +191,7 @@ def deco(c):
     kind = c['deco']
     if kind == 'rule2':
         return '''
-        <View
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="2dp"
             android:layout_marginTop="10dp"
@@ -199,7 +199,7 @@ def deco(c):
 '''
     if kind == 'bar3':
         return '''
-        <View
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="3dp"
             android:layout_marginTop="10dp"
@@ -207,7 +207,7 @@ def deco(c):
 '''
     if kind == 'block':
         return '''
-        <View
+        <TextView
             android:layout_width="56dp"
             android:layout_height="6dp"
             android:layout_marginTop="8dp"
@@ -286,17 +286,19 @@ def row(n, c):
 def div(n, c):
     if c['div_h'] <= 0:
         return '''
-            <View
+            <TextView
                 android:id="@+id/w2_div{n}"
                 android:layout_width="match_parent"
-                android:layout_height="0dp" />
+                android:layout_height="0dp"
+                android:visibility="gone" />
 '''.format(n=n)
     return '''
-            <View
+            <TextView
                 android:id="@+id/w2_div{n}"
                 android:layout_width="match_parent"
                 android:layout_height="{h}dp"
                 android:layout_marginTop="1dp"
+                android:visibility="gone"
                 android:background="{col}" />
 '''.format(n=n, h=c['div_h'], col=c['div_color'])
 
@@ -306,8 +308,10 @@ def gen(c):
     bold = '\n        android:textStyle="bold"' if c['total_bold'] else ''
     frost = ("""
     <!-- 玻璃高光：背景之上、内容之下，只在顶部露出淡淡一层白 -->
-    <View
+    <ImageView
         android:id="@+id/w2_frost"
+        android:scaleType="fitXY"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="72dp"
         android:layout_gravity="top"

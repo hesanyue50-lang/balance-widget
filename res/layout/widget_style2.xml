@@ -9,14 +9,14 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="start">
+            android:gravity="left">
 
             <TextView
                 android:id="@+id/w2_title"
@@ -81,13 +81,13 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:includeFontPadding="false"
-            android:gravity="start"
+            android:gravity="left"
         android:fontFamily="serif"
             android:textColor="@color/ws2_tx"
             android:textSize="30sp"
             android:text="—" />
 
-        <View
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="2dp"
             android:layout_marginTop="10dp"
@@ -101,7 +101,7 @@
             android:includeFontPadding="false"
             android:singleLine="true"
             android:ellipsize="end"
-            android:gravity="start"
+            android:gravity="left"
             android:textColor="@color/ws2_tx3"
             android:textSize="10.5sp" />
 
@@ -197,11 +197,12 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div1"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
+                android:visibility="gone"
                 android:background="#FFD8D2C8" />
 
             <LinearLayout
@@ -289,11 +290,12 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div2"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
+                android:visibility="gone"
                 android:background="#FFD8D2C8" />
 
             <LinearLayout
@@ -381,11 +383,12 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
                 android:id="@+id/w2_div3"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginTop="1dp"
+                android:visibility="gone"
                 android:background="#FFD8D2C8" />
 
             <LinearLayout
