@@ -72,18 +72,20 @@ public final class WidgetRenderer {
      * 用 Provider 的类名判断，不反射实例化 —— 拿得到、开销小、不会因为
      * 某个子类构造失败把整个刷新搞崩。
      */
+    /** 七个固定风格的 Provider，**顺序必须和 fixedStyle() 的返回值一致** */
+    private static final Class<?>[] STYLE_PROVIDERS = {
+            WidgetAuroraLight.class, WidgetAuroraDark.class, WidgetEditorial.class,
+            WidgetSwiss.class, WidgetDevtool.class, WidgetBrutal.class, WidgetClay.class,
+    };
+
     private static int styleOf(AppWidgetManager mgr, int id) {
         try {
             android.appwidget.AppWidgetProviderInfo info = mgr.getAppWidgetInfo(id);
             if (info == null || info.provider == null) return -1;
             String cn = info.provider.getClassName();
-            if (cn.endsWith(".WidgetAuroraDark"))  return 1;
-            if (cn.endsWith(".WidgetEditorial"))   return 2;
-            if (cn.endsWith(".WidgetSwiss"))       return 3;
-            if (cn.endsWith(".WidgetDevtool"))     return 4;
-            if (cn.endsWith(".WidgetBrutal"))      return 5;
-            if (cn.endsWith(".WidgetClay"))        return 6;
-            if (cn.endsWith(".WidgetAuroraLight")) return 0;
+            for (int i = 0; i < STYLE_PROVIDERS.length; i++) {
+                if (STYLE_PROVIDERS[i].getName().equals(cn)) return i;
+            }
             return -1;
         } catch (Throwable t) {
             return -1;
@@ -324,9 +326,11 @@ public final class WidgetRenderer {
            桌面会缓存 View 树，布局里新加的资源引用有时不生效。
            固定风格的组件用它自己那张，只有「跟随主题」那个才看壁纸明暗。 */
         try {
+            /* 跟随主题的那个组件也用主题背景（Theme.widgetBgRes 就是 wg_t0~t6）。
+               原来写死 WallpaperTint.bgRes（壁纸玻璃图），用户把 App 切成
+               Brutal/Clay 后，桌面组件的底还是 Aurora 玻璃，字却换成了新主题色。 */
             v.setInt(R.id.w2_root, "setBackgroundResource",
-                     style >= 0 ? STYLE_BG[style]
-                                : WallpaperTint.bgRes(WallpaperTint.useDark(ctx)));
+                     style >= 0 ? STYLE_BG[style] : Theme.widgetBgRes(ctx));
         } catch (Throwable ignored) { }
         /* 组件本体与刷新按钮 → 走连击计数（单击同步 / 双击开应用 / 三击强制重拉）。
            注意 requestCode 必须区分开：同一个 code 会被系统当成同一个 PendingIntent

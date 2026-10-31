@@ -75,7 +75,9 @@ public class Alert {
                     it.low = false;
                 }
             } else {
-                it.low = it.ok && thr > 0 && it.bal < thr
+                /* noData = "这平台压根没有余额可查"（免费服务 / 未登录 / 未填凭据）。
+                   它们 bal 恒为 0，不排除掉就会天天误报"余额不足"。 */
+                it.low = it.ok && !it.noData && thr > 0 && it.bal < thr
                         && !"消费".equals(it.tag);   // 后付费平台（如七牛云）没有余额概念，不参与低余额预警
             }
             if (it.low) lows.add(it);

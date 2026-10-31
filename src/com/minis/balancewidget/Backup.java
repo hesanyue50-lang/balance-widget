@@ -83,6 +83,20 @@ public final class Backup {
                     prefs.put(e.getKey(), v);
                 }
             }
+            /* 主题选择存在 app_flags 里，不属于 balance_widget。
+               不单独带上，换机恢复后密钥/订阅/曲线都在，唯独多套皮肤掉回默认。 */
+            try {
+                SharedPreferences fl = c.getSharedPreferences(
+                        App.PREFS_FLAGS, Context.MODE_PRIVATE);
+                String th = fl.getString("ui_theme", "");
+                if (th != null && th.length() > 0) {
+                    JSONObject to = new JSONObject();
+                    to.put("__type", "str");
+                    to.put("value", th);
+                    prefs.put("__ui_theme", to);
+                }
+            } catch (Throwable ignored) { }
+
             root.put("prefs", prefs);
 
             /* 统计页的开关 / 折算率 / 曲线配色 / 控制台地址存在独立的 stats_opt 文件里，
@@ -141,6 +155,7 @@ public final class Backup {
                 Iterator<String> it = prefs.keys();
                 while (it.hasNext()) {
                     String k = it.next();
+                    if ("__ui_theme".equals(k)) continue;   // 主题单独处理，见下
                     Object v = prefs.get(k);
                     if (v instanceof JSONObject && ((JSONObject) v).has("__type")) {
                         JSONObject t = (JSONObject) v;
@@ -155,7 +170,10 @@ public final class Backup {
                     else if (v instanceof Integer) {
                         /* 旧备份没有类型标记：Float 被压成了 Integer。
                            已知的"率"类键按 float 还原，否则读取方 getFloat 会崩。 */
-                        if (k.startsWith("rate_") || "last_rate".equals(k)) {
+                        /* thr_* 也是 float（Alert.setThreshold 写的就是 float），
+                           漏了它在 migrateLegacy 里 getFloat 会抛 ClassCastException，
+                           整个刷新线程静默失败。 */
+                        if (k.startsWith("rate_") || k.startsWith("thr_") || "last_rate".equals(k)) {
                             ed.putFloat(k, ((Integer) v).floatValue());
                         } else {
                             ed.putInt(k, (Integer) v);
@@ -175,6 +193,18 @@ public final class Backup {
                进程一被杀就全丢 —— 而账本紧接着在 SQLite 事务里已提交，
                会留下"历史恢复了、设置没恢复"的半截状态。 */
             ed.commit();
+
+            /* 还原主题选择（app_flags 不属于上面这个 prefs） */
+            try {
+                Object tv = prefs == null ? null : prefs.opt("__ui_theme");
+                if (tv instanceof JSONObject) {
+                    String th = ((JSONObject) tv).optString("value", "");
+                    if (th != null && th.length() > 0) {
+                        c.getSharedPreferences(App.PREFS_FLAGS, Context.MODE_PRIVATE)
+                         .edit().putString("ui_theme", th).apply();
+                    }
+                }
+            } catch (Throwable ignored) { }
 
             /* 还原 stats_opt（旧备份没有这个字段就跳过） */
             try {

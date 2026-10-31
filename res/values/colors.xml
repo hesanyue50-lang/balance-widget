@@ -51,13 +51,4 @@
     <!-- 制式分档之间的分隔线（浅色主题 / 玻璃主题） -->
     <color name="div_line">#26A8B4C6</color>
     <color name="glass_div_line">#3DFFFFFF</color>
-
-    <!-- ===== 小组件 v2（重写版）配色 ===== -->
-    <color name="w2_card">#FFFFFF</color>
-    <color name="w2_tx">#0B0E14</color>
-    <color name="w2_tx2">#5A6472</color>
-    <color name="w2_tx3">#656F7F</color>
-    <color name="w2_div">#2E9AA6B2</color>
-    <color name="w2_accent">#4166F5</color>
-    <color name="w2_danger">#E5484D</color>
 </resources>

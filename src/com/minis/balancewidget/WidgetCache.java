@@ -119,6 +119,13 @@ public final class WidgetCache {
         x.put("unitOverride", it.unitOverride == null ? "" : it.unitOverride);
         x.put("gatewayUrl", it.gatewayUrl == null ? "" : it.gatewayUrl);
         x.put("gatewayDown", it.gatewayDown);
+        /* 这四个也必须存：弱网全失败保留缓存、开机首屏、小组件读缓存这些路径
+           都靠它们。丢了 subEndMs 订阅到期提醒不再触发，丢了 pctLeft/hasQuota
+           积分卡片的"剩余 %"消失，丢了 estimated 总额的 ≈ 标记也没了。 */
+        x.put("subEndMs", it.subEndMs);
+        x.put("estimated", it.estimated);
+        x.put("pctLeft", it.pctLeft);
+        x.put("hasQuota", it.hasQuota);
         return x;
     }
 
@@ -143,6 +150,10 @@ public final class WidgetCache {
         it.unitOverride = x.optString("unitOverride", "");
         it.gatewayUrl = x.optString("gatewayUrl", "");
         it.gatewayDown = x.optBoolean("gatewayDown", false);
+        it.subEndMs = x.optLong("subEndMs", 0);
+        it.estimated = x.optBoolean("estimated", false);
+        it.pctLeft = x.optInt("pctLeft", -1);
+        it.hasQuota = x.optBoolean("hasQuota", false);
         return it;
     }
 

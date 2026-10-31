@@ -149,7 +149,10 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
         try {
-            fetchAndRender(ctx, mgr, ids);
+            /* 系统按 updatePeriodMillis 发起的周期更新，本质上就是后台刷新：
+               走精简模式（跳过汇率查询、失败不重试）。原来按前台全量跑，
+               每 30 分钟串行查一次汇率，还和 RefreshScheduler 的闹钟互不知情。 */
+            fetchAndRender(ctx, mgr, ids, true);
         } catch (Throwable t) {
             BalanceFetcher.diag(ctx, "onUpdate 异常: " + t);
             safeRedraw(ctx);
@@ -503,7 +506,33 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         }
 
         final PendingResult pr = goAsync();
-        new Thread(new Runnable() {
+        /* finish 必须幂等：兜底定时器和正常收尾都会调用它 */
+        final java.util.concurrent.atomic.AtomicBoolean done =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        final Runnable finishOnce = new Runnable() {
+            public void run() {
+                if (done.compareAndSet(false, true)) {
+                    try { pr.finish(); } catch (Throwable ignored) { }
+                }
+            }
+        };
+        /* 超窗兜底：goAsync 的广播存活窗口约 10 秒，而"汇率串行 3s + 并发抓取 8s"
+           就已经越过它。超窗后系统要么让广播失败要么直接杀进程，此时缓存还没写，
+           组件早就被刷成「正在刷新」，然后一直停在那儿。 */
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+            public void run() {
+                if (done.get()) return;
+                try {
+                    FETCHING.set(false);
+                    paintFromCache(ctx, mgr, allWidgetIds(ctx, mgr));
+                    BalanceFetcher.diag(ctx, "刷新超窗，已回退到缓存显示");
+                } catch (Throwable ignored) { }
+                finishOnce.run();
+            }
+        }, 8500);
+
+        try {
+            new Thread(new Runnable() {
             public void run() {
                 try {
                     long t0 = System.currentTimeMillis();
@@ -563,10 +592,16 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                     BalanceFetcher.diag(ctx, "刷新异常: " + t);
                 } finally {
                     FETCHING.set(false);
-                    pr.finish();
+                    finishOnce.run();
                 }
             }
         }).start();
+        } catch (Throwable t) {
+            /* 线程都没起来（极端内存）：闸门不能留着，finish 也不能漏 */
+            FETCHING.set(false);
+            finishOnce.run();
+            BalanceFetcher.diag(ctx, "刷新线程启动失败: " + t);
+        }
     }
 
     /** 当前页码不能超出实际页数（条目变少时要收回来） */

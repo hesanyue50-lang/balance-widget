@@ -189,7 +189,7 @@ public final class KeyStore {
 
     // ---------- 写 ----------
 
-    public static void add(Context c, String platform, ApiKey k) {
+    public static synchronized void add(Context c, String platform, ApiKey k) {
         dataVersion++; invalidate();
         List<ApiKey> all = load(c);
         if (k.id == null || k.id.length() == 0) {
@@ -200,7 +200,7 @@ public final class KeyStore {
         save(c, all);
     }
 
-    public static void update(Context c, ApiKey k) {
+    public static synchronized void update(Context c, ApiKey k) {
         dataVersion++; invalidate();
         List<ApiKey> all = load(c);
         for (int i = 0; i < all.size(); i++) {
@@ -350,7 +350,13 @@ public final class KeyStore {
             /* ⚠️ 必须 commit：这是用户手录的密钥，apply() 异步写盘时
                若进程被回收，内存缓存已经是新值、磁盘还是旧值 ——
                表现就是"明明保存了，重启后没了"。几十条 Key 的序列化只有几毫秒。 */
-            sp(c).edit().putString(K_KEYS, arr.toString()).commit();
+            boolean wrote = sp(c).edit().putString(K_KEYS, arr.toString()).commit();
+            if (!wrote) {
+                /* 写盘失败（存储满 / 存档异常）时不能更新缓存：
+                   否则界面显示"已保存"，重启后 Key 却没了。 */
+                BalanceFetcher.diag(c, "密钥写盘失败，本次改动未生效");
+                return;
+            }
             cache = new ArrayList<ApiKey>(list);   // 回填缓存，省掉下一次重解密
             cacheVer = dataVersion;
         } catch (Throwable ignored) { }

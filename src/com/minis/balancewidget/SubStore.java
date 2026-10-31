@@ -281,7 +281,8 @@ public final class SubStore {
         update(c, s);
     }
 
-    private static void save(Context c, List<Sub> l) {
+    /** 写存档。加锁：后台自动更新与 UI 上的改名/新增会并发进来，整份覆盖写必须串行 */
+    private static synchronized void save(Context c, List<Sub> l) {
         try {
             JSONArray arr = new JSONArray();
             for (int i = 0; i < l.size(); i++) {
@@ -307,9 +308,23 @@ public final class SubStore {
             SharedPreferences.Editor ed = sp(c).edit();
             ed.putString(K_SUBS, arr.toString());
             /* 不读旧值直接自增会踩类型坑（见上）；用时间戳当版本号，单调且类型永远对 */
-            ed.putLong("subs_ver", System.currentTimeMillis());
-            ed.commit();
-        } catch (Throwable ignored) { }
+            /* 版本号必须严格递增：用 currentTimeMillis 时，自动更新刚写完、用户立刻改名
+               这种"同一毫秒两次 save"会拿到相同版本，all() 认为缓存仍有效，
+               界面就显示不出这次改动。 */
+            long prevVer = sp(c).getLong("subs_ver", 0L);
+            ed.putLong("subs_ver", Math.max(System.currentTimeMillis(), prevVer + 1));
+            if (!ed.commit()) {
+                /* 写盘失败：让缓存失效，下次 all() 重新从磁盘读，
+                   而不是让内存里这份"看起来已生效"的列表继续骗人。 */
+                cacheList = null;
+                cacheVer = -1;
+                BalanceFetcher.diag(c, "订阅写盘失败，本次改动未落盘");
+            }
+        } catch (Throwable t) {
+            cacheList = null;
+            cacheVer = -1;
+            BalanceFetcher.diag(c, "订阅保存异常: " + t);
+        }
     }
 
     // ---------- 迁移 ----------

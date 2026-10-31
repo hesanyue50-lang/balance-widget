@@ -97,15 +97,6 @@ HEADER = '''<?xml version="1.0" encoding="utf-8"?>
         android:orientation="vertical">
 '''
 
-FROST = '''
-        <!-- 玻璃高光：只在左上角铺一层极淡的白，制造"有厚度"的错觉 -->
-        <View
-            android:id="@+id/w2_frost"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="@drawable/wg_frost" />
-'''
-
 
 def header_row(c):
     """标题行：title / page / prev / next / refresh"""

@@ -58,9 +58,18 @@ public final class MimoKeepAlive {
         if (BalanceFetcher.mimoSession(act).length() == 0) return;   // 从没登录过，没什么可续
         long now = System.currentTimeMillis();
         if (now - lastAt < MIN_GAP_MS) return;
-        lastAt = now;
         act.runOnUiThread(new Runnable() {
-            public void run() { start(act); }
+            public void run() {
+                try {
+                    start(act);
+                    /* 成功之后才记时间：WebView 创建失败时不该吃满 8 分钟冷却，
+                       否则这段时间会话继续老化，用户感觉"偶尔莫名其妙就过期了"。 */
+                    lastAt = System.currentTimeMillis();
+                } catch (Throwable t) {
+                    lastAt = 0;
+                    BalanceFetcher.diag(act, "保活启动失败: " + t);
+                }
+            }
         });
     }
 

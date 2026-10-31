@@ -182,7 +182,6 @@ public class BalanceFetcher {
                而按 6 小时全局挡会把新点全挡掉。 */
             long lastSample = sps.getLong("last_sample_at", 0);
             if (System.currentTimeMillis() - lastSample < 60 * 1000L) return;
-            sps.edit().putLong("last_sample_at", System.currentTimeMillis()).apply();
             Ledger lg = Ledger.get(ctx);
             /* 账本按「密钥」记录快照（用合并前的原始条目，避免平台级 id 覆盖） */
             java.util.List<Item> raw = r.rawItems != null ? r.rawItems : r.items;
@@ -215,6 +214,9 @@ public class BalanceFetcher {
             }
             /* 顺手清理超期数据（默认留 90 天） */
             lg.prune(ctx, sps.getInt("ledger_keep_days", Ledger.KEEP_DAYS_DEFAULT));
+            /* 记账确实跑完才推进时间戳：原来先写时间戳再记账，记账抛异常
+               （存储满/数据库锁）时后面 60 秒全被闸门挡掉，曲线上就出现空洞。 */
+            sps.edit().putLong("last_sample_at", System.currentTimeMillis()).apply();
             diag(ctx, "账本采样完成，写入 " + n + " 条 [" + who.toString().trim() + "]");
         } catch (Throwable t) {
             diag(ctx, "快照记录失败: " + t);
@@ -1586,7 +1588,7 @@ public class BalanceFetcher {
                     REDIRECT_HOPS.set(Integer.valueOf(hops + 1));
                     try {
                         Log.i(TAG, "  跟随重定向(代理 " + code + ") → " + loc2);
-                        return get(loc2, bearer, cookie, Math.max(2500, timeoutMs));
+                        return get(loc2, bearer, cookie, Math.max(1200, timeoutMs / 2));
                     } finally {
                         REDIRECT_HOPS.set(Integer.valueOf(hops));
                     }
@@ -1668,7 +1670,7 @@ public class BalanceFetcher {
                     REDIRECT_HOPS.set(Integer.valueOf(hops + 1));
                     try {
                         Log.i(TAG, "  跟随重定向(" + code + ") → " + loc);
-                        return get(loc, bearer, cookie, Math.max(2500, timeoutMs));
+                        return get(loc, bearer, cookie, Math.max(1200, timeoutMs / 2));
                     } finally {
                         REDIRECT_HOPS.set(Integer.valueOf(hops));
                     }
@@ -1830,7 +1832,7 @@ public class BalanceFetcher {
         if (date.charAt(4) != '-' || date.charAt(7) != '-') return s;
         String y = date.substring(0, 4);
         String md = date.substring(5);                       // MM-dd
-        String nowY = new java.text.SimpleDateFormat("yyyy").format(new java.util.Date());
+        String nowY = new java.text.SimpleDateFormat("yyyy", java.util.Locale.US).format(new java.util.Date());
         return nowY.equals(y) ? md : y + "-" + md;
     }
 
@@ -1900,7 +1902,7 @@ public class BalanceFetcher {
                 r.close();
             }
             if (code < 200 || code >= 300) {
-                if (code == 401 || code == 403) throw new Exception("Key 无效或未授权 (" + code + ")");
+                if (code == 401 || code == 403) throw new StatusException("Key 无效或未授权 (" + code + ")");
                 if (code == 404) throw new Exception("接口地址不存在 (404)");
                 if (code == 429) throw new Exception("请求过于频繁 (429)");
                 throw new Exception("HTTP " + code);
@@ -3381,6 +3383,9 @@ public class BalanceFetcher {
             it.cny = 0;
             it.bal = 0;
             it.rows = "免费服务";
+            /* 没有额度可查 ≠ 余额 0 元。不打这个标，用户设过阈值后
+               每轮刷新都会收到"¥0.00 低于阈值"的假预警。 */
+            it.noData = true;
             return;
         }
 

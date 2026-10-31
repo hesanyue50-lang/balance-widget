@@ -976,12 +976,18 @@ public final class Clash {
             /* 顺手留一份原始订阅到 App 外部目录：
                排查"下到了但解析不出节点"这类问题时能直接看原文。 */
             try {
-                java.io.File dir = c.getExternalFilesDir(null);
-                if (dir != null) {
-                    java.io.FileWriter w = new java.io.FileWriter(
-                            new java.io.File(dir, "last_subscription.yaml"), false);
-                    w.write(out.yaml);
-                    w.close();
+                /* 落**内部**私有目录。
+                   原来写到 getExternalFilesDir()，而这份 Yaml 里有全部节点地址、
+                   端口和密码 —— 外部目录其它应用可读，也会被系统备份带走。
+                   顺手限制 1MB，避免机场返回巨物把用户存储塞满。 */
+                if (out.yaml.length() <= 1024 * 1024) {
+                    java.io.File dir = c.getFilesDir();
+                    if (dir != null) {
+                        java.io.FileWriter w = new java.io.FileWriter(
+                                new java.io.File(dir, "last_subscription.yaml"), false);
+                        w.write(out.yaml);
+                        w.close();
+                    }
                 }
             } catch (Throwable ig) { }
         } catch (Throwable t) {
