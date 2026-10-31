@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 平台表单弹窗外壳：圆角卡片，跟随主题（?attr 在 drawable 里可用，
+     与 input_aurora.xml 同一套做法）。
+     20dp 圆角是「浮层」档：比卡片的 12dp 大，视觉上从页面里浮起来。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="20dp" />
+    <solid android:color="?attr/c_card" />
+    <stroke android:width="1dp" android:color="?attr/c_line" />
+</shape>

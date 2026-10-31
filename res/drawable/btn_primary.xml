@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主按钮：强调色实底 + 白字（c_accent_tx）。弹窗底栏「保存 / 确定」用。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="13dp" />
+    <solid android:color="?attr/c_accent" />
+</shape>

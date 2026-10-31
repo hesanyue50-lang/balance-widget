@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 胶囊 chip：强调色的 15% 底（c_accent_soft）+ 强调色字。
+     用来做「币种: CNY」「制式: 金额」这类点一下循环切换的轻量开关 ——
+     比下拉框省一层弹窗，也比纯文字链接看得出「可以点」。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="14dp" />
+    <solid android:color="?attr/c_accent_soft" />
+</shape>
