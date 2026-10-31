@@ -371,6 +371,9 @@ public final class Anim {
 
     /* ==================== 数字滚动 ==================== */
 
+    /** 临时诊断计数：tilt 到底有没有被调用 */
+    private static int TILT_LOG_COUNT = 0;
+
     /** 正在跑的滚动动画（每个 TextView 一个，重复触发要先停掉旧的） */
     private static final java.util.WeakHashMap<View, ValueAnimator> COUNTING =
             new java.util.WeakHashMap<View, ValueAnimator>();
@@ -493,17 +496,26 @@ public final class Anim {
             public boolean onTouch(View view, android.view.MotionEvent e) {
                 int action = e.getActionMasked();
                 if (action == android.view.MotionEvent.ACTION_DOWN) {
+                    /* 临时诊断：确认触摸事件真的送到了卡片根布局上。
+                       ViewGroup 的 onTouchListener 只有在**没有子 View 消费事件**时才触发，
+                       如果卡片里有 clickable 的子控件，这里就一次都不会进。 */
+                    if (TILT_LOG_COUNT < 5) {
+                        TILT_LOG_COUNT++;
+                        try {
+                            BalanceFetcher.diag(view.getContext(), "tilt 触发 #" + TILT_LOG_COUNT);
+                        } catch (Throwable ignored) { }
+                    }
                     /* 按下去 = 缩小 + 阴影加深（离"手"更近则影更散）。
                        注意缩小幅度要够：1.8% 肉眼几乎看不出来，3% 才有"被压"的感觉。 */
                     view.animate().cancel();
                     try { view.setElevation(dp(view, 10)); } catch (Throwable ignored) { }
                     /* 200ms：110ms 太快，手指刚按下去动画就结束了，感觉不到"压"的过程。
                        慢下来才有"按进橡皮"的过程感。 */
-                    view.animate().scaleX(0.968f).scaleY(0.968f)
+                    view.animate().scaleX(0.935f).scaleY(0.935f)
                             .setDuration(200)
                             .setInterpolator(EMPHASIZED)
                             .start();
-                    tilt(view, e, maxDeg);
+                    tilt(view, e, maxDeg);       // 第一帧就有倾角，不用等 MOVE
                     return false;      // 不消费：点击 / 长按 / 滚动照常
                 }
                 if (action == android.view.MotionEvent.ACTION_MOVE) {
@@ -541,10 +553,12 @@ public final class Anim {
         float w = Math.max(1f, view.getWidth());
         float px = (e.getX() / w - 0.5f) * 2f;      // -1 .. 1
         float base = (px >= 0 ? -1f : 1f) * 0.35f;  // 按中间也有反应
-        /* 跟手时用短动画过渡而不是直接 set：手指移动是离散事件，
-           直接 set 会一跳一跳；60ms 的补间把它抹平，又不至于拖泥带水。 */
-        view.animate().rotationY((base + px * 0.65f) * maxDeg)
-                .setDuration(60).start();
+        /* ⚠️ 必须用 setRotationY 直接设值，**不能** animate().rotationY()。
+           ViewPropertyAnimator 是每个 View 共用的同一个实例：
+           在 MOVE 里调 animate().rotationY() 会接管动画队列，
+           把 DOWN 时刚启动的 scale 动画**取消掉** —— 卡片只缩了一点点就停住，
+           看起来就是"完全没反应"。直接 set 则只改属性，不干扰那条动画。 */
+        view.setRotationY((base + px * 0.65f) * maxDeg);
     }
 
     private static int dp(View v, int val) {
