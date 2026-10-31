@@ -234,6 +234,7 @@ public class SettingsBinder {
                 public void onClick(View v) {
                     if (moreBox == null) return;
                     boolean now = moreBox.getVisibility() != View.VISIBLE;
+                    Anim.pulse(moreToggle);
                     prefs().edit().putBoolean("more_opened", now).apply();
                     moreToggle.setText(now
                             ? act.getString(R.string.toggle_collapse)
@@ -262,6 +263,7 @@ public class SettingsBinder {
                 public void onClick(View v) {
                     if (themeBox == null) return;
                     boolean now = themeBox.getVisibility() != View.VISIBLE;
+                    Anim.pulse(themeToggle);
                     prefs().edit().putBoolean("theme_opened", now).apply();
                     themeToggle.setText(now
                             ? act.getString(R.string.toggle_collapse)
@@ -340,6 +342,7 @@ public class SettingsBinder {
                 public void onClick(View v) {
                     if (keyCard == null) return;
                     boolean now = keyCard.getVisibility() != View.VISIBLE;
+                    if (keyToggle != null) Anim.pulse(keyToggle);
                     prefs().edit().putBoolean("key_opened", now).apply();
                     keyToggle.setText(now ? "收起 ▴" : "展开 ▾");
                     if (now) Anim.expand(keyCard);

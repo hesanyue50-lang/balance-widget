@@ -489,25 +489,29 @@ public final class Anim {
                8000 是经验值：再小透视过猛，再大就接近正交投影没立体感。 */
             v.setCameraDistance(v.getResources().getDisplayMetrics().density * 8000f);
         } catch (Throwable ignored) { }
-        v.setOnTouchListener(new View.OnTouchListener() {
+        v.setOnTouchListener(new android.view.View.OnTouchListener() {
             public boolean onTouch(View view, android.view.MotionEvent e) {
                 int action = e.getActionMasked();
-                if (action == android.view.MotionEvent.ACTION_DOWN
-                        || action == android.view.MotionEvent.ACTION_MOVE) {
-                    float w = Math.max(1f, view.getWidth());
-                    float h = Math.max(1f, view.getHeight());
-                    float px = (e.getX() / w - 0.5f) * 2f;      // -1 .. 1
-                    float py = (e.getY() / h - 0.5f) * 2f;
-                    /* 手在左上 → 卡片向左上"低头"，所以 Y 轴反向、X 轴正向 */
-                    view.setRotationY(-px * maxDeg);
-                    view.setRotationX(py * maxDeg);
+                if (action == android.view.MotionEvent.ACTION_DOWN) {
+                    /* 抬起、轻微放大：和旋转叠在一起，按压才有"被按下去"的分量 */
+                    view.animate().cancel();
+                    try { view.setElevation(dp(view, 6)); } catch (Throwable ignored) { }
+                    view.animate().scaleX(0.982f).scaleY(0.982f)
+                            .setDuration(120).start();
+                    tilt(view, e, maxDeg);
                     return false;      // 不消费：点击 / 长按 / 滚动照常
+                }
+                if (action == android.view.MotionEvent.ACTION_MOVE) {
+                    tilt(view, e, maxDeg);
+                    return false;
                 }
                 if (action == android.view.MotionEvent.ACTION_UP
                         || action == android.view.MotionEvent.ACTION_CANCEL) {
+                    try { view.setElevation(0f); } catch (Throwable ignored) { }
                     view.animate()
                             .rotationX(0f).rotationY(0f)
-                            .setDuration(320)
+                            .scaleX(1f).scaleY(1f)
+                            .setDuration(340)
                             .setInterpolator(springDefault())   // 回弹时有一点过冲，像被松开的弹簧
                             .start();
                     return false;
@@ -515,6 +519,23 @@ public final class Anim {
                 return false;
             }
         });
+    }
+
+    private static void tilt(View view, android.view.MotionEvent e, float maxDeg) {
+        float w = Math.max(1f, view.getWidth());
+        float h = Math.max(1f, view.getHeight());
+        float px = (e.getX() / w - 0.5f) * 2f;      // -1 .. 1
+        float py = (e.getY() / h - 0.5f) * 2f;
+        /* 手在正中时 px/py 接近 0，纯正比的话按中间完全没效果 ——
+           补一个固定的小倾角（朝按压方向），保证任何位置都有反馈。 */
+        float baseX = (py >= 0 ? 1f : -1f) * 0.42f;
+        float baseY = (px >= 0 ? -1f : 1f) * 0.42f;
+        view.setRotationY((baseY + px * 0.58f) * maxDeg);
+        view.setRotationX((baseX + py * 0.58f) * maxDeg);
+    }
+
+    private static int dp(View v, int val) {
+        return (int) (val * v.getResources().getDisplayMetrics().density + 0.5f);
     }
 
     /** 一次性倾斜反馈（不需要持续跟手时用） */
@@ -608,5 +629,26 @@ public final class Anim {
                 .setDuration(380)
                 .setInterpolator(springFast())
                 .start();
+    }
+
+    /**
+     * 给卡片挂一层点击涟漪（前景层，不动它自己的背景）。
+     *
+     * 用 foreground 而不是 background：背景是主题画出来的圆角矩形，
+     * 换成 RippleDrawable 会把形状一起换掉；foreground 只是叠在上面，
+     * 涟漪的圆角由 mask 决定，和卡片形状一致。
+     */
+    public static void attachRipple(View v, int color) {
+        if (v == null) return;
+        if (android.os.Build.VERSION.SDK_INT < 23) return;   // View.setForeground 是 23+
+        try {
+            android.graphics.drawable.GradientDrawable mask =
+                    new android.graphics.drawable.GradientDrawable();
+            mask.setColor(0xFFFFFFFF);
+            mask.setCornerRadius(v.getResources().getDisplayMetrics().density * 20f);
+            android.content.res.ColorStateList csl =
+                    android.content.res.ColorStateList.valueOf(color);
+            v.setForeground(new android.graphics.drawable.RippleDrawable(csl, null, mask));
+        } catch (Throwable ignored) { }
     }
 }

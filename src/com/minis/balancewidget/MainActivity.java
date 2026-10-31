@@ -635,6 +635,13 @@ public class MainActivity extends Activity {
         if (inner <= 0) return;
         float step = inner / (float) Math.max(1, navTabs.size());
         segSlider.setTranslationX(progress * step);
+        /* 滚动中把滑块横向拉伸：越接近"两格之间"拉得越长，落定后回 1。
+           iOS 分段控件的招牌手感 —— 纯位移会显得滑块是"滑"过去，
+           拉伸之后像"被两边的格子拽"，跟手感强很多。 */
+        float frac = progress - (float) Math.floor(progress);      // 0..1
+        float between = (float) Math.sin(frac * Math.PI);          // 中段最大
+        float stretch = 1f + 0.42f * between;
+        segSlider.setScaleX(stretch);
 
         /* 用当前的标签列表，而不是写死的四个 id —— 隐藏页面后标签会变少 */
         int on = Theme.c(this, R.attr.c_accent);
@@ -648,7 +655,7 @@ public class MainActivity extends Activity {
             t.setTextColor(blendColor(off, on, eased));
             /* 强调用缩放而不是切换 bold：改 typeface 会触发重新测量，
                滚动过程中文字会左右抖；scale 纯绘制期变化，不动布局。 */
-            float sc = 1f + 0.075f * eased;
+            float sc = 1f + 0.13f * eased;
             t.setScaleX(sc);
             t.setScaleY(sc);
         }
@@ -1771,7 +1778,11 @@ public class MainActivity extends Activity {
                         hidePullRefresh();
                         /* 手动刷新（非自动）完成时，给总额一个"活一下"的确认 ——
                            数字没变也值得，否则用户看不出刷新到底有没有生效 */
-                        if (!silent) Anim.pulse(tTotal);
+                        if (!silent) {
+                            Anim.pulse(tTotal);
+                            /* 完成时再扫一道更亮的光：开始是"正在等"，结束是"好了" */
+                            Anim.shimmer(tTotal, 120);
+                        }
                     }
                 });
                 } catch (Throwable t) {
@@ -2175,6 +2186,11 @@ public class MainActivity extends Activity {
         /* tSub 也要判：缺 t_sub 时后面 2163/2188 两处直接用会 NPE，
            而本文件别的地方（176/1703）都是当"可能为 null"处理的。 */
         if (cards == null || tTotal == null || tSub == null) return;
+        /* 卡片倾斜时会画到自己的边界外，父容器默认会裁掉 —— 关掉裁剪 */
+        try {
+            cards.setClipChildren(false);
+            cards.setClipToPadding(false);
+        } catch (Throwable ignored) { }
         /* 首次渲染（列表本来是空的）才播入场动画 ——
            自动刷新时也播的话，每几分钟整页闪一次，反而烦 */
         final boolean firstFill = cards.getChildCount() == 0;
@@ -2222,7 +2238,11 @@ public class MainActivity extends Activity {
             /* 点卡片 = 弹出菜单：刷新这一项 / 看密钥（看密钥要先过密码） */
             /* 按压时跟着手指做 2.5° 的立体倾斜 —— 幅度小、有回弹阻尼，
                和卡片 11dp 的外边距配合，倾斜的边角不会被父容器裁掉。 */
-            Anim.attachTilt(v, 2.5f);
+            /* 5°：2.5° 在 88dp 高的卡片上边缘只位移 3.8dp，肉眼几乎看不出；
+               父容器已经 setClipChildren(false)，不会被切边。 */
+            Anim.attachTilt(v, 5f);
+            /* 点击涟漪：半透明白，暗色主题下是"亮一下"，亮色主题下是"灰一下" */
+            Anim.attachRipple(v, 0x1A808080);
             v.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v2) {
                     /* MiMo 是登录型平台：登录态失效时，菜单里必须先给"重新登录"。

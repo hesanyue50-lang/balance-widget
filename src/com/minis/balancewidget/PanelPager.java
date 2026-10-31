@@ -238,12 +238,20 @@ public class PanelPager extends HorizontalScrollView {
             float offset = (scrollX - i * pageWidth) / (float) pageWidth;   // 0=完全可见
             float a = Math.min(1f, Math.abs(offset));
             if (a < 0.001f) {
-                /* 已经完全对齐：彻底复位，避免残留半透明 */
+                /* 已经完全对齐：彻底复位，避免残留半透明 / 缩放 */
                 page.setAlpha(1f);
                 page.setTranslationY(0f);
+                page.setScaleX(1f);
+                page.setScaleY(1f);
             } else {
                 page.setAlpha(1f - 0.35f * a);
                 page.setTranslationY(18f * a);
+                /* 略微缩小：离开的页"往后退"，进来的是"迎面而来"。
+                   scale 是绘制期变换，不改布局尺寸，所以不会影响
+                   HorizontalScrollView 的宽度计算。 */
+                float sc = 1f - 0.035f * a;
+                page.setScaleX(sc);
+                page.setScaleY(sc);
             }
         }
     }
