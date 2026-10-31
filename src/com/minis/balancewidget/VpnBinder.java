@@ -1409,7 +1409,7 @@ public class VpnBinder {
             public void run() {
                 String err;
                 try {
-                    err = Clash.start(act, Clash.buildConfig(a.yaml));
+                    err = Clash.startWithRollback(act, Clash.buildConfig(a.yaml));
                 } catch (Throwable t) {
                     err = "启动异常：" + t;
                 }

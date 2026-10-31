@@ -497,6 +497,40 @@ public final class Clash {
         return sb.toString();
     }
 
+    /**
+     * 启动内核，失败且是"配置解析错"时自动回滚到上一版配置再试一次。
+     *
+     * 为什么需要：机场限流时会返回**看起来正常但实际残缺**的正文，覆盖之后内核报
+     * `Parse config error: yaml: line N: found unexpected end of stream`；
+     * 而重新下载订阅往往又必须经过代理 —— 代理正是起不来的那个，于是彻底死锁。
+     * 有上一版配置就能自己爬出来，不用用户去别的客户端折腾。
+     *
+     * @return null = 启动成功；否则是错误说明
+     */
+    public static String startWithRollback(Context c, String cfgText) {
+        String err = start(c, cfgText);
+        if (err == null) return null;
+        boolean parseError = err.contains("Parse config error")
+                || err.contains("yaml:") || err.contains("unmarshal");
+        if (!parseError) return err;
+        try {
+            String id = SubStore.activeId(c);
+            if (id == null) return err;
+            if (!SubStore.rollback(c, id)) return err;
+            SubStore.Sub s = SubStore.byId(c, id);
+            if (s == null || !s.ready()) return err;
+            BalanceFetcher.diag(c, "配置解析失败，尝试回滚到上一版（" + s.yaml.length() + " 字节）");
+            String err2 = start(c, buildConfig(s.yaml));
+            if (err2 == null) {
+                BalanceFetcher.diag(c, "回滚成功，已用上一版配置启动");
+                return null;
+            }
+            return err2;
+        } catch (Throwable t) {
+            return err;
+        }
+    }
+
     /** buildConfig 头部自己写死的顶层键 —— 订阅里的同名项要丢掉，免得重复定义 */
     private static final String[] OWNED_TOP_KEYS = {
         "mixed-port:", "port:", "socks-port:", "external-controller:",

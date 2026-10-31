@@ -182,6 +182,21 @@ public class ClashVpnService extends VpnService {
             /* ③ 生成带 tun 段的配置并启动内核 */
             String cfg = Clash.buildTunConfig(sub.yaml, tunFd);
             String err = Clash.startWithFd(this, cfg, tunFd);
+            /* 配置解析失败（机场塞了残缺正文）→ 回滚到上一版再试一次。
+               没有这一步的话，用户会卡在"代理起不来 → 订阅下不了（订阅要走代理）"
+               的死循环里。 */
+            if (err != null && (err.contains("Parse config error")
+                    || err.contains("yaml:") || err.contains("unmarshal"))) {
+                String rid = SubStore.activeId(this);
+                if (rid != null && SubStore.rollback(this, rid)) {
+                    SubStore.Sub s2 = SubStore.byId(this, rid);
+                    if (s2 != null && s2.ready()) {
+                        BalanceFetcher.diag(this, "配置解析失败，回滚到上一版重试");
+                        err = Clash.startWithFd(this,
+                                Clash.buildTunConfig(s2.yaml, tunFd), tunFd);
+                    }
+                }
+            }
             if (err != null) {
                 BalanceFetcher.diag(this, "内核启动失败：" + err);
                 stopVpn();

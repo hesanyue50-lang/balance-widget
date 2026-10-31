@@ -35,6 +35,15 @@ public final class SubStore {
         public String url = "";
         /** 已下载的配置正文（启用时直接用，不联网） */
         public String yaml = "";
+        /**
+         * 上一版能用的配置。
+         *
+         * 为什么要留：下载可能拿到"看起来正常但实际残缺"的正文（机场限流时常见），
+         * 覆盖之后内核就起不来；而重新下载订阅往往又**必须经过代理** ——
+         * 代理正是起不来的那个，于是彻底卡死。
+         * 有这一份就能在内核启动失败时自动回滚，不用用户去别的客户端折腾。
+         */
+        public String prevYaml = "";
         public long updatedAt = 0;
         public int nodeCount = 0;
         /** 机场流量（字节；-1 = 机场没提供）。expire 是秒级时间戳 */
@@ -122,6 +131,7 @@ public final class SubStore {
                 sub.name = j.optString("name", "");
                 sub.url = j.optString("url", "");
                 sub.yaml = j.optString("yaml", "");
+                sub.prevYaml = j.optString("prevYaml", "");
                 sub.updatedAt = j.optLong("updatedAt", 0);
                 sub.nodeCount = j.optInt("nodeCount", 0);
                 sub.up = j.optLong("up", -1);
@@ -188,9 +198,37 @@ public final class SubStore {
         if (sub == null) return;
         List<Sub> l = all(c);
         for (int i = 0; i < l.size(); i++) {
-            if (l.get(i).id.equals(sub.id)) { l.set(i, sub); break; }
+            if (!l.get(i).id.equals(sub.id)) continue;
+            Sub old = l.get(i);
+            /* 正文要变了 → 先把旧的那份挪到 prevYaml。
+               旧 yaml 为空（首次下载）或新的和旧的一样（只改了名字/开关）就不用动。 */
+            if (sub.yaml != null && sub.yaml.length() > 0
+                    && old.yaml != null && old.yaml.length() > 0
+                    && !old.yaml.equals(sub.yaml)) {
+                sub.prevYaml = old.yaml;
+            } else if (sub.prevYaml == null || sub.prevYaml.length() == 0) {
+                sub.prevYaml = old.prevYaml;
+            }
+            l.set(i, sub);
+            break;
         }
         save(c, l);
+    }
+
+    /** 内核起不来时回滚到上一版配置；没有可回滚的返回 false */
+    public static boolean rollback(Context c, String id) {
+        Sub s = byId(c, id);
+        if (s == null) return false;
+        if (s.prevYaml == null || s.prevYaml.length() < 200) return false;
+        String bad = s.yaml;
+        s.yaml = s.prevYaml;
+        s.prevYaml = "";          // 只能用一次，避免来回横跳
+        s.nodeCount = Clash.countProxies(s.yaml);
+        s.updatedAt = System.currentTimeMillis();
+        update(c, s);
+        BalanceFetcher.diag(c, "配置回滚：用上一版 " + s.yaml.length()
+                + " 字节替换掉 " + (bad == null ? 0 : bad.length()) + " 字节");
+        return true;
     }
 
     public static void remove(Context c, String id) {
@@ -223,6 +261,9 @@ public final class SubStore {
                 j.put("name", s.name);
                 j.put("url", s.url);
                 j.put("yaml", s.yaml == null ? "" : s.yaml);
+                if (s.prevYaml != null && s.prevYaml.length() > 0) {
+                    j.put("prevYaml", s.prevYaml);
+                }
                 j.put("updatedAt", s.updatedAt);
                 j.put("nodeCount", s.nodeCount);
                 j.put("up", s.up);

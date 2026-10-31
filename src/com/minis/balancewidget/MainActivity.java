@@ -146,7 +146,7 @@ public class MainActivity extends Activity {
                     }
                     String sub = readText(new java.io.File(Clash.workDir(c0), "sub.yaml"));
                     if (sub.length() > 0) {
-                        String err = Clash.start(c0, Clash.buildConfig(sub));
+                        String err = Clash.startWithRollback(c0, Clash.buildConfig(sub));
                         BalanceFetcher.diag(c0, "自动启动加速：" + (err == null ? "成功" : err));
                     }
                 } catch (Throwable t) {

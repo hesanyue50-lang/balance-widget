@@ -102,7 +102,7 @@ public class RefreshReceiver extends BroadcastReceiver {
                         if (Clash.isRunning()) return;
                         SubStore.Sub a = SubStore.active(ac);
                         if (a == null || !a.ready()) return;
-                        Clash.start(ac, Clash.buildConfig(a.yaml));
+                        Clash.startWithRollback(ac, Clash.buildConfig(a.yaml));
                         BalanceFetcher.diag(ac, "开机/更新后已自动恢复加速");
                     } catch (Throwable t) {
                         BalanceFetcher.diag(ac, "自动恢复加速失败：" + t.getClass().getSimpleName());
