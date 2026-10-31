@@ -56,7 +56,7 @@
             android:ellipsize="end"
             android:includeFontPadding="false"
             android:textColor="@color/w2_tx2"
-            android:textSize="12sp"
+            android:textSize="11.5sp"
             android:text="API 余额" />
 
         <TextView
@@ -115,7 +115,7 @@
         android:singleLine="true"
         android:includeFontPadding="false"
         android:textColor="@color/w2_tx"
-        android:textSize="26sp"
+        android:textSize="23sp"
         android:textStyle="bold" />
 
     <TextView
@@ -165,7 +165,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val1"
@@ -175,7 +175,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -204,7 +204,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val2"
@@ -214,7 +214,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
@@ -262,7 +262,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val3"
@@ -272,7 +272,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -301,7 +301,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val4"
@@ -311,7 +311,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
@@ -359,7 +359,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val5"
@@ -369,7 +369,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -398,7 +398,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val6"
@@ -408,7 +408,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
@@ -456,7 +456,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val7"
@@ -466,7 +466,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -495,7 +495,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx2"
-                android:textSize="12sp" />
+                android:textSize="11.5sp" />
 
             <TextView
                 android:id="@+id/w2_val8"
@@ -505,7 +505,7 @@
                 android:singleLine="true"
                 android:includeFontPadding="false"
                 android:textColor="@color/w2_tx"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>

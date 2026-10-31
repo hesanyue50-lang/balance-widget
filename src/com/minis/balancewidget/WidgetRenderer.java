@@ -103,8 +103,8 @@ public final class WidgetRenderer {
     public static void renderLoading(Context ctx, AppWidgetManager mgr, int id) {
         RemoteViews v = new RemoteViews(ctx.getPackageName(), LAYOUT);
         boolean darkL = WallpaperTint.useDark(ctx);
-        v.setTextColor(R.id.w2_title, WallpaperTint.tx2(darkL));
-        v.setTextColor(R.id.w2_total, WallpaperTint.tx(darkL));
+        v.setTextColor(R.id.w2_title, Theme.wTx2(ctx));
+        v.setTextColor(R.id.w2_total, Theme.wTx(ctx));
         v.setTextViewText(R.id.w2_title, "API 管理助手");
         v.setTextViewText(R.id.w2_total, "…");
         v.setTextViewText(R.id.w2_sub, "正在刷新");
@@ -125,9 +125,12 @@ public final class WidgetRenderer {
            所有文字色都由它决定，不再依赖布局里写死的颜色 —— 布局里的色值只是
            设计时的参考值，运行时一律覆盖掉。 */
         final boolean dark = WallpaperTint.useDark(ctx);
-        final int cTx  = WallpaperTint.tx(dark);
-        final int cTx2 = WallpaperTint.tx2(dark);
-        final int cTx3 = WallpaperTint.tx3(dark);
+        /* 文字色跟**应用主题**走（wallpaper 只管背景要不要深色）。
+           原来三档全按壁纸明暗取，用户把 App 换成 Editorial 纸感，
+           桌面上还是冷黑字，两边像两个产品。 */
+        final int cTx  = Theme.wTx(ctx);
+        final int cTx2 = Theme.wTx2(ctx);
+        final int cTx3 = Theme.wTx3(ctx);
         v.setTextColor(R.id.w2_title, cTx2);
         v.setTextColor(R.id.w2_total, cTx);
         v.setTextColor(R.id.w2_sub, cTx3);

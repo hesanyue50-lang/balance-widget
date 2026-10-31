@@ -259,4 +259,30 @@ public final class Theme {
         } catch (Throwable ignored) { }
         return 0;
     }
+
+    /* ==================== 小组件专用配色 ==================== */
+
+    /**
+     * 桌面小组件的文字色三档：{主, 次, 三级}。
+     *
+     * 为什么不直接用 {@link #c} 解析 attr：小组件刷新发生在**没有 Activity 的
+     * 后台上下文**里，那里的 Theme 是 manifest 上写死的 AppTheme，
+     * 解析出来永远是 Aurora 亮的值 —— 用户选了 Editorial，桌面还是冷黑字。
+     * 表格里的值是各主题 c_tx / c_tx2 / c_tx3 的原样抄录。
+     */
+    private static final int[][] SMALL_TEXT = {
+            { 0xFF0B0E14, 0xFF414A5C, 0xFF55606F },   // Aurora 亮
+            { 0xFFF5F7FA, 0xFF9AA3B2, 0xFF6B7382 },   // Aurora 暗
+            { 0xFF1A1614, 0xFF574E45, 0xFF7A6E62 },   // Editorial
+            { 0xFF0A0A0A, 0xFF555555, 0xFF808080 },   // Minimal 瑞士
+            { 0xFFE6E6E6, 0xFF8A8A8A, 0xFF5C5C5C },   // Devtool
+            { 0xFF000000, 0xFF333333, 0xFF555555 },   // Brutalism
+            { 0xFF2B3446, 0xFF5A6B85, 0xFF8394AC },   // Soft Clay
+    };
+
+    public static int wTx(Context c) { return SMALL_TEXT[index(c)][0]; }
+
+    public static int wTx2(Context c) { return SMALL_TEXT[index(c)][1]; }
+
+    public static int wTx3(Context c) { return SMALL_TEXT[index(c)][2]; }
 }
