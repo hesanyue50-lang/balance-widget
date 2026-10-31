@@ -91,6 +91,26 @@ public final class WidgetRenderer {
     }
 
     /** @param style 固定风格 0~6；-1 = 跟随应用主题 */
+    /* 固定风格的七套资源：背景 + 三档文字色 + 强调色。
+       style >= 0 时一律从这里取，不再跟壁纸/主题走 —— 否则用户在桌面挑了
+       「Brutalism 撞色」，运行时又被 Theme.wTx() 覆盖成灰黑字，等于白选。 */
+    private static final int[] STYLE_BG = {
+            R.drawable.wg_t0, R.drawable.wg_t1, R.drawable.wg_t2, R.drawable.wg_t3,
+            R.drawable.wg_t4, R.drawable.wg_t5, R.drawable.wg_t6,
+    };
+    private static final int[] STYLE_TX = {
+            R.color.ws0_tx, R.color.ws1_tx, R.color.ws2_tx, R.color.ws3_tx,
+            R.color.ws4_tx, R.color.ws5_tx, R.color.ws6_tx,
+    };
+    private static final int[] STYLE_TX2 = {
+            R.color.ws0_tx2, R.color.ws1_tx2, R.color.ws2_tx2, R.color.ws3_tx2,
+            R.color.ws4_tx2, R.color.ws5_tx2, R.color.ws6_tx2,
+    };
+    private static final int[] STYLE_TX3 = {
+            R.color.ws0_tx3, R.color.ws1_tx3, R.color.ws2_tx3, R.color.ws3_tx3,
+            R.color.ws4_tx3, R.color.ws5_tx3, R.color.ws6_tx3,
+    };
+
     private static int layoutFor(Context ctx, int style) {
         int i = style >= 0 ? style : Theme.index(ctx);
         switch (i) {
@@ -163,7 +183,7 @@ public final class WidgetRenderer {
         v.setTextViewText(R.id.w2_sub, "正在刷新");
         v.setTextViewText(R.id.w2_page, "");
         hideAll(v);
-        bind(ctx, v, id);
+        bind(ctx, v, id, style);
         push(ctx, mgr, id, v);
     }
 
@@ -173,7 +193,7 @@ public final class WidgetRenderer {
         int perPage = WidgetStyle.capacityFor(mgr, id);
         final int style = styleOf(mgr, id);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx, style));
-        bind(ctx, v, id);
+        bind(ctx, v, id, style);
 
         /* 从壁纸吸色挑一套预设（亮壁纸 → 浅玻璃+深字，暗壁纸 → 深玻璃+浅字）。
            所有文字色都由它决定，不再依赖布局里写死的颜色 —— 布局里的色值只是
@@ -182,9 +202,9 @@ public final class WidgetRenderer {
         /* 文字色跟**应用主题**走（wallpaper 只管背景要不要深色）。
            原来三档全按壁纸明暗取，用户把 App 换成 Editorial 纸感，
            桌面上还是冷黑字，两边像两个产品。 */
-        final int cTx  = Theme.wTx(ctx);
-        final int cTx2 = Theme.wTx2(ctx);
-        final int cTx3 = Theme.wTx3(ctx);
+        final int cTx  = style >= 0 ? ctx.getColor(STYLE_TX[style])  : Theme.wTx(ctx);
+        final int cTx2 = style >= 0 ? ctx.getColor(STYLE_TX2[style]) : Theme.wTx2(ctx);
+        final int cTx3 = style >= 0 ? ctx.getColor(STYLE_TX3[style]) : Theme.wTx3(ctx);
         v.setTextColor(R.id.w2_title, cTx2);
         v.setTextColor(R.id.w2_total, cTx);
         v.setTextColor(R.id.w2_sub, cTx3);
@@ -297,12 +317,14 @@ public final class WidgetRenderer {
         } catch (Throwable ignored) { }
     }
 
-    private static void bind(Context ctx, RemoteViews v, int widgetId) {
+    private static void bind(Context ctx, RemoteViews v, int widgetId, int style) {
         /* 背景：布局里已经写了，这里再设一次兜底 ——
-           桌面会缓存 View 树，布局里新加的资源引用有时不生效 */
+           桌面会缓存 View 树，布局里新加的资源引用有时不生效。
+           固定风格的组件用它自己那张，只有「跟随主题」那个才看壁纸明暗。 */
         try {
             v.setInt(R.id.w2_root, "setBackgroundResource",
-                     WallpaperTint.bgRes(WallpaperTint.useDark(ctx)));
+                     style >= 0 ? STYLE_BG[style]
+                                : WallpaperTint.bgRes(WallpaperTint.useDark(ctx)));
         } catch (Throwable ignored) { }
         /* 组件本体与刷新按钮 → 走连击计数（单击同步 / 双击开应用 / 三击强制重拉）。
            注意 requestCode 必须区分开：同一个 code 会被系统当成同一个 PendingIntent

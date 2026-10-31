@@ -347,6 +347,22 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
 
     /** 后台联网拉取（goAsync 延长广播存活时间） */
     /** 非后台来源（用户点击、系统更新等） */
+    /** 只画缓存，不联网。给「被节流/并发挡掉」的实例兜底。 */
+    private static void paintFromCache(Context ctx, AppWidgetManager mgr, int[] ids) {
+        if (ids == null || ids.length == 0) return;
+        try {
+            BalanceFetcher.Result r = WidgetCache.read(ctx);
+            int page = WidgetCache.page(ctx);
+            boolean usable = WidgetCache.usable(r);
+            for (int i = 0; i < ids.length; i++) {
+                if (usable) WidgetRenderer.renderResult(ctx, mgr, ids[i], r, page);
+                else        WidgetRenderer.renderLoading(ctx, mgr, ids[i]);
+            }
+        } catch (Throwable t) {
+            BalanceFetcher.diag(ctx, "paintFromCache 异常: " + t);
+        }
+    }
+
     private void fetchAndRender(final Context ctx, final AppWidgetManager mgr, final int[] ids) {
         fetchAndRender(ctx, mgr, ids, false);
     }
@@ -369,6 +385,11 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
         long now = System.currentTimeMillis();
         if (!force && now - LAST_FETCH_AT < MIN_GAP_MS) {
             BalanceFetcher.diag(ctx, "跳过刷新：距上次仅 " + (now - LAST_FETCH_AT) + "ms");
+            /* 跳过的是「联网」，不是「画」。
+               连续添加七种风格时系统会连发七次 update，后面的全被节流挡掉，
+               桌面上就一直挂着布局里的占位文字（"API 余额" + 一片空白）。
+               这里必须先把缓存画上去。 */
+            paintFromCache(ctx, mgr, ids);
             return;
         }
         if (!FETCHING.compareAndSet(false, true)) {
@@ -379,6 +400,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                 retryForceLater(ctx);
                 return;
             }
+            paintFromCache(ctx, mgr, ids);
             return;
         }
         LAST_FETCH_AT = now;
