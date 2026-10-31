@@ -143,18 +143,12 @@ public class SettingsBinder {
                         act.getString(R.string.theme_applied, Theme.NAMES[idx]),
                         android.widget.Toast.LENGTH_SHORT).show();
                 /* 必须重建：attr 是 View 创建时解析的，已经建好的控件不会自己换色。
-                   先整体淡出 110ms 再 recreate —— 直接重建是"啪"地切一下，
-                   淡出把这下换色做成一次转场。 */
-                final android.view.View deco = act.getWindow() == null
-                        ? null : act.getWindow().getDecorView();
-                if (deco == null) {
-                    act.recreate();
-                } else {
-                    deco.animate().alpha(0f).setDuration(110)
-                            .withEndAction(new Runnable() {
-                                public void run() { act.recreate(); }
-                            }).start();
-                }
+                   ⚠️ 不要在这之前给 DecorView 做 alpha 淡出 —— 试过，
+                   把整棵树设成 alpha=0 再 recreate()：只要重建没有立刻换掉窗口
+                   （或动画回调跑在 Activity 已经不在前台的时候），
+                   那个 alpha=0 就留在旧视图树上，整屏全透明 = 用户看到的黑屏，
+                   而且退出重开才恢复。换主题这种一次性动作不值得冒这个风险。 */
+                act.recreate();
             }
         });
         return row;
