@@ -285,4 +285,44 @@ public final class Theme {
     public static int wTx2(Context c) { return SMALL_TEXT[index(c)][1]; }
 
     public static int wTx3(Context c) { return SMALL_TEXT[index(c)][2]; }
+
+    /* ==================== 小组件的"风格"资源 ==================== */
+
+    /**
+     * 每套主题对应的小组件背景（圆角 / 底色 / 描边都不同）。
+     *
+     * RemoteViews 不能解析 ?attr，所以「换风格」只能靠**切换整份 drawable**：
+     * `setInt(root, "setBackgroundResource", res)` 是 RemoteViews 支持的 action，
+     * 而 setBackgroundColor 会把圆角一起丢了。
+     */
+    private static final int[] WIDGET_BG = {
+            R.drawable.wg_t0, R.drawable.wg_t1, R.drawable.wg_t2,
+            R.drawable.wg_t3, R.drawable.wg_t4, R.drawable.wg_t5,
+            R.drawable.wg_t6,
+    };
+
+    public static int widgetBgRes(Context c) { return WIDGET_BG[index(c)]; }
+
+    /** 小组件字号三档：{总额, 行值, 行名}。衬线和高密度主题要相应收一点。 */
+    private static final float[][] WIDGET_SP = {
+            { 23f, 15f, 11.5f },   // Aurora 亮
+            { 23f, 15f, 11.5f },   // Aurora 暗
+            { 22f, 14.5f, 11f },   // Editorial（衬线字更占宽）
+            { 22f, 14.5f, 11f },   // Minimal 瑞士（高密度）
+            { 22f, 14f, 11f },     // Devtool
+            { 24f, 15.5f, 12f },   // Brutalism
+            { 24f, 16f, 12f },     // Soft Clay
+    };
+
+    public static float widgetTotalSp(Context c) { return WIDGET_SP[index(c)][0]; }
+
+    public static float widgetRowSp(Context c) { return WIDGET_SP[index(c)][1]; }
+
+    public static float widgetNameSp(Context c) { return WIDGET_SP[index(c)][2]; }
+
+    /** 只有 Aurora 两套用「壁纸毛玻璃」底，其余主题自带不透明底色 */
+    public static boolean widgetUsesFrost(Context c) {
+        int i = index(c);
+        return i == 0 || i == 1;
+    }
 }

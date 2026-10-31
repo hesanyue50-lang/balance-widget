@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 小组件背景（wg_t6）：由 WidgetRenderer 按当前主题 setBackgroundResource 切过来。
+     RemoteViews 不能用 ?attr，所以每套主题各准备一份，代码里选资源 id。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="24dp" />
+    <solid android:color="#F7F9FC" />
+</shape>

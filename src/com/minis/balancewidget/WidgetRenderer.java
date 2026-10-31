@@ -105,6 +105,28 @@ public final class WidgetRenderer {
         boolean darkL = WallpaperTint.useDark(ctx);
         v.setTextColor(R.id.w2_title, Theme.wTx2(ctx));
         v.setTextColor(R.id.w2_total, Theme.wTx(ctx));
+
+        /* ---- 换风格：背景整份换、字号按主题调 ----
+           这两样是 RemoteViews 里**唯一**能表达"风格差异"的手段：
+           背景必须 setBackgroundResource（setBackgroundColor 会丢圆角），
+           字号用 setTextViewTextSize。字体本身改不了（没有对应 action）。 */
+        try {
+            v.setInt(R.id.w2_root, "setBackgroundResource", Theme.widgetBgRes(ctx));
+        } catch (Throwable ignored) { }
+        try {
+            v.setTextViewTextSize(R.id.w2_total,
+                    android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetTotalSp(ctx));
+            v.setTextViewTextSize(R.id.w2_sub,
+                    android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetNameSp(ctx));
+        } catch (Throwable ignored) { }
+        for (int i = 0; i < VAL.length; i++) {
+            try {
+                v.setTextViewTextSize(VAL[i],
+                        android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetRowSp(ctx));
+                v.setTextViewTextSize(NAME[i],
+                        android.util.TypedValue.COMPLEX_UNIT_SP, Theme.widgetNameSp(ctx));
+            } catch (Throwable ignored) { }
+        }
         v.setTextViewText(R.id.w2_title, "API 管理助手");
         v.setTextViewText(R.id.w2_total, "…");
         v.setTextViewText(R.id.w2_sub, "正在刷新");

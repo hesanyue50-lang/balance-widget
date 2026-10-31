@@ -16,7 +16,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="20dp"
-    android:background="@drawable/wg_glass_l">
+    android:background="@drawable/wg_t0">
 
     <!-- 毛玻璃图层：铺满整个卡片，显示「壁纸缩小再放大」得到的模糊图。
          拿不到壁纸时保持 GONE，退回底下的 9-patch 半透明背景。 -->
