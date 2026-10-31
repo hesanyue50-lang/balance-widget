@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="676"
-    android:versionName="26.10.676">
+    android:versionCode="709"
+    android:versionName="26.10.709">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -158,6 +158,104 @@
                 <!-- App 更新后系统会发给自己：靠它把桌面小组件从「更新后不刷新」的状态里救出来 -->
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".WidgetAuroraLight"
+            android:label="@string/wg_aurora_light"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 刷新按钮 / 后台闹钟发的是 setPackage 广播，这里必须显式声明才收得到 -->
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_al" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetAuroraDark"
+            android:label="@string/wg_aurora_dark"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 刷新按钮 / 后台闹钟发的是 setPackage 广播，这里必须显式声明才收得到 -->
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_ad" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetEditorial"
+            android:label="@string/wg_editorial"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 刷新按钮 / 后台闹钟发的是 setPackage 广播，这里必须显式声明才收得到 -->
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_ed" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetSwiss"
+            android:label="@string/wg_swiss"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 刷新按钮 / 后台闹钟发的是 setPackage 广播，这里必须显式声明才收得到 -->
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_sw" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetDevtool"
+            android:label="@string/wg_devtool"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 刷新按钮 / 后台闹钟发的是 setPackage 广播，这里必须显式声明才收得到 -->
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_dt" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetBrutal"
+            android:label="@string/wg_brutal"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 刷新按钮 / 后台闹钟发的是 setPackage 广播，这里必须显式声明才收得到 -->
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_br" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetClay"
+            android:label="@string/wg_clay"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 刷新按钮 / 后台闹钟发的是 setPackage 广播，这里必须显式声明才收得到 -->
+                <action android:name="com.minis.balancewidget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_cl" />
         </receiver>
     </application>
 </manifest>
