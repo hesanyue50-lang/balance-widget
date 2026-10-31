@@ -471,4 +471,142 @@ public final class Anim {
                 .setInterpolator(springDefault())
                 .start();
     }
+
+    /* ==================== 3D 倾斜（按压时跟着手指） ==================== */
+
+    /**
+     * 给卡片挂上"按压立体倾斜"：手指按在哪个位置，卡片就朝那个角度微微翻转。
+     *
+     * iOS 的按压只做 scale —— 加一点真实的透视旋转，立体感完全不是一个量级。
+     * 关键是**幅度必须小**（±3°）且**必须有阻尼**，大了会像坏掉的转盘。
+     *
+     * 只作用于被按的那一张，不碰兄弟节点，所以不会引起重新布局。
+     */
+    public static void attachTilt(final View v, final float maxDeg) {
+        if (v == null) return;
+        try {
+            /* camera distance 不设的话，旋转看起来像被压扁的平行四边形。
+               8000 是经验值：再小透视过猛，再大就接近正交投影没立体感。 */
+            v.setCameraDistance(v.getResources().getDisplayMetrics().density * 8000f);
+        } catch (Throwable ignored) { }
+        v.setOnTouchListener(new View.OnTouchListener() {
+            public boolean onTouch(View view, android.view.MotionEvent e) {
+                int action = e.getActionMasked();
+                if (action == android.view.MotionEvent.ACTION_DOWN
+                        || action == android.view.MotionEvent.ACTION_MOVE) {
+                    float w = Math.max(1f, view.getWidth());
+                    float h = Math.max(1f, view.getHeight());
+                    float px = (e.getX() / w - 0.5f) * 2f;      // -1 .. 1
+                    float py = (e.getY() / h - 0.5f) * 2f;
+                    /* 手在左上 → 卡片向左上"低头"，所以 Y 轴反向、X 轴正向 */
+                    view.setRotationY(-px * maxDeg);
+                    view.setRotationX(py * maxDeg);
+                    return false;      // 不消费：点击 / 长按 / 滚动照常
+                }
+                if (action == android.view.MotionEvent.ACTION_UP
+                        || action == android.view.MotionEvent.ACTION_CANCEL) {
+                    view.animate()
+                            .rotationX(0f).rotationY(0f)
+                            .setDuration(320)
+                            .setInterpolator(springDefault())   // 回弹时有一点过冲，像被松开的弹簧
+                            .start();
+                    return false;
+                }
+                return false;
+            }
+        });
+    }
+
+    /** 一次性倾斜反馈（不需要持续跟手时用） */
+    public static void tiltPulse(View v, float deg) {
+        if (v == null) return;
+        try {
+            v.setCameraDistance(v.getResources().getDisplayMetrics().density * 8000f);
+        } catch (Throwable ignored) { }
+        v.animate().rotationX(-deg).setDuration(90)
+                .withEndAction(new Runnable() {
+                    public void run() {
+                        v.animate().rotationX(0f).setDuration(300)
+                                .setInterpolator(springDefault()).start();
+                    }
+                }).start();
+    }
+
+    /* ==================== 微光扫过（骨架屏 / 刷新中） ==================== */
+
+    /**
+     * 在一张卡片上扫过一道高光。
+     *
+     * 用 ViewOverlay 画一个渐变条然后平移过去 —— 不碰卡片自己的背景，
+     * 所以和主题、和背景形状都不冲突。
+     */
+    public static void shimmer(final View v, long delayMs) {
+        if (v == null) return;
+        v.postDelayed(new Runnable() {
+            public void run() {
+                try {
+                    if (!v.isAttachedToWindow() || v.getWidth() <= 0) return;
+                    android.view.ViewOverlay ov = v.getOverlay();
+                    if (ov == null) return;
+                    final float bandW = v.getWidth() * 0.45f;
+                    final android.graphics.Paint p = new android.graphics.Paint();
+                    p.setShader(new android.graphics.LinearGradient(
+                            0, 0, bandW, 0,
+                            new int[]{ 0x00FFFFFF, 0x22FFFFFF, 0x00FFFFFF },
+                            new float[]{ 0f, 0.5f, 1f },
+                            android.graphics.Shader.TileMode.CLAMP));
+                    final android.graphics.drawable.Drawable d =
+                            new android.graphics.drawable.Drawable() {
+                                public void draw(android.graphics.Canvas c) {
+                                    c.save();
+                                    c.translate(getBounds().left, 0);
+                                    c.clipRect(0, getBounds().top, bandW, getBounds().bottom);
+                                    c.drawRect(getBounds(), p);
+                                    c.restore();
+                                }
+                                public void setAlpha(int a) { }
+                                public void setColorFilter(android.graphics.ColorFilter cf) { }
+                                public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+                            };
+                    d.setBounds(0, 0, v.getWidth(), v.getHeight());
+                    ov.add(d);
+                    ValueAnimator va = ValueAnimator.ofFloat(-bandW, v.getWidth());
+                    va.setDuration(680);
+                    va.setInterpolator(EMPHASIZED);
+                    va.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                        public void onAnimationUpdate(ValueAnimator a) {
+                            Object o = a.getAnimatedValue();
+                            if (!(o instanceof Float)) return;
+                            d.setBounds((int) ((Float) o).floatValue(), 0,
+                                    (int) ((Float) o).floatValue() + (int) bandW, v.getHeight());
+                            v.invalidate();
+                        }
+                    });
+                    va.addListener(new AnimatorListenerAdapter() {
+                        public void onAnimationEnd(Animator a) {
+                            try { ov.remove(d); } catch (Throwable ignored) { }
+                        }
+                    });
+                    va.start();
+                } catch (Throwable ignored) { }
+            }
+        }, delayMs);
+    }
+
+    /* ==================== 弹簧吸附到某个 X ==================== */
+
+    /**
+     * 把一个 View 用弹簧送到目标 translationX。
+     *
+     * 和直接 setTranslationX 的区别：有质量和回弹，像被磁铁吸过去。
+     * 用于导航滑块、开关手柄这类"吸附"动作。
+     */
+    public static void springTo(View v, float targetX) {
+        if (v == null) return;
+        v.animate()
+                .translationX(targetX)
+                .setDuration(380)
+                .setInterpolator(springFast())
+                .start();
+    }
 }

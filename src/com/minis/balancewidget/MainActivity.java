@@ -643,9 +643,14 @@ public class MainActivity extends Activity {
         for (java.util.Iterator<TextView> it = navTabs.values().iterator(); it.hasNext(); i++) {
             TextView t = it.next();
             float t01 = Math.max(0f, 1f - Math.abs(progress - i));
-            t.setTextColor(blendColor(off, on, t01));
-            t.setTypeface(null, t01 > 0.5f
-                    ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            /* 用曲线让"接近就亮起来"更缓和：线性的话滚到一半时两个标签都是灰的 */
+            float eased = t01 * t01 * (3f - 2f * t01);
+            t.setTextColor(blendColor(off, on, eased));
+            /* 强调用缩放而不是切换 bold：改 typeface 会触发重新测量，
+               滚动过程中文字会左右抖；scale 纯绘制期变化，不动布局。 */
+            float sc = 1f + 0.075f * eased;
+            t.setScaleX(sc);
+            t.setScaleY(sc);
         }
     }
 
@@ -1728,6 +1733,9 @@ public class MainActivity extends Activity {
             tSub.setTextColor(Theme.c(this, R.attr.c_tx3));
         }
 
+        /* 刷新开始时在总额卡上扫一道微光 —— 比转圈更轻，
+           而且只在"真的在等网络"时才出现，不打断阅读。 */
+        Anim.shimmer(tTotal, 0);
         final Context ctx = this;
         new Thread(new Runnable() {
             public void run() {
@@ -2212,6 +2220,9 @@ public class MainActivity extends Activity {
             final BalanceFetcher.Item fi = it;
             View v = inf.inflate(R.layout.item_platform, cards, false);
             /* 点卡片 = 弹出菜单：刷新这一项 / 看密钥（看密钥要先过密码） */
+            /* 按压时跟着手指做 2.5° 的立体倾斜 —— 幅度小、有回弹阻尼，
+               和卡片 11dp 的外边距配合，倾斜的边角不会被父容器裁掉。 */
+            Anim.attachTilt(v, 2.5f);
             v.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v2) {
                     /* MiMo 是登录型平台：登录态失效时，菜单里必须先给"重新登录"。

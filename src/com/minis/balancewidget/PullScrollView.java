@@ -48,6 +48,8 @@ public class PullScrollView extends ScrollView {
     private int touchSlop;
     private int triggerPx;
     private int indicatorH;
+    /** 刷新期间的"呼吸"动画（无限循环，结束时必须 cancel） */
+    private android.animation.ValueAnimator breath;
 
     public PullScrollView(Context c) { super(c); init(c); }
     public PullScrollView(Context c, AttributeSet a) { super(c, a); init(c); }
@@ -92,8 +94,46 @@ public class PullScrollView extends ScrollView {
             indicator.setAlpha(1f);
             indicator.setTranslationY(0f);
             if (label != null) label.setText("正在刷新…");
+            /* 刷新期间让它"呼吸"：轻微缩放循环，暗示还活着。
+               0.96↔1.02 这个幅度小到不会烦人，但静止的指示器会让人以为卡住了。 */
+            startBreath();
         } else {
+            stopBreath();
+            if (indicator != null) {
+                indicator.animate().cancel();
+                indicator.setScaleX(1f);
+                indicator.setScaleY(1f);
+            }
             collapseIndicator();
+        }
+    }
+
+    /** 刷新期间轻微缩放循环 —— 静止的指示器会让人以为卡住了 */
+    private void startBreath() {
+        stopBreath();
+        if (indicator == null) return;
+        breath = android.animation.ValueAnimator.ofFloat(1f, 0.95f);
+        breath.setDuration(820);
+        breath.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        breath.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        breath.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        breath.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            public void onAnimationUpdate(android.animation.ValueAnimator a) {
+                Object o = a.getAnimatedValue();
+                if (o instanceof Float && indicator != null) {
+                    float v = ((Float) o).floatValue();
+                    indicator.setScaleX(v);
+                    indicator.setScaleY(v);
+                }
+            }
+        });
+        breath.start();
+    }
+
+    private void stopBreath() {
+        if (breath != null) {
+            try { breath.cancel(); } catch (Throwable ignored) { }
+            breath = null;
         }
     }
 
@@ -106,6 +146,10 @@ public class PullScrollView extends ScrollView {
         indicator.animate().cancel();
         indicator.setAlpha(0.25f + 0.75f * p);
         indicator.setTranslationY(-indicatorH * (1f - p));
+        /* 跟手缩放：越拉越"涨"，拉满时比静止大 8% —— 比单纯淡入有分量 */
+        float sc = 0.92f + 0.10f * Math.min(1f, p);
+        indicator.setScaleX(sc);
+        indicator.setScaleY(sc);
         if (label != null && !refreshing) {
             label.setText(p >= 1f ? "松手刷新" : "下拉刷新");
         }

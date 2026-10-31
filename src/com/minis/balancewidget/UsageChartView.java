@@ -296,12 +296,23 @@ public class UsageChartView extends View {
                             && (i + 1 >= s.vals.length || Double.isNaN(s.vals[i + 1]));
                     boolean touched = (i == touchIdx);
                     if (!lonely && !touched && !sparse) continue;
+                    /* 跟着揭示进度弹出：折线画到哪，点才长出来，而且是从 0 弹到满。
+                       用"当前位置被揭示了多少"算缩放，天然和从左到右的进度对齐。 */
+                    float px = n <= 1 ? 0f : (i / (float) (n - 1));
+                    if (progress < px - 0.02f) continue;
+                    float grow = Math.min(1f, (progress - px + 0.06f) / 0.12f);
+                    if (grow <= 0.02f) continue;
+                    /* 轻微过冲，像"弹"出来而不是"长"出来 */
+                    float ease = grow * grow * (3f - 2f * grow);
+                    float over = (float) Math.sin(grow * Math.PI) * 0.28f;
+                    float k = ease * (1f + over);
                     float x = padL + slot * i + slot / 2f;
                     float y = padT + ch - (float) (s.vals[i] / maxLine * ch);
                     /* 孤立点/按住点放大一点：密度低时它们是唯一的视觉锚点 */
-                    float r = (lonely || touched) ? 10f : 9f;
+                    float r = ((lonely || touched) ? 10f : 9f) * k;
+                    if (r < 0.7f) continue;
                     cv.drawCircle(x, y, r, pDot);
-                    cv.drawCircle(x, y, 3.5f, pDotIn);
+                    cv.drawCircle(x, y, 3.5f * k, pDotIn);
                 }
             }
         }
