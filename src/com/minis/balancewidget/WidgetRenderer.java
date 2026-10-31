@@ -172,8 +172,8 @@ public final class WidgetRenderer {
         final int style = styleOf(mgr, id);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), layoutFor(ctx, style));
         boolean darkL = WallpaperTint.useDark(ctx);
-        v.setTextColor(R.id.w2_title, Theme.wTx2(ctx));
-        v.setTextColor(R.id.w2_total, Theme.wTx(ctx));
+        v.setTextColor(R.id.w2_title, style >= 0 ? ctx.getColor(STYLE_TX2[style]) : Theme.wTx2(ctx));
+        v.setTextColor(R.id.w2_total, style >= 0 ? ctx.getColor(STYLE_TX[style])  : Theme.wTx(ctx));
 
         /* 样式（背景 / 字号 / 字体 / 间距）已经写在各自主题的 layout 里，
            这里不再 setBackgroundResource / setTextViewTextSize ——
