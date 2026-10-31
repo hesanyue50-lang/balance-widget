@@ -493,11 +493,16 @@ public final class Anim {
             public boolean onTouch(View view, android.view.MotionEvent e) {
                 int action = e.getActionMasked();
                 if (action == android.view.MotionEvent.ACTION_DOWN) {
-                    /* 抬起、轻微放大：和旋转叠在一起，按压才有"被按下去"的分量 */
+                    /* 按下去 = 缩小 + 阴影加深（离"手"更近则影更散）。
+                       注意缩小幅度要够：1.8% 肉眼几乎看不出来，3% 才有"被压"的感觉。 */
                     view.animate().cancel();
-                    try { view.setElevation(dp(view, 6)); } catch (Throwable ignored) { }
-                    view.animate().scaleX(0.982f).scaleY(0.982f)
-                            .setDuration(120).start();
+                    try { view.setElevation(dp(view, 10)); } catch (Throwable ignored) { }
+                    /* 200ms：110ms 太快，手指刚按下去动画就结束了，感觉不到"压"的过程。
+                       慢下来才有"按进橡皮"的过程感。 */
+                    view.animate().scaleX(0.968f).scaleY(0.968f)
+                            .setDuration(200)
+                            .setInterpolator(EMPHASIZED)
+                            .start();
                     tilt(view, e, maxDeg);
                     return false;      // 不消费：点击 / 长按 / 滚动照常
                 }
@@ -508,11 +513,13 @@ public final class Anim {
                 if (action == android.view.MotionEvent.ACTION_UP
                         || action == android.view.MotionEvent.ACTION_CANCEL) {
                     try { view.setElevation(0f); } catch (Throwable ignored) { }
+                    /* 松手要"弹"回来：springFast 的过冲约 +9%，
+                       —— 3% 的缩小回弹时会先冲到 1.03 再落定，肉眼很清楚。 */
                     view.animate()
-                            .rotationX(0f).rotationY(0f)
+                            .rotationY(0f)
                             .scaleX(1f).scaleY(1f)
-                            .setDuration(340)
-                            .setInterpolator(springDefault())   // 回弹时有一点过冲，像被松开的弹簧
+                            .setDuration(460)
+                            .setInterpolator(springFast())
                             .start();
                     return false;
                 }
@@ -521,17 +528,23 @@ public final class Anim {
         });
     }
 
+    /**
+     * 按压时的透视倾斜。
+     *
+     * 只做 **rotationY**（水平翻），不做 rotationX：
+     * 垂直倾斜会让文字跟着上下歪，看起来像"卡片坏了"而不是"被按下去"。
+     * 水平翻就像卡片在手里被轻轻压一侧 —— 立体但文字仍然可读。
+     *
+     * 手指在正中时 px≈0，纯正比等于没效果，所以补一个固定方向的基础倾角。
+     */
     private static void tilt(View view, android.view.MotionEvent e, float maxDeg) {
         float w = Math.max(1f, view.getWidth());
-        float h = Math.max(1f, view.getHeight());
         float px = (e.getX() / w - 0.5f) * 2f;      // -1 .. 1
-        float py = (e.getY() / h - 0.5f) * 2f;
-        /* 手在正中时 px/py 接近 0，纯正比的话按中间完全没效果 ——
-           补一个固定的小倾角（朝按压方向），保证任何位置都有反馈。 */
-        float baseX = (py >= 0 ? 1f : -1f) * 0.42f;
-        float baseY = (px >= 0 ? -1f : 1f) * 0.42f;
-        view.setRotationY((baseY + px * 0.58f) * maxDeg);
-        view.setRotationX((baseX + py * 0.58f) * maxDeg);
+        float base = (px >= 0 ? -1f : 1f) * 0.35f;  // 按中间也有反应
+        /* 跟手时用短动画过渡而不是直接 set：手指移动是离散事件，
+           直接 set 会一跳一跳；60ms 的补间把它抹平，又不至于拖泥带水。 */
+        view.animate().rotationY((base + px * 0.65f) * maxDeg)
+                .setDuration(60).start();
     }
 
     private static int dp(View v, int val) {

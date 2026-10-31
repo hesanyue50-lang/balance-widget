@@ -2240,9 +2240,7 @@ public class MainActivity extends Activity {
                和卡片 11dp 的外边距配合，倾斜的边角不会被父容器裁掉。 */
             /* 5°：2.5° 在 88dp 高的卡片上边缘只位移 3.8dp，肉眼几乎看不出；
                父容器已经 setClipChildren(false)，不会被切边。 */
-            Anim.attachTilt(v, 5f);
-            /* 点击涟漪：半透明白，暗色主题下是"亮一下"，亮色主题下是"灰一下" */
-            Anim.attachRipple(v, 0x1A808080);
+            Anim.attachTilt(v, 3.5f);
             v.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v2) {
                     /* MiMo 是登录型平台：登录态失效时，菜单里必须先给"重新登录"。
