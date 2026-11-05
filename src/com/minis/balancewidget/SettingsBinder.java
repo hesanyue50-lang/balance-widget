@@ -1754,31 +1754,35 @@ public class SettingsBinder {
     private void webDialog(final int editIdx) {
         final boolean isEdit = editIdx >= 0;
         final List<WebCustom> ws = WebCustom.loadAll(act);
-        final WebCustom w0 = isEdit && editIdx < ws.size() ? ws.get(editIdx) : new WebCustom();
+        if (isEdit && editIdx >= ws.size()) {
+            Toast.makeText(act, "平台列表已经变了，退出重进再试", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final WebCustom w0 = isEdit ? ws.get(editIdx) : new WebCustom();
 
         final FormDialog fd = new FormDialog(act,
                 isEdit ? "编辑高级平台" : "添加高级平台", "保存");
         final LinearLayout box = fd.box;
 
         /* 首屏只放「名称 / 网址 / Key / 登录 / 币种制式 / 显示文字」六项 ——
-           十来个高级字段全挪进下面的折叠区。原来不分层，一打开就是
-           一整屏专业术语，普通用户当场劝退。 */
+           十来个高级字段全挪进下面的折叠区。原来不分层，一打开就是一整屏术语。 */
 
         Form.label(act, box, "名称");
         final EditText eName = Form.input(act, box, "比如：我的图床额度", w0.name);
 
         Form.label(act, box, "网址（要抓的页面或接口）");
         final EditText eUrl = Form.input(act, box, "https://example.com/api/balance", w0.url);
+        Form.uri(eUrl);
 
-        Form.label(act, box, "API Key（可选，不参与请求）");
+        Form.label(act, box, "API Key（填了会作为 Authorization: Bearer 发送）");
         final EditText eKey = Form.secret(act, box, "可留空", w0.key);
 
         /* ---------- 网页登录：抓到的 Cookie 要塞进「附加请求头」 ---------- */
-        final String[] cookieRef = { w0.headers };
         final EditText[] eHeadersRef = new EditText[1];
         final TextView loginBtn = Form.wide(act, "🌐 打开网页登录", null);
         fd.add(loginBtn, 14);
-        final TextView cookieInfo = Form.note(act, box, "还没有登录态");
+        final TextView cookieInfo = Form.note(act, box,
+                hasCookieHeader(w0.headers) ? "已记录登录态（含 Cookie）" : "还没有登录态");
 
         loginBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -1790,19 +1794,18 @@ public class SettingsBinder {
                 WebLoginActivity.open(act, u, new WebLoginActivity.OnCookie() {
                     public void onCookie(String host, String cookie) {
                         if (cookie == null || cookie.length() == 0) return;
-                        String merged = WebCustom.mergeHeader(cookieRef[0], "Cookie", cookie);
-                        cookieRef[0] = merged;
+                        /* ⚠️ 以输入框**当前**内容为基线合并。
+                           用打开弹窗时的快照 w0.headers 当基线，会把用户在
+                           「附加请求头」里手改的内容整段覆盖回去。 */
+                        String base = (eHeadersRef[0] != null
+                                && eHeadersRef[0].getText().length() > 0)
+                                ? eHeadersRef[0].getText().toString() : w0.headers;
+                        String merged = WebCustom.mergeHeader(base, "Cookie", cookie);
                         w0.headers = merged;
                         if (eHeadersRef[0] != null) eHeadersRef[0].setText(merged);
-                        boolean has = false;
-                        try {
-                            String[] ps0 = merged.split("\n");
-                            for (int k = 0; k < ps0.length; k++) {
-                                if (ps0[k].trim().toLowerCase().startsWith("cookie:")) has = true;
-                            }
-                        } catch (Throwable ig) { }
                         if (cookieInfo != null) {
-                            cookieInfo.setText(has ? "已记录登录态（含 Cookie）" : "还没有登录态");
+                            cookieInfo.setText(hasCookieHeader(merged)
+                                    ? "已记录登录态（含 Cookie）" : "还没有登录态");
                         }
                         Toast.makeText(act, "已记录登录态", Toast.LENGTH_SHORT).show();
                     }
@@ -1813,10 +1816,14 @@ public class SettingsBinder {
         /* ---------- 币种 / 制式 ---------- */
         final String[] unitVals = { "CNY", "USD", "NONE" };
         final String[] unitNames = { "币种: CNY", "币种: USD", "币种: 纯数值" };
-        final int[] unitIdx = { idxOf(w0.unit, unitVals) };
-        final TextView unitChip = Form.chip(act, unitNames[unitIdx[0]], null);
+        final int ui0 = idxOfOr(w0.unit, unitVals);
+        final int[] unitIdx = { ui0 < 0 ? 0 : ui0 };
+        final boolean[] unitTouched = { false };
+        final TextView unitChip = Form.chip(act,
+                ui0 < 0 ? ("币种: " + w0.unit) : unitNames[unitIdx[0]], null);
         unitChip.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                unitTouched[0] = true;
                 unitIdx[0] = (unitIdx[0] + 1) % unitVals.length;
                 unitChip.setText(unitNames[unitIdx[0]]);
             }
@@ -1824,10 +1831,14 @@ public class SettingsBinder {
 
         final String[] kindVals = { "balance", "asset" };
         final String[] kindNames = { "制式: 金额", "制式: 额度" };
-        final int[] kindIdx = { idxOf(w0.kind, kindVals) };
-        final TextView kindChip = Form.chip(act, kindNames[kindIdx[0]], null);
+        final int ki0 = idxOfOr(w0.kind, kindVals);
+        final int[] kindIdx = { ki0 < 0 ? 0 : ki0 };
+        final boolean[] kindTouched = { false };
+        final TextView kindChip = Form.chip(act,
+                ki0 < 0 ? ("制式: " + w0.kind) : kindNames[kindIdx[0]], null);
         kindChip.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                kindTouched[0] = true;
                 kindIdx[0] = (kindIdx[0] + 1) % kindVals.length;
                 kindChip.setText(kindNames[kindIdx[0]]);
             }
@@ -1840,9 +1851,11 @@ public class SettingsBinder {
         lpKind.leftMargin = dp(8);
         kindChip.setLayoutParams(lpKind);
         chipRow.addView(kindChip);
+        Form.note(act, box, "金额 = 计入总资产；额度 = 只在卡片上展示，不进汇总。");
 
-        Form.label(act, box, "显示文字（可留空，{v} 会替换成抓到的数值）");
+        Form.label(act, box, "显示文字（可留空；{v} 是抓到的数值本身，不带货币符号）");
         final EditText eTemplate = Form.input(act, box, "例如: 还剩 {v} 天", w0.template);
+        Form.noSuggest(eTemplate);
 
         /* ---------- 测试：用当前填的值试抓，不落库、不关窗 ---------- */
         final TextView testBtn = Form.wide(act, "⟳ 测试抓取（用当前填的值试一下）", null);
@@ -1854,11 +1867,15 @@ public class SettingsBinder {
 
         final String[] modeVals = { "auto", "json", "regex", "between", "text" };
         final String[] modeNames = { "自动识别", "JSON 路径", "正则表达式", "区间截取", "整页文本" };
-        final int[] modeIdx = { idxOf(w0.mode, modeVals) };
+        final int mi0 = idxOfOr(w0.mode, modeVals);
+        final int[] modeIdx = { mi0 < 0 ? 0 : mi0 };
+        final boolean[] modeTouched = { false };
         Form.label(act, adv, "提取模式（点一下切换）");
-        final TextView modeChip = Form.chip(act, modeNames[modeIdx[0]], null);
+        final TextView modeChip = Form.chip(act,
+                mi0 < 0 ? ("模式: " + w0.mode) : modeNames[modeIdx[0]], null);
         modeChip.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                modeTouched[0] = true;
                 modeIdx[0] = (modeIdx[0] + 1) % modeVals.length;
                 modeChip.setText(modeNames[modeIdx[0]]);
             }
@@ -1868,10 +1885,11 @@ public class SettingsBinder {
         Form.note(act, adv, "自动识别 = 先按 JSON 试、再按正则试，都不行抓页面里第一串像金额的数字。");
 
         Form.label(act, adv, "JSON 路径（多个候选用 | 分隔）");
-        final EditText ePath = Form.input(act, adv, "data.balance", w0.path);
+        final EditText ePath = Form.noSuggest(Form.input(act, adv, "data.balance", w0.path));
 
         Form.label(act, adv, "正则表达式");
-        final EditText ePattern = Form.input(act, adv, "余额[:：]\\s*([0-9.,]+)", w0.pattern);
+        final EditText ePattern = Form.noSuggest(Form.input(act, adv,
+                "余额[:：]\\s*([0-9.,]+)", w0.pattern));
         Form.note(act, adv, "有括号取第 1 个括号里的内容，没括号取整个匹配。");
 
         Form.label(act, adv, "区间截取：左标记 / 右标记");
@@ -1907,7 +1925,8 @@ public class SettingsBinder {
 
         Form.label(act, adv, "倍率 / 显示后缀");
         final EditText eScale = Form.inline(act, "1（不缩放）",
-                w0.scale == 1.0 ? "" : String.valueOf(w0.scale), 1f);
+                w0.scale == 1.0 ? "" : trimNum(w0.scale), 1f);
+        eScale.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         final EditText eSuffix = Form.inline(act, "%（留空表示无）", w0.suffix, 1f);
         LinearLayout srow = Form.row(act, adv);
         srow.addView(eScale);
@@ -1933,7 +1952,8 @@ public class SettingsBinder {
 
         Form.label(act, adv, "低值预警阈值（0 = 不预警）");
         final EditText eThreshold = Form.input(act, adv, "0",
-                w0.threshold == 0 ? "" : String.valueOf(w0.threshold));
+                w0.threshold == 0 ? "" : trimNum(w0.threshold));
+        eThreshold.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
 
         /* ---------- 点卡片后弹出的按钮 ---------- */
         Form.label(act, adv, "点卡片后弹出的按钮（地址留空 = 不显示）");
@@ -1971,6 +1991,7 @@ public class SettingsBinder {
             final String qv = quickVals[qi];
             TextView q = Form.chip(act, quickNames[qi], null);
             q.setTextSize(11.5f);
+            q.setMinHeight(dp(34));
             q.setPadding(dp(9), dp(5), dp(9), dp(5));
             if (qi > 0) {
                 LinearLayout.LayoutParams lpQ = new LinearLayout.LayoutParams(
@@ -2002,8 +2023,8 @@ public class SettingsBinder {
             public void run() {
                 WebCustom w = new WebCustom();
                 w.name = eName.getText().toString().trim();
-                w.url = eUrl.getText().toString().trim();
-                w.mode = modeVals[modeIdx[0]];
+                w.url = normUrl(eUrl.getText().toString());
+                w.mode = (mi0 < 0 && !modeTouched[0]) ? w0.mode : modeVals[modeIdx[0]];
                 w.path = ePath.getText().toString().trim();
                 w.pattern = ePattern.getText().toString().trim();
                 w.start = eStart.getText().toString().trim();
@@ -2014,40 +2035,100 @@ public class SettingsBinder {
                 /* Key 与登录 Cookie 合并进「附加请求头」：填了 Key 就自动走 Bearer */
                 String hdrs = eHeaders.getText().toString().trim();
                 String kv = eKey.getText().toString().trim();
-                if (kv.length() > 0) {
-                    hdrs = WebCustom.mergeHeader(hdrs, "Authorization", "Bearer " + kv);
+                /* 换了网站就别把旧凭据带过去 —— A 站的 Cookie / Bearer 发给 B 站，
+                   既抓不对，也是把登录态泄露给了别人。 */
+                if (isEdit && !hostOf(w0.url).equals(hostOf(w.url))) {
+                    hdrs = stripHeader(stripHeader(hdrs, "Cookie"), "Authorization");
+                    Toast.makeText(act, "网址换了，已清空旧的登录态与 Authorization",
+                            Toast.LENGTH_SHORT).show();
                 }
                 w.headers = hdrs;
                 w.key = kv;
                 w.body = eBody.getText().toString().trim();
                 w.suffix = eSuffix.getText().toString().trim();
                 w.template = eTemplate.getText().toString().trim();
-                w.unit = unitVals[unitIdx[0]];
-                w.kind = kindVals[kindIdx[0]];
+                w.unit = (ui0 < 0 && !unitTouched[0]) ? w0.unit : unitVals[unitIdx[0]];
+                w.kind = (ki0 < 0 && !kindTouched[0]) ? w0.kind : kindVals[kindIdx[0]];
                 w.foreign = w0.foreign;
+                w.numMode = w0.numMode;     // 这一屏没有开关，原样带回去
                 for (int bi = 0; bi < NBTN; bi++) {
                     w.btnLabels[bi] = eBtnName[bi].getText().toString().trim();
                     w.btnUrls[bi] = eBtnUrl[bi].getText().toString().trim();
                 }
-                try {
-                    String sv = eScale.getText().toString().trim();
-                    w.scale = sv.length() == 0 ? 1.0 : Double.parseDouble(sv);
-                } catch (Exception e) {
-                    w.scale = 1.0;
-                }
-                try {
-                    String tv = eThreshold.getText().toString().trim();
-                    w.threshold = tv.length() == 0 ? 0 : Double.parseDouble(tv);
-                } catch (Exception e) {
-                    w.threshold = 0;
-                }
 
-                if (w.name.length() == 0 || w.url.length() == 0) {
-                    Toast.makeText(act, "名称和网址不能为空", Toast.LENGTH_SHORT).show();
+                if (w.name.length() == 0) {
+                    Toast.makeText(act, "名称不能为空", Toast.LENGTH_SHORT).show();
                     return;
                 }
+                if (w.url.length() == 0) {
+                    Toast.makeText(act, "网址不能为空", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (w.url.length() <= "https://".length()) {
+                    Toast.makeText(act, "网址不完整，请填完整地址", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                String sv = eScale.getText().toString().trim();
+                if (sv.length() > 0) {
+                    double v;
+                    try {
+                        v = Double.parseDouble(sv);
+                    } catch (Exception e) {
+                        Toast.makeText(act, "倍率要填数字，例如 0.01", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (!(v > 0) || Double.isInfinite(v)) {
+                        Toast.makeText(act, "倍率要大于 0（不缩放就留空）", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    w.scale = v;
+                } else {
+                    w.scale = 1.0;
+                }
+                String tv = eThreshold.getText().toString().trim();
+                if (tv.length() == 0) {
+                    w.threshold = 0;
+                } else {
+                    double v;
+                    try {
+                        v = Double.parseDouble(tv);
+                    } catch (Exception e) {
+                        Toast.makeText(act, "预警阈值要填数字，例如 10", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (!(v >= 0) || Double.isInfinite(v)) {
+                        Toast.makeText(act, "预警阈值要填 ≥ 0 的数字", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    w.threshold = v;
+                }
+                /* 正则先编译一遍：写错了不该等到下次刷新才在卡片上报错 */
+                if (w.pattern.length() > 0
+                        && ("regex".equals(w.mode) || "auto".equals(w.mode))) {
+                    try {
+                        java.util.regex.Pattern.compile(w.pattern);
+                    } catch (Exception e) {
+                        Toast.makeText(act, "正则写错了：" + e.getMessage(),
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                }
+                /* Key 有值时自动拼 Bearer（和界面文案一致） */
+                if (kv.length() > 0) w.headers = WebCustom.mergeHeader(w.headers, "Authorization", "Bearer " + kv);
+
                 List<WebCustom> list = WebCustom.loadAll(act);
-                if (isEdit && editIdx < list.size()) list.set(editIdx, w);
+                int at = -1;
+                if (isEdit) {
+                    for (int i = 0; i < list.size(); i++) {
+                        WebCustom o = list.get(i);
+                        if (sameStr(o.url, w0.url) && sameStr(o.name, w0.name)) {
+                            at = i;
+                            break;
+                        }
+                    }
+                    if (at < 0 && editIdx < list.size()) at = editIdx;
+                }
+                if (at >= 0) list.set(at, w);
                 else list.add(w);
                 WebCustom.saveAll(act, list);
                 Busy.run(act, "正在更新…", new Runnable() {
@@ -2059,11 +2140,13 @@ public class SettingsBinder {
 
         testBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                /* 用当前表单里的值试抓（不落库）—— 边填边试 */
+                /* 用当前表单里的值试抓（不落库）—— 边填边试。
+                   ⚠️ 倍率 / 后缀 / 模板 / Key 都要带上，否则「测试」显示的是
+                   裸数字，和保存后卡片上的数字不是一回事。 */
                 WebCustom w = new WebCustom();
                 w.name = "test";
-                w.url = eUrl.getText().toString().trim();
-                w.mode = modeVals[modeIdx[0]];
+                w.url = normUrl(eUrl.getText().toString());
+                w.mode = (mi0 < 0 && !modeTouched[0]) ? w0.mode : modeVals[modeIdx[0]];
                 w.path = ePath.getText().toString().trim();
                 w.pattern = ePattern.getText().toString().trim();
                 w.start = eStart.getText().toString().trim();
@@ -2073,13 +2156,29 @@ public class SettingsBinder {
                 w.charset = eCharset.getText().toString().trim();
                 w.headers = eHeaders.getText().toString().trim();
                 w.body = eBody.getText().toString().trim();
-                w.unit = unitVals[unitIdx[0]];
+                w.unit = (ui0 < 0 && !unitTouched[0]) ? w0.unit : unitVals[unitIdx[0]];
+                w.suffix = eSuffix.getText().toString().trim();
+                w.template = eTemplate.getText().toString().trim();
                 w.foreign = w0.foreign;
+                String kv2 = eKey.getText().toString().trim();
+                if (kv2.length() > 0) {
+                    w.headers = WebCustom.mergeHeader(w.headers, "Authorization", "Bearer " + kv2);
+                }
+                try {
+                    String sv2 = eScale.getText().toString().trim();
+                    w.scale = sv2.length() == 0 ? 1.0 : Double.parseDouble(sv2);
+                } catch (Exception e) {
+                    w.scale = 1.0;
+                }
                 if (w.url.length() == 0) {
                     Toast.makeText(act, "先填网址再测试", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 final WebCustom wt = w;
+                /* 按钮置灰 + 改字：抓取最长 24s，期间界面看起来毫无反应，
+                   用户会连点三次 → 三个线程并发抓 → 连弹三个结果框。 */
+                testBtn.setEnabled(false);
+                testBtn.setText("正在抓取…");
                 Busy.show(act, "正在抓取…");
                 new Thread(new Runnable() {
                     public void run() {
@@ -2098,6 +2197,8 @@ public class SettingsBinder {
                         act.runOnUiThread(new Runnable() {
                             public void run() {
                                 Busy.hide(act);
+                                testBtn.setEnabled(true);
+                                testBtn.setText("⟳ 测试抓取（用当前填的值试一下）");
                                 if (act.isFinishing() || act.isDestroyed()) return;
                                 new AlertDialog.Builder(act)
                                         .setTitle(ft)
@@ -2112,6 +2213,83 @@ public class SettingsBinder {
         });
 
         fd.show();
+    }
+
+    /* ---------------- 两个平台弹窗共用的小工具 ---------------- */
+
+    /** 找不到返回 -1。idxOf 返回 0，会把「老数据里的未知取值」静默改写成第一项。 */
+    private static int idxOfOr(String v, String[] arr) {
+        if (v == null) return -1;
+        for (int i = 0; i < arr.length; i++) {
+            if (arr[i].equals(v)) return i;
+        }
+        return -1;
+    }
+
+    /** 数字回显：1.0E7 这种科学计数法用户看不懂，整数就别带小数尾巴 */
+    private static String trimNum(double v) {
+        if (v == Math.floor(v) && Math.abs(v) < 1e15) return String.valueOf((long) v);
+        return String.valueOf(v);
+    }
+
+    /**
+     * 网址规整：去掉所有空白（含全角空格 \u3000 与不换行空格 \u00A0）并补 scheme。
+     * 输入法在长 URL 中间插一个空格，请求就会直接失败，用户只看到「查询失败」，
+     * 根本猜不到是空格。
+     */
+    private static String normUrl(String u) {
+        if (u == null) return "";
+        String s = u.replaceAll("[\\s\\u3000\\u00A0]+", "");
+        if (s.length() == 0) return s;
+        String l = s.toLowerCase();
+        if (!l.startsWith("http://") && !l.startsWith("https://")) s = "https://" + s;
+        return s;
+    }
+
+    /** 取主机名：换域名时判断「旧的登录态还能不能带过去」 */
+    private static String hostOf(String url) {
+        if (url == null) return "";
+        String s = url.trim().toLowerCase();
+        int i = s.indexOf("://");
+        if (i >= 0) s = s.substring(i + 3);
+        int j = s.indexOf('/');
+        if (j >= 0) s = s.substring(0, j);
+        int k = s.indexOf(':');
+        if (k >= 0) s = s.substring(0, k);
+        return s;
+    }
+
+    /** 删掉某一类请求头（一行一个，名字不区分大小写） */
+    private static String stripHeader(String headers, String name) {
+        if (headers == null || headers.length() == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        String[] ps = headers.split("\n");
+        for (int i = 0; i < ps.length; i++) {
+            String ln = ps[i].trim();
+            if (ln.length() == 0) continue;
+            int c = ln.indexOf(':');
+            if (c > 0 && ln.substring(0, c).trim().equalsIgnoreCase(name)) continue;
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(ln);
+        }
+        return sb.toString();
+    }
+
+    /** 请求头里有没有 Cookie（决定「还没有登录态」那行文案） */
+    private static boolean hasCookieHeader(String headers) {
+        if (headers == null || headers.length() == 0) return false;
+        String[] ps = headers.split("\n");
+        for (int i = 0; i < ps.length; i++) {
+            String ln = ps[i].trim().toLowerCase();
+            if (ln.startsWith("cookie:") && ln.length() > 7) return true;
+        }
+        return false;
+    }
+
+    private static boolean sameStr(String a, String b) {
+        if (a == null) a = "";
+        if (b == null) b = "";
+        return a.equals(b);
     }
 
     private static int idxOf(String v, String[] arr) {
@@ -2568,7 +2746,13 @@ public class SettingsBinder {
     private void customDialog(final int editIdx) {
         final boolean isEdit = editIdx >= 0;
         List<BalanceFetcher.Custom> all0 = BalanceFetcher.loadCustom(act);
-        final BalanceFetcher.Custom c0 = isEdit && editIdx < all0.size()
+        if (isEdit && editIdx >= all0.size()) {
+            /* 越界时别硬开一个空表单 —— 保存时会变成「新增一条」，
+               用户以为在改，其实多了一条同名平台。 */
+            Toast.makeText(act, "平台列表已经变了，退出重进再试", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final BalanceFetcher.Custom c0 = isEdit
                 ? all0.get(editIdx) : new BalanceFetcher.Custom();
 
         final FormDialog fd = new FormDialog(act,
@@ -2577,28 +2761,35 @@ public class SettingsBinder {
 
         /* 字段顺序照「用户填表的顺序」排：先它是谁（名称）、在哪（URL）、
            怎么进（Key）、取哪个数（路径）、怎么显示（币种/制式/显示文字）。
-           每行只在标签里点一句关键约束，长解释挪进 note —— 原来每个字段
-           挂五六行说明，一屏只装得下两个字段。 */
+           每行只在标签里点一句关键约束，长解释挪进 note。 */
 
         Form.label(act, box, "名称");
         final EditText eName = Form.input(act, box, "比如：WorkBuddy", c0.name);
 
         Form.label(act, box, "URL（免费服务可留空）");
         final EditText eUrl = Form.input(act, box, "https://api.example.com/v1", c0.url);
+        Form.uri(eUrl);      // URI 变体 + 关联想：输入法不会自动大写、往长 URL 里插空格
 
         Form.label(act, box, "API Key（仅用于此请求）");
         final EditText eKey = Form.secret(act, box, "sk-…（可留空）", c0.key);
 
         Form.label(act, box, "余额字段路径（JSON 路径，如 data.balance）");
-        final EditText ePath = Form.input(act, box, "可留空，自动识别", c0.path);
+        final EditText ePath = Form.noSuggest(Form.input(act, box, "可留空，自动识别", c0.path));
 
         /* ---------- 币种 / 制式：两个点一下就换的胶囊 ---------- */
-        final String[] unitVals = { "CNY", "USD", "NONE" };
-        final String[] unitNames = { "币种: CNY", "币种: USD", "币种: 纯数值" };
-        final int[] unitIdx = { idxOf(c0.unit, unitVals) };
-        final TextView unitChip = Form.chip(act, unitNames[unitIdx[0]], null);
+        /* 只留 CNY / USD：「纯数值」在这个弹窗没有后缀输入框，
+           选了也还是显示 ¥12，属于假选项。 */
+        final String[] unitVals = { "CNY", "USD" };
+        final String[] unitNames = { "币种: CNY", "币种: USD" };
+        final int ui0 = idxOfOr(c0.unit, unitVals);
+        final int[] unitIdx = { ui0 < 0 ? 0 : ui0 };
+        final boolean[] unitTouched = { false };
+        final TextView unitChip = Form.chip(act,
+                ui0 < 0 ? ("币种: " + ("NONE".equals(c0.unit) ? "纯数值" : c0.unit))
+                        : unitNames[unitIdx[0]], null);
         unitChip.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                unitTouched[0] = true;
                 unitIdx[0] = (unitIdx[0] + 1) % unitVals.length;
                 unitChip.setText(unitNames[unitIdx[0]]);
             }
@@ -2606,10 +2797,14 @@ public class SettingsBinder {
 
         final String[] kindVals = { "balance", "asset" };
         final String[] kindNames = { "制式: 金额", "制式: 额度" };
-        final int[] kindIdx = { idxOf(c0.kind, kindVals) };
-        final TextView kindChip = Form.chip(act, kindNames[kindIdx[0]], null);
+        final int ki0 = idxOfOr(c0.kind, kindVals);
+        final int[] kindIdx = { ki0 < 0 ? 0 : ki0 };
+        final boolean[] kindTouched = { false };
+        final TextView kindChip = Form.chip(act,
+                ki0 < 0 ? ("制式: " + c0.kind) : kindNames[kindIdx[0]], null);
         kindChip.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                kindTouched[0] = true;
                 kindIdx[0] = (kindIdx[0] + 1) % kindVals.length;
                 kindChip.setText(kindNames[kindIdx[0]]);
             }
@@ -2622,6 +2817,7 @@ public class SettingsBinder {
         lpKind.leftMargin = dp(8);
         kindChip.setLayoutParams(lpKind);
         chipRow.addView(kindChip);
+        Form.note(act, box, "金额 = 计入总资产；额度 = 只在卡片上展示，不进汇总。");
 
         Form.label(act, box, "显示文字（不填 URL 时用，默认「免费」）");
         final EditText eText = Form.input(act, box, "例如: 免费 / 不限量", c0.text);
@@ -2629,7 +2825,13 @@ public class SettingsBinder {
         /* ---------- 新增时才给「从模板开始」 ---------- */
         if (!isEdit) {
             TextView tpl = Form.wide(act, "📋 从常见平台模板开始", new View.OnClickListener() {
-                public void onClick(View v) { showTemplatePicker(null); }
+                public void onClick(View v) {
+                    /* 模板自己会落库一条并可能再开编辑弹窗 —— 这个「添加」弹窗
+                       必须跟着关掉，否则用户回到最底层再点保存又多一条。 */
+                    showTemplatePicker(new Runnable() {
+                        public void run() { fd.dismiss(); }
+                    });
+                }
             });
             fd.add(tpl, 14);
             Form.note(act, box,
@@ -2645,27 +2847,44 @@ public class SettingsBinder {
         Form.note(act, more, "点余额卡片 →「控制台」会打开这个地址。");
         Form.label(act, more, "低值预警阈值（0 = 不预警）");
         final EditText eThreshold = Form.input(act, more, "0",
-                c0.threshold == 0 ? "" : String.valueOf(c0.threshold));
+                c0.threshold == 0 ? "" : trimNum(c0.threshold));
+        eThreshold.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         Form.note(act, more, "低于这个值时后台刷新会发通知。");
 
         fd.onSave(new Runnable() {
             public void run() {
                 BalanceFetcher.Custom c = new BalanceFetcher.Custom();
                 c.name = eName.getText().toString().trim();
-                c.url = eUrl.getText().toString().trim();
+                c.url = normUrl(eUrl.getText().toString());
                 c.key = eKey.getText().toString().trim();
                 c.path = ePath.getText().toString().trim();
                 c.text = eText.getText().toString().trim();
-                c.unit = unitVals[unitIdx[0]];
-                c.kind = kindVals[kindIdx[0]];
+                /* 用户没点过 chip 就保留原值 —— 老数据里有 sub / free / usage
+                   这些制式，归一成 balance 会把「额度」算进总资产。 */
+                c.unit = (ui0 < 0 && !unitTouched[0]) ? c0.unit : unitVals[unitIdx[0]];
+                c.kind = (ki0 < 0 && !kindTouched[0]) ? c0.kind : kindVals[kindIdx[0]];
                 c.console = eConsole.getText().toString().trim();
                 /* 后缀这一屏没有输入框，编辑时保留旧值，别悄悄清空 */
                 c.suffix = isEdit && c0.suffix != null ? c0.suffix : "";
-                try {
-                    String tv = eThreshold.getText().toString().trim();
-                    c.threshold = tv.length() == 0 ? 0 : Double.parseDouble(tv);
-                } catch (Exception e) {
+
+                String tv = eThreshold.getText().toString().trim();
+                if (tv.length() == 0) {
                     c.threshold = 0;
+                } else {
+                    double v;
+                    try {
+                        v = Double.parseDouble(tv);
+                    } catch (Exception e) {
+                        /* 以前这里 catch 后直接归零 = 悄悄关掉预警，用户以为设成了 1000 */
+                        Toast.makeText(act, "预警阈值要填数字，例如 10 或 10.5",
+                                Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (!(v >= 0) || Double.isInfinite(v)) {
+                        Toast.makeText(act, "预警阈值要填 ≥ 0 的数字", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    c.threshold = v;
                 }
 
                 if (c.name.length() == 0) {
@@ -2678,8 +2897,27 @@ public class SettingsBinder {
                     Toast.makeText(act, "URL 和「显示文字」至少填一个", Toast.LENGTH_SHORT).show();
                     return;
                 }
+                if (c.url.length() > 0 && c.url.length() <= "https://".length()) {
+                    Toast.makeText(act, "URL 不完整，请填完整地址", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
                 List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
-                if (isEdit && editIdx < list.size()) list.set(editIdx, c);
+                /* 认内容不认下标：弹窗开着的时候列表可能被导入/恢复备份改过，
+                   直接 set(editIdx) 会覆盖到别的平台头上。 */
+                int at = -1;
+                if (isEdit) {
+                    for (int i = 0; i < list.size(); i++) {
+                        BalanceFetcher.Custom o = list.get(i);
+                        if (sameStr(o.name, c0.name) && sameStr(o.url, c0.url)
+                                && sameStr(o.text, c0.text)) {
+                            at = i;
+                            break;
+                        }
+                    }
+                    if (at < 0 && editIdx < list.size()) at = editIdx;   // 内容被改过，退回下标
+                }
+                if (at >= 0) list.set(at, c);
                 else list.add(c);
                 BalanceFetcher.saveCustom(act, list);
                 Busy.run(act, "正在保存…", new Runnable() {

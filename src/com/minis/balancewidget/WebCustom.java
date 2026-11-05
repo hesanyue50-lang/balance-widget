@@ -522,15 +522,18 @@ public class WebCustom {
             s = String.format(java.util.Locale.US, "%.2f", v);
         }
         String suff = suffix == null ? "" : suffix;
+        /* ⚠️ 模板套在**裸数字**上，别套在已经带符号的串上：
+           用户写「还剩 {v} 天」时想看到「还剩 12 天」，不是「还剩 ¥12 天」。
+           要符号就自己写在模板里（「¥{v}」），比让程序猜更可控。 */
+        if (template != null && template.length() > 0) {
+            return template.replace("{v}", s);
+        }
         if ("NONE".equals(unit) && suff.length() > 0) {
             s = s + suff;
         } else if ("USD".equals(unit)) {
             s = "$" + s;
         } else if ("CNY".equals(unit)) {
             s = "¥" + s;
-        }
-        if (template != null && template.length() > 0) {
-            s = template.replace("{v}", s);
         }
         return s;
     }

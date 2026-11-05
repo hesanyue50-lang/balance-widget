@@ -2,6 +2,7 @@ package com.minis.balancewidget;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.DialogInterface;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -29,14 +30,19 @@ public class FormDialog {
     public final LinearLayout box;
 
     private final Activity act;
+    private final LinearLayout rootView;
     private Runnable onSave;
 
     public FormDialog(Activity act, String title, String saveText) {
         this.act = act;
 
         LinearLayout root = new LinearLayout(act);
+        rootView = root;
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundResource(R.drawable.dialog_card);
+        /* 用主题帮手机取背景：Aurora 两套给 20dp + 1dp 描边，
+           Editorial / Brutal 是直角主题（0dp，Brutal 还有 2dp 黑边）——
+           写死 @drawable/dialog_card 的话，直角主题里就只剩弹窗是圆的。 */
+        root.setBackground(Theme.cardBg(act));
         int ph = Form.dp(act, 20);
         root.setPadding(ph, Form.dp(act, 18), ph, Form.dp(act, 14));
 
@@ -48,7 +54,25 @@ public class FormDialog {
         tvTitle.setLetterSpacing(0.012f);
         root.addView(tvTitle);
 
-        ScrollView sv = new ScrollView(act);
+        /* ⚠️ ScrollView 必须封顶。
+           窗口高度是 WRAP_CONTENT，LinearLayout 按顺序把「剩余高度」下发：
+           ScrollView 拿到的是 AT_MOST(屏高 - 标题)，内容一超屏它就吃掉全部剩余高度，
+           排在后面的底栏只能拿到 AT_MOST(0) —— 高度 0、被裁到屏幕外，
+           「保存」按钮彻底消失（高级平台展开「高级选项」后 100% 复现）。
+           封到屏高的 58%（并给底栏留 90dp）之后，超出部分在 ScrollView 内部滚，底栏永远在。 */
+        final int screenH = act.getResources().getDisplayMetrics().heightPixels;
+        final int reserve = Form.dp(act, 90);        // 底栏 + 底部内边距
+        final int hardCap = (int) (screenH * 0.58f);
+        ScrollView sv = new ScrollView(act) {
+            @Override
+            protected void onMeasure(int wSpec, int hSpec) {
+                int avail = View.MeasureSpec.getMode(hSpec) == View.MeasureSpec.AT_MOST
+                        ? View.MeasureSpec.getSize(hSpec) : screenH;
+                int limit = Math.min(hardCap, Math.max(Form.dp(act, 120), avail - reserve));
+                super.onMeasure(wSpec,
+                        View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST));
+            }
+        };
         sv.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         box = new LinearLayout(act);
@@ -65,8 +89,7 @@ public class FormDialog {
         flp.topMargin = Form.dp(act, 16);
         foot.setLayoutParams(flp);
 
-        TextView cancel = footBtn("取消", R.drawable.btn_secondary,
-                Theme.c(act, R.attr.c_tx2));
+        TextView cancel = footBtn("取消", R.attr.c_input, R.attr.c_tx2);
         LinearLayout.LayoutParams lpC = new LinearLayout.LayoutParams(
                 0, Form.dp(act, 46), 1f);
         lpC.rightMargin = Form.dp(act, 6);
@@ -74,7 +97,7 @@ public class FormDialog {
         foot.addView(cancel);
 
         TextView save = footBtn(saveText == null ? "保存" : saveText,
-                R.drawable.btn_primary, Theme.c(act, R.attr.c_accent_tx));
+                R.attr.c_accent, R.attr.c_accent_tx);
         LinearLayout.LayoutParams lpS = new LinearLayout.LayoutParams(
                 0, Form.dp(act, 46), 1f);
         lpS.leftMargin = Form.dp(act, 6);
@@ -83,20 +106,22 @@ public class FormDialog {
 
         root.addView(foot);
 
-        dlg = new Dialog(act);
+        dlg = new Dialog(act, dialogStyle(act));
         dlg.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dlg.setContentView(root);
         Window w = dlg.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            /* 92% 屏宽：留出两侧 4% 的呼吸位，比系统弹窗的 90% 略宽一点，
-               长输入框（URL / JSON 路径）不至于一屏只看到半截。 */
+            /* 92% 屏宽，但封 560dp —— 横屏/平板上不然会变成一张巨幅表单 */
             int sw = act.getResources().getDisplayMetrics().widthPixels;
-            w.setLayout((int) (sw * 0.92f), ViewGroup.LayoutParams.WRAP_CONTENT);
+            int wp = Math.min((int) (sw * 0.92f), Form.dp(act, 560));
+            w.setLayout(wp, ViewGroup.LayoutParams.WRAP_CONTENT);
             w.setGravity(Gravity.CENTER);
             /* 软键盘弹出来时把弹窗顶上去，别把正在填的输入框挡住 */
             w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
+        /* 表单一屏能填十几个字段，手指在窗外蹭一下就把全屏输入丢了 —— 关掉外部点击取消 */
+        dlg.setCanceledOnTouchOutside(false);
 
         cancel.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { dlg.dismiss(); }
@@ -108,18 +133,40 @@ public class FormDialog {
                 if (onSave != null) onSave.run();
             }
         });
-
-        Theme.skin(act, root);   // 弹窗是独立窗口，Activity 那棵树遍历不到
+        dlg.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            public void onDismiss(DialogInterface d) {
+                /* 断开引用：onSave 里捕获着整棵视图树，进而捕获 Activity */
+                onSave = null;
+            }
+        });
     }
 
-    private TextView footBtn(String s, int bgRes, int txColor) {
+    /**
+     * 弹窗主题（决定 EditText 光标色、选择手柄色、进出动画）。
+     * 只有 {@code android:alertDialogTheme} 是给 AlertDialog 用的，
+     * {@code new Dialog(act)} 解析的是 dialogTheme —— 不显式指定就落到系统默认，
+     * 深色主题下光标会是系统蓝，动画也跟 App 里其它弹窗不一致。
+     */
+    private static int dialogStyle(Activity a) {
+        switch (Theme.index(a)) {
+            case 1: return R.style.AppDialog_AuroraDark;
+            case 2: return R.style.AppDialog_Editorial;
+            case 3: return R.style.AppDialog_Swiss;
+            case 4: return R.style.AppDialog_Devtool;
+            case 5: return R.style.AppDialog_Brutal;
+            case 6: return R.style.AppDialog_Clay;
+            default: return R.style.AppDialog_AuroraLight;
+        }
+    }
+
+    private TextView footBtn(String s, int bgAttr, int txAttr) {
         TextView t = new TextView(act);
         t.setText(s);
         t.setTextSize(14);
-        t.setTextColor(txColor);
+        t.setTextColor(Theme.c(act, txAttr));
         t.setGravity(Gravity.CENTER);
         t.setTypeface(null, Typeface.BOLD);
-        t.setBackgroundResource(bgRes);
+        Form.paint(act, t, bgAttr, 13, 999);
         t.setClickable(true);
         t.setFocusable(true);
         return t;
@@ -170,7 +217,15 @@ public class FormDialog {
     }
 
     public void show() {
-        dlg.show();
+        /* ⚠️ skin 放在 show 而不是构造函数里：调用方是「构造完再往 box 里加字段」，
+           构造末尾 skin 一遍只能覆盖标题和底栏，正文那几十个 TextView 全是默认字体
+           （Editorial 衬线主题下弹窗里外两种字，Brutal 下也不跟）。 */
+        Theme.skin(act, rootView);
+        try {
+            dlg.show();
+        } catch (Throwable ignored) {
+            /* Activity 正在 finish 时 show() 抛 BadTokenException，别让设置页跟着崩 */
+        }
     }
 
     public void dismiss() {
