@@ -12,6 +12,7 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -2425,6 +2426,28 @@ public class MainActivity extends Activity {
                     conv.setVisibility(View.GONE);
                     conv2.setVisibility(View.GONE);
                 }
+                /* 预测行：按近期速度还能用多久 / 订阅还有几天到期。
+                   算不出来就整行隐藏 —— 显示「--」比不显示更让人困惑。 */
+                TextView daysTv = (TextView) v.findViewById(R.id.p_days);
+                if (it.daysLeft > 0) {
+                    daysTv.setVisibility(View.VISIBLE);
+                    daysTv.setText("按近期速度，约剩 " + it.daysLeft + " 天");
+                    daysTv.setTextColor(Theme.c(this,
+                            it.daysLeft <= 3 ? R.attr.c_danger : R.attr.c_accent));
+                } else if (it.ok && it.subEndMs > 0) {
+                    long dd = (it.subEndMs - System.currentTimeMillis()) / 86400000L;
+                    if (dd >= 0 && dd <= 60) {
+                        daysTv.setVisibility(View.VISIBLE);
+                        daysTv.setText(dd <= 0 ? "今天到期" : (dd + " 天后到期"));
+                        daysTv.setTextColor(Theme.c(this,
+                                dd <= 3 ? R.attr.c_danger : R.attr.c_accent));
+                    } else {
+                        daysTv.setVisibility(View.GONE);
+                    }
+                } else {
+                    daysTv.setVisibility(View.GONE);
+                }
+
                 if (it.rows != null && it.rows.length() > 0) {
                     rows.setVisibility(View.VISIBLE);
                     rows.setText(it.rows);
@@ -2478,6 +2501,7 @@ public class MainActivity extends Activity {
                 conv.setVisibility(View.GONE);
                 hide(v, R.id.p_conv2);
                 hide(v, R.id.p_pct_box);
+                hide(v, R.id.p_days);
                 rows.setVisibility(View.VISIBLE);
                 /* 网关没在跑：不是"查询失败"，而是"服务没起" ——
                    提示要说清怎么解决，并让点一下就能拉起。 */
@@ -2486,6 +2510,14 @@ public class MainActivity extends Activity {
                     rows.setTextColor(Theme.c(this, R.attr.c_danger));
                     rows.setOnClickListener(new View.OnClickListener() {
                         public void onClick(View x) { showGatewayHelp(it); }
+                    });
+                } else if (AuthFail.needLogin(this, it.platform)) {
+                    /* 连续两次 401/403 或"未授权"类文案 —— 这已经不是"查询失败"，
+                       而是钥匙过期了。直接给一个能点的入口，别让用户自己去翻设置。 */
+                    rows.setText("登录态已失效，点这里重新登录\n" + it.error);
+                    rows.setTextColor(Theme.c(this, R.attr.c_danger));
+                    rows.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View x) { showRelogin(it); }
                     });
                 } else {
                     rows.setText(it.error);
@@ -2516,6 +2548,41 @@ public class MainActivity extends Activity {
      * 普通应用做不到。所以这里不假装能一键启动，而是把**可复制的命令**给出来 ——
      * 拉起只需执行一条命令，复制粘贴的代价远低于让用户自己回忆路径和参数。
      */
+    /**
+     * 凭证失效的补救入口。
+     *
+     * <p>能拿到地址的高级平台就地走网页登录（抓到 Cookie 直接写回该平台的请求头，
+     * 用户不必再进设置找一遍）；内置平台的凭据存在 KeyStore 里，统一跳设置页处理。
+     */
+    private void showRelogin(final BalanceFetcher.Item it) {
+        final String p = it.platform == null ? "" : it.platform;
+        if (p.startsWith("web:")) {
+            int t = -1;
+            try { t = Integer.parseInt(p.substring(4)); } catch (Exception ignored) { }
+            final int idx = t;
+            final List<WebCustom> ws = WebCustom.loadAll(this);
+            if (idx >= 0 && idx < ws.size()) {
+                WebLoginActivity.open(this, ws.get(idx).url,
+                        new WebLoginActivity.OnCookie() {
+                            public void onCookie(String host, String cookie) {
+                                if (cookie == null || cookie.length() == 0) return;
+                                WebCustom w = ws.get(idx);
+                                w.headers = WebCustom.mergeHeader(w.headers, "Cookie", cookie);
+                                WebCustom.putOne(MainActivity.this, w, w.name, w.url);
+                                AuthFail.clear(MainActivity.this, p);
+                                Toast.makeText(MainActivity.this, "已更新登录态，正在刷新…",
+                                        Toast.LENGTH_SHORT).show();
+                                refresh(true);
+                            }
+                        });
+                return;
+            }
+        }
+        Toast.makeText(this, "在设置里更新一下「" + it.label + "」的密钥或登录态",
+                Toast.LENGTH_LONG).show();
+        startActivity(new android.content.Intent(this, SettingsActivity.class));
+    }
+
     private void showGatewayHelp(final BalanceFetcher.Item it) {
         String base = BalanceFetcher.normalizeBase(
                 it != null && it.gatewayUrl != null ? it.gatewayUrl : "");

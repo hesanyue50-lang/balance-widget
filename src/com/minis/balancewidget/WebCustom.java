@@ -85,6 +85,9 @@ public class WebCustom {
     /** 低值预警阈值（0 = 不预警） */
     public double threshold = 0;
 
+    /** 下次扣费日（毫秒时间戳，0 = 没填）—— 订阅制平台到期前按天数提醒 */
+    public long renewAt = 0;
+
     /**
      * API Key：可选。
      *
@@ -142,6 +145,44 @@ public class WebCustom {
         return list;
     }
 
+    /**
+     * 改一条高级平台：以**原始存档**为基准逐条替换，不受 ready() 过滤。
+     *
+     * <p>loadAll() 会丢掉 ready() 为假的项，saveAll() 再整表覆盖 ——
+     * 编辑一条会把界面上看不见的旧数据全删掉。
+     *
+     * @param oldName 改动前的值，用来认出目标项（name / url 都允许被改）
+     */
+    public static void putOne(Context ctx, WebCustom w, String oldName, String oldUrl) {
+        JSONObject nv = w.toJson();
+        try {
+            JSONArray arr = new JSONArray(sp(ctx).getString(KEY, "[]"));
+            int at = -1;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                if (eq(o.optString("name", ""), oldName)
+                        && eq(o.optString("url", ""), oldUrl)) {
+                    at = i;
+                    break;
+                }
+            }
+            if (at >= 0) arr.put(at, nv); else arr.put(nv);
+            sp(ctx).edit().putString(KEY, arr.toString()).commit();
+        } catch (Exception e) {
+            /* 存档解析不出来：退回整表写，至少这次编辑不丢 */
+            List<WebCustom> list = loadAll(ctx);
+            list.add(w);
+            saveAll(ctx, list);
+        }
+    }
+
+    private static boolean eq(String a, String b) {
+        if (a == null) a = "";
+        if (b == null) b = "";
+        return a.equals(b);
+    }
+
     public static void saveAll(Context ctx, List<WebCustom> list) {
         try {
             JSONArray arr = new JSONArray();
@@ -180,6 +221,7 @@ public class WebCustom {
             o.put("suffix", suffix);
             o.put("foreign", foreign);
             o.put("threshold", threshold);
+            o.put("renewAt", renewAt);
             org.json.JSONArray bl = new org.json.JSONArray();
             org.json.JSONArray bu = new org.json.JSONArray();
             for (int i = 0; i < 4; i++) {
@@ -214,6 +256,7 @@ public class WebCustom {
         w.suffix = o.optString("suffix", "");
         w.foreign = o.optBoolean("foreign", false);
         w.threshold = o.optDouble("threshold", 0);
+        w.renewAt = o.optLong("renewAt", 0);
         org.json.JSONArray bl = o.optJSONArray("btnLabels");
         org.json.JSONArray bu = o.optJSONArray("btnUrls");
         for (int i = 0; i < 4; i++) {

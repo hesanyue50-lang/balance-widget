@@ -379,6 +379,93 @@ public final class Ledger extends SQLiteOpenHelper {
         return out;
     }
 
+    // ---------- 预测 ----------
+
+    /**
+     * 账户级预测：合并同一账户下所有 Key 的快照。
+     *
+     * <b>取舍：不把多 Key 的序列首尾拼接。</b>
+     * 同一账户的多个 Key 各按自己的节奏采样，时间点并不重合。把它们的点按时间戳
+     * 揉成一条曲线，会得到一个"在几个余额值之间来回跳"的锯齿 —— 每一跳都被当成
+     * 一次充值和一次消耗，日均能被放大到荒唐的数字（而且方向随机）。
+     *
+     * 所以这里**按 keyId 各自用区间法算速率**（{@link Prediction#burnStats}），
+     * 再按各自的有效时长做**加权平均**：
+     * <pre>
+     *     perDay = Σ(rate_i × hours_i) / Σ(hours_i)
+     * </pre>
+     * 用加权平均而不是相加，是因为同账户的 Key 共享同一份余额 ——
+     * 相加等于把消耗算两遍。加权的意义在于：点密、跨度长的那条 Key 说话更算数。
+     *
+     * 余额取**最新一条快照**的值（多个 Key 时取时间最新者），不再二次合并。
+     *
+     * 注意：会查库（每 Key 2 次查询）。界面请把结果缓存到本轮刷新里，
+     * 别在 onDraw / 列表 bind 里反复调。
+     *
+     * @param keyIds 同一账户下的 Key id（可含历史遗留的平台 id 别名）
+     * @param days   统计窗口（天），一般给 7 或 30
+     */
+    public static Prediction.Estimate estimate(Context c, String[] keyIds, int days) {
+        Prediction.Estimate est = new Prediction.Estimate();
+        if (c == null || keyIds == null || keyIds.length == 0 || days <= 0) return est;
+
+        long now = System.currentTimeMillis();
+        long from = now - (long) days * 24L * 3600L * 1000L;
+
+        Ledger lg = get(c);
+        java.util.HashSet<String> seen = new java.util.HashSet<String>();
+        double sumRate = 0d, sumHours = 0d;
+        long newestTs = Long.MIN_VALUE;
+        double newestBal = Double.NaN;
+
+        for (int i = 0; i < keyIds.length; i++) {
+            String kid = keyIds[i];
+            if (kid == null || kid.length() == 0) continue;
+            if (!seen.add(kid)) continue;          // 别名重复出现只算一次
+
+            List<Point> pts = lg.series(c, kid, from);
+            if (pts.isEmpty()) continue;
+
+            Point last = pts.get(pts.size() - 1);  // series 升序
+            if (last.ts > newestTs) {
+                newestTs = last.ts;
+                newestBal = last.balance;
+            }
+            if (pts.size() < 2) continue;          // 单点只能看余额，不能算速率
+
+            double[] ts = new double[pts.size()];
+            double[] bal = new double[pts.size()];
+            for (int j = 0; j < pts.size(); j++) {
+                ts[j] = pts.get(j).ts;
+                bal[j] = pts.get(j).balance;
+            }
+
+            List<Recharge> rs = lg.recharges(c, kid, from);
+            double[] rts = new double[rs.size()];
+            double[] ramt = new double[rs.size()];
+            for (int j = 0; j < rs.size(); j++) {
+                rts[j] = rs.get(j).ts;
+                ramt[j] = rs.get(j).amount;
+            }
+
+            double[] st = Prediction.burnStats(ts, bal, rts, ramt, from);
+            if (st[0] > 0 && st[1] > 0) {
+                sumRate += st[0] * st[1];
+                sumHours += st[1];
+            }
+        }
+
+        est.balance = newestBal;
+        if (!(sumHours > 0) || newestBal != newestBal) return est;   // 无有效数据 → 保持 -1
+
+        double perDay = sumRate / sumHours;
+        est.perDay = perDay;
+        est.validDays = sumHours / 24d;
+        est.daysLeft = Prediction.daysLeft(newestBal, perDay);
+        est.exhaustAtMs = Prediction.exhaustAt(newestBal, perDay, now);
+        return est;
+    }
+
     private double rechargedBetween(Context c, String keyId, long from, long to) {
         double sum = 0;
         try {

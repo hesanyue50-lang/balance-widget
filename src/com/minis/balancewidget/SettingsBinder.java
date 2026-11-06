@@ -1955,6 +1955,11 @@ public class SettingsBinder {
                 w0.threshold == 0 ? "" : trimNum(w0.threshold));
         eThreshold.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
 
+        Form.label(act, adv, "下次扣费日（可留空）");
+        final EditText eRenew = Form.noSuggest(Form.input(act, adv,
+                "2026-11-19 或 11-19", fmtRenewAt(w0.renewAt)));
+        Form.note(act, adv, "填了之后，到期前 3 天会提醒你。");
+
         /* ---------- 点卡片后弹出的按钮 ---------- */
         Form.label(act, adv, "点卡片后弹出的按钮（地址留空 = 不显示）");
         Form.note(act, adv, "https:// 开头用浏览器打开；app: 指令切到 App 内界面"
@@ -2055,6 +2060,13 @@ public class SettingsBinder {
                     w.btnLabels[bi] = eBtnName[bi].getText().toString().trim();
                     w.btnUrls[bi] = eBtnUrl[bi].getText().toString().trim();
                 }
+                /* 日期写法错就拦在这里，不往下走：静默存 0 等于提醒永远不响 */
+                w.renewAt = parseRenewAt(eRenew.getText().toString().trim());
+                if (w.renewAt < 0) {
+                    Toast.makeText(act, "日期要写成 2026-11-19 或 11-19",
+                            Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
                 if (w.name.length() == 0) {
                     Toast.makeText(act, "名称不能为空", Toast.LENGTH_SHORT).show();
@@ -2116,21 +2128,10 @@ public class SettingsBinder {
                 /* Key 有值时自动拼 Bearer（和界面文案一致） */
                 if (kv.length() > 0) w.headers = WebCustom.mergeHeader(w.headers, "Authorization", "Bearer " + kv);
 
-                List<WebCustom> list = WebCustom.loadAll(act);
-                int at = -1;
-                if (isEdit) {
-                    for (int i = 0; i < list.size(); i++) {
-                        WebCustom o = list.get(i);
-                        if (sameStr(o.url, w0.url) && sameStr(o.name, w0.name)) {
-                            at = i;
-                            break;
-                        }
-                    }
-                    if (at < 0 && editIdx < list.size()) at = editIdx;
-                }
-                if (at >= 0) list.set(at, w);
-                else list.add(w);
-                WebCustom.saveAll(act, list);
+                /* 以**原始存档**为基准替换这一条。
+                   别用 loadAll()+saveAll()：loadAll 会丢掉 ready() 不过的项，
+                   saveAll 再整表覆盖 —— 编辑一条就把界面上看不见的旧数据全删了。 */
+                WebCustom.putOne(act, w, isEdit ? w0.name : null, isEdit ? w0.url : null);
                 Busy.run(act, "正在更新…", new Runnable() {
                     public void run() { renderWebs(); kick(); }
                 });
@@ -2297,6 +2298,59 @@ public class SettingsBinder {
             if (arr[i].equals(v)) return i;
         }
         return 0;
+    }
+
+    /**
+     * 解析「下次扣费日」。空串 → 0（= 没填，不提醒）。
+     *
+     * 认两种写法：yyyy-MM-dd（2026-11-19）和 MM-dd（11-19）。
+     * 只写月日时补当前年；补出来那天已经过去就算明年 —— 用户填「11-19」
+     * 想的是下一个 11-19，不是今年那个已经过掉的。
+     *
+     * @return 毫秒时间戳；0 = 没填；-1 = 写法不对。
+     *         调用处见到 -1 必须弹提示后 return，不能静默存 0 ——
+     *         否则用户以为填上了，到期提醒其实永远不响。
+     */
+    private static long parseRenewAt(String s) {
+        if (s == null) return 0;
+        s = s.trim();
+        if (s.length() == 0) return 0;
+        boolean full = s.matches("\\d{4}-\\d{1,2}-\\d{1,2}");
+        if (!full && !s.matches("\\d{1,2}-\\d{1,2}")) return -1;
+        String[] p = s.split("-");
+        int y = full ? Integer.parseInt(p[0])
+                : java.util.Calendar.getInstance().get(java.util.Calendar.YEAR);
+        int mo = Integer.parseInt(p[full ? 1 : 0]);
+        int d = Integer.parseInt(p[full ? 2 : 1]);
+        if (y < 1970 || y > 2999 || mo < 1 || mo > 12 || d < 1 || d > 31) return -1;
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.set(y, mo - 1, d, 0, 0, 0);
+        c.set(java.util.Calendar.MILLISECOND, 0);
+        /* Calendar 默认宽松，2-30 会被悄悄进位成 3-2：回读一遍，对不上就是日期不存在 */
+        if (c.get(java.util.Calendar.YEAR) != y
+                || c.get(java.util.Calendar.MONTH) != mo - 1
+                || c.get(java.util.Calendar.DAY_OF_MONTH) != d) {
+            return -1;
+        }
+        if (!full) {
+            java.util.Calendar today = java.util.Calendar.getInstance();
+            today.set(java.util.Calendar.HOUR_OF_DAY, 0);
+            today.set(java.util.Calendar.MINUTE, 0);
+            today.set(java.util.Calendar.SECOND, 0);
+            today.set(java.util.Calendar.MILLISECOND, 0);
+            if (c.getTimeInMillis() < today.getTimeInMillis()) {
+                /* 当天不算过去：今天就是扣费日时仍是今年 */
+                c.set(y + 1, mo - 1, d);
+            }
+        }
+        return c.getTimeInMillis();
+    }
+
+    /** 下次扣费日回填：统一写成 yyyy-MM-dd；没填返回空串 */
+    private static String fmtRenewAt(long ms) {
+        if (ms <= 0) return "";
+        return new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                .format(new java.util.Date(ms));
     }
 
     // ---------------- 自定义平台 ----------------
@@ -2851,6 +2905,11 @@ public class SettingsBinder {
         eThreshold.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         Form.note(act, more, "低于这个值时后台刷新会发通知。");
 
+        Form.label(act, more, "下次扣费日（可留空）");
+        final EditText eRenew = Form.noSuggest(Form.input(act, more,
+                "2026-11-19 或 11-19", fmtRenewAt(c0.renewAt)));
+        Form.note(act, more, "填了之后，到期前 3 天会提醒你。");
+
         fd.onSave(new Runnable() {
             public void run() {
                 BalanceFetcher.Custom c = new BalanceFetcher.Custom();
@@ -2866,6 +2925,13 @@ public class SettingsBinder {
                 c.console = eConsole.getText().toString().trim();
                 /* 后缀这一屏没有输入框，编辑时保留旧值，别悄悄清空 */
                 c.suffix = isEdit && c0.suffix != null ? c0.suffix : "";
+                /* 日期写法错就拦在这里，不往下走：静默存 0 等于提醒永远不响 */
+                c.renewAt = parseRenewAt(eRenew.getText().toString().trim());
+                if (c.renewAt < 0) {
+                    Toast.makeText(act, "日期要写成 2026-11-19 或 11-19",
+                            Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
                 String tv = eThreshold.getText().toString().trim();
                 if (tv.length() == 0) {
@@ -2902,24 +2968,11 @@ public class SettingsBinder {
                     return;
                 }
 
-                List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
-                /* 认内容不认下标：弹窗开着的时候列表可能被导入/恢复备份改过，
-                   直接 set(editIdx) 会覆盖到别的平台头上。 */
-                int at = -1;
-                if (isEdit) {
-                    for (int i = 0; i < list.size(); i++) {
-                        BalanceFetcher.Custom o = list.get(i);
-                        if (sameStr(o.name, c0.name) && sameStr(o.url, c0.url)
-                                && sameStr(o.text, c0.text)) {
-                            at = i;
-                            break;
-                        }
-                    }
-                    if (at < 0 && editIdx < list.size()) at = editIdx;   // 内容被改过，退回下标
-                }
-                if (at >= 0) list.set(at, c);
-                else list.add(c);
-                BalanceFetcher.saveCustom(act, list);
+                /* 以**原始存档**为基准替换这一条（按内容认出目标，不认下标），
+                   原因同高级平台：整表写回会把 ready() 不过的旧数据一起删掉。 */
+                BalanceFetcher.putCustom(act, c,
+                        isEdit ? c0.name : null, isEdit ? c0.url : null,
+                        isEdit ? c0.text : null);
                 Busy.run(act, "正在保存…", new Runnable() {
                     public void run() { renderCustoms(); renderKeys(); kick(); }
                 });

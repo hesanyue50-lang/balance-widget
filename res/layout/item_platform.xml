@@ -120,6 +120,17 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
+    <!-- 预测：按近期消耗速度还能用多久。算不出来就整行不显示，
+         不要占位显示横杠（用户会以为数据坏了） -->
+    <TextView
+        android:id="@+id/p_days"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="?attr/c_accent"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/p_rows"
         android:layout_width="match_parent"

@@ -79,10 +79,36 @@ public class Alert {
                    它们 bal 恒为 0，不排除掉就会天天误报"余额不足"。 */
                 it.low = it.ok && !it.noData && thr > 0 && it.bal < thr
                         && !"消费".equals(it.tag);   // 后付费平台（如七牛云）没有余额概念，不参与低余额预警
+                /* 顺手算「还能用几天」。放在 mark() 里是因为这是每轮刷新唯一
+                   遍历全部平台的地方（应用内、小组件、单卡刷新都会经过），
+                   在渲染循环里算会变成"每张卡一次 SQL"，那才是真的慢。 */
+                it.daysLeft = -1;
+                if (it.ok && !it.noData && it.bal > 0) it.daysLeft = forecastDays(c, it);
             }
             if (it.low) lows.add(it);
         }
         return lows;
+    }
+
+    /**
+     * 按近 7 天消耗速度，这点余额还能撑几天。
+     *
+     * <p>账本里每 6 小时一条快照，区间法扣掉充值后得到日均消耗 —— 见
+     * {@link Prediction}。数据不足（< 24 小时）时返回 -1，
+     * 界面据此整行隐藏，不显示"还剩 -- 天"这种没法解释的东西。
+     */
+    private static int forecastDays(Context c, BalanceFetcher.Item it) {
+        try {
+            /* 优先用「这张卡由哪几个密钥组成」去查 —— 合并卡的 it.id 是平台标识，
+               账本里没有这个键，直接查永远是"数据不足"。 */
+            String[] kids = (it.keyIds != null && it.keyIds.length > 0)
+                    ? it.keyIds : new String[] { it.id };
+            Prediction.Estimate est = Ledger.estimate(c, kids, 7);
+            if (!est.ok()) return -1;
+            return Prediction.daysLeft(it.bal, est.perDay);
+        } catch (Throwable t) {
+            return -1;      // 预测永远不能把预警流程搞崩
+        }
     }
 
     // ---------- 通知 ----------
@@ -161,11 +187,22 @@ public class Alert {
             BalanceFetcher.Item it = items.get(i);
             double thr = it.threshold > 0 ? it.threshold : threshold(c, it.id);
             if (i > 0) sb.append("\n");
-            sb.append(it.label).append("  ")
-              .append(("USD".equals(it.tag) ? "$" : "¥")).append(String.format("%.2f", it.bal))
-              .append("（阈值 ")
-              .append(("USD".equals(it.tag) ? "$" : "¥")).append(String.format("%.2f", thr))
-              .append("）");
+            sb.append(it.label).append("  ");
+            /* 订阅制没有"余额"这个概念：该显示的是还能用几天，
+               写成 ¥0.00（阈值 7.00）用户根本看不懂在提醒什么。 */
+            if ("sub".equals(it.kind) && it.subEndMs > 0) {
+                long dd = (it.subEndMs - System.currentTimeMillis()) / 86400000L;
+                sb.append(dd <= 0 ? "今天到期" : ("还有 " + dd + " 天到期"));
+            } else {
+                sb.append(("USD".equals(it.tag) ? "$" : "¥"))
+                  .append(String.format("%.2f", it.bal));
+                /* 有预测就补一句"还能用几天"—— 比单看余额有决策价值 */
+                if (it.daysLeft > 0) sb.append("，约够 ").append(it.daysLeft).append(" 天");
+                sb.append("（阈值 ")
+                  .append(("USD".equals(it.tag) ? "$" : "¥"))
+                  .append(String.format("%.2f", thr))
+                  .append("）");
+            }
         }
 
         Intent open = new Intent(c, MainActivity.class);

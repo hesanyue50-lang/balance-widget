@@ -616,6 +616,8 @@ public class BalanceFetcher {
         public double threshold = 0;
         /** 控制台地址（模板填的，或用户自己填）。点卡片 →「控制台」用它 */
         public String console = "";
+        /** 下次扣费日（毫秒，0 = 没填）。订阅制平台到期前提醒用 */
+        public long renewAt = 0;
 
         /** 配置完备吗？—— 静态文本模式不用填 URL，其余要有 URL */
         public boolean ready() {
@@ -661,6 +663,48 @@ public class BalanceFetcher {
         return list;
     }
 
+    /**
+     * 改一条自定义平台：以**原始存档**为基准逐条替换，不受 ready() 过滤。
+     *
+     * <p>为什么不能 loadCustom() + saveCustom()：loadCustom 会丢掉 ready() 为假的项
+     * （name 为空之类），saveCustom 再拿这个过滤后的列表整表覆盖 —— 用户只是编辑 A 平台，
+     * B、C 两条在界面上看不见的旧数据就被永久删掉了。
+     *
+     * @param oldName 改动前的值，用来在存档里认出目标项（name 允许被用户改掉）
+     */
+    public static void putCustom(Context ctx, Custom c,
+                                 String oldName, String oldUrl, String oldText) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        JSONObject nv = customToJson(c, false);
+        try {
+            JSONArray arr = new JSONArray(sp.getString("custom_json", "[]"));
+            int at = -1;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                if (eqStr(o.optString("name", ""), oldName)
+                        && eqStr(o.optString("url", ""), oldUrl)
+                        && eqStr(o.optString("text", ""), oldText)) {
+                    at = i;
+                    break;
+                }
+            }
+            if (at >= 0) arr.put(at, nv); else arr.put(nv);
+            sp.edit().putString("custom_json", arr.toString()).commit();
+        } catch (Exception e) {
+            /* 存档坏到连 JSONArray 都解析不出来：退回整表写，至少这次编辑不丢 */
+            List<Custom> list = loadCustom(ctx);
+            list.add(c);
+            saveCustom(ctx, list);
+        }
+    }
+
+    private static boolean eqStr(String a, String b) {
+        if (a == null) a = "";
+        if (b == null) b = "";
+        return a.equals(b);
+    }
+
     public static void saveCustom(Context ctx, List<Custom> list) {
         JSONArray arr = new JSONArray();
         for (int i = 0; i < list.size(); i++) {
@@ -694,6 +738,7 @@ public class BalanceFetcher {
             o.put("text", c.text);
             o.put("threshold", c.threshold);
             o.put("console", c.console == null ? "" : c.console);
+            o.put("renewAt", c.renewAt);
         } catch (Exception ignored) { }
         return o;
     }
@@ -712,6 +757,7 @@ public class BalanceFetcher {
         c.text = o.optString("text", "");
         c.threshold = o.optDouble("threshold", 0);
         c.console = o.optString("console", "");
+        c.renewAt = o.optLong("renewAt", 0);
         return c;
     }
 
@@ -733,7 +779,12 @@ public class BalanceFetcher {
         public boolean low = false;     // 是否低于预警阈值
         public boolean ok = false;
         public long subEndMs = 0;       // 订阅制最近到期时间戳（按到期天数报警用）
+        /** 按近期消耗速度还能用几天（-1 = 算不出来 / 不该显示） */
+        public int daysLeft = -1;
         public int mergeCount = 1;      // 合并了多少个密钥（同平台，卡片按平台合并时用）
+        /** 这张卡背后是哪些密钥 id（账本按密钥记账，预测必须用它们查，
+            不能用合并后的 platform —— 那是个永远查不到历史的平台标识） */
+        public String[] keyIds;
         public double usageTokens = -1; // usage 平台 token 用量（千token，-1=无数据）
         public String debug = "";       // 诊断：原始应答截断（仅排查用）
         /** 平台本身没数据可查（MiMo 未登录 / 登录过期）—— 别拿这种 0 值去记快照、画曲线 */
@@ -773,7 +824,7 @@ public class BalanceFetcher {
             o.gatewayDown = gatewayDown; o.gatewayUrl = gatewayUrl;
             o.unitOverride = unitOverride;
             o.alertKey = alertKey; o.low = low; o.ok = ok; o.subEndMs = subEndMs;
-            o.mergeCount = mergeCount; o.usageTokens = usageTokens;
+            o.mergeCount = mergeCount; o.usageTokens = usageTokens; o.keyIds = keyIds;
             o.debug = debug; o.noData = noData; o.foreign = foreign;
             o.viaProxy = viaProxy;
             return o;
@@ -2360,6 +2411,7 @@ public class BalanceFetcher {
                 it.label = c.name.length() > 0 ? c.name : "自定义";
                 it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
                 it.kind = c.kind;
+                it.subEndMs = c.renewAt;   // 自定义平台也参与订阅到期提醒
                 /* 自定义平台不预设是否国外，交给用户在设置里勾 */
                 it.viaProxy = Clash.platformViaProxy(ctx, it.platform, false);
                 items.add(it);
@@ -2412,6 +2464,7 @@ public class BalanceFetcher {
             it.label = c.name.length() > 0 ? c.name : "自定义";
             it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
             it.kind = c.kind;
+            it.subEndMs = c.renewAt;   // 自定义平台也参与订阅到期提醒
             items.add(it);
             custs.add(c);
             keys.add(c.key);
@@ -2515,7 +2568,13 @@ public class BalanceFetcher {
                                 + " | " + e.getClass().getSimpleName());
                         diag(ctx, "  NG  " + it.id + " " + it.error
                                 + "   (" + (System.currentTimeMillis() - ts0) + "ms)");
+                        /* 凭证失效判定：401/403 或"未授权/需登录"类文案，连续两次就标记
+                           需要重新登录 —— 否则用户只看到"查询失败"，分不清是网络抖动
+                           还是 Cookie 过期，只能一个个进设置翻。 */
+                        AuthFail.record(ctx, it.platform, false,
+                                AuthFail.httpCodeOf(e.getMessage()), null, e.getMessage());
                     } finally {
+                        if (it.ok) AuthFail.record(ctx, it.platform, true, 0, null, null);
                         if (viaProxy) VIA_PROXY.remove();   // 线程即将结束，顺手清掉
                         latch.countDown();                  // 无论成败都算「这一项已结束」
                     }
@@ -2575,9 +2634,19 @@ public class BalanceFetcher {
         for (int i = 0; i < res.items.size(); i++) res.rawItems.add(res.items.get(i).copy());
         java.util.LinkedHashMap<String, Item> byPlat =
                 new java.util.LinkedHashMap<String, Item>();
+        /* 顺便记下每个平台由哪些密钥组成：合并后 it.id 会被改写成平台标识，
+           而账本快照是按密钥 id 存的 —— 预测要按密钥查，所以这里先留一份。 */
+        final java.util.LinkedHashMap<String, java.util.ArrayList<String>> platKeys =
+                new java.util.LinkedHashMap<String, java.util.ArrayList<String>>();
         for (int i = 0; i < res.items.size(); i++) {
             Item it = res.items.get(i);
             String plat = it.platform == null ? "" : it.platform;
+            java.util.ArrayList<String> kl = platKeys.get(plat);
+            if (kl == null) {
+                kl = new java.util.ArrayList<String>();
+                platKeys.put(plat, kl);
+            }
+            kl.add(it.id);
             Item prev = byPlat.get(plat);
             if (prev == null) {
                 it.mergeCount = 1;
@@ -2598,6 +2667,8 @@ public class BalanceFetcher {
             Item it = res.items.get(i);
             it.id = it.platform;           // 卡片/刷新/预警统一用平台标识
             it.alertKey = it.platform;
+            java.util.ArrayList<String> kl = platKeys.get(it.platform);
+            it.keyIds = kl == null ? null : kl.toArray(new String[kl.size()]);
             if (it.ok) {
                 if (countsInTotal(ctx, it)) {
                     res.totalCny += it.cny;
@@ -2674,6 +2745,7 @@ public class BalanceFetcher {
                 it.label = c.name.length() > 0 ? c.name : "自定义";
                 it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
                 it.kind = c.kind;
+                it.subEndMs = c.renewAt;   // 自定义平台也参与订阅到期提醒
                 double rateC = 7.1;
                 try {
                     rateC = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -2810,6 +2882,7 @@ public class BalanceFetcher {
                 it.label = c.name.length() > 0 ? c.name : "自定义";
                 it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
                 it.kind = c.kind;
+                it.subEndMs = c.renewAt;   // 自定义平台也参与订阅到期提醒
                 fillCustom(ctx, it, c, rate, timeoutMs);
                 if (!it.noData) it.ok = true;
             } else {
@@ -2842,6 +2915,14 @@ public class BalanceFetcher {
             it.ok = false;
             it.error = (e.getMessage() == null) ? "查询失败" : e.getMessage();
             it.amount = "\u2014";
+        }
+        /* 单卡刷新也要记账：否则用户点卡片刷新后，凭证状态还停在上一轮的结果上。
+           早退分支（平台已删除 / Key 不存在）不经过这里，不会被误记。 */
+        if (it.ok) {
+            AuthFail.record(ctx, it.platform, true, 0, null, null);
+        } else if (it.error != null && it.error.length() > 0) {
+            AuthFail.record(ctx, it.platform, false,
+                    AuthFail.httpCodeOf(it.error), null, it.error);
         }
         return it;
     }
