@@ -748,8 +748,13 @@ public final class Ledger extends SQLiteOpenHelper {
                     db.setTransactionSuccessful();
                     return 0;
                 }
-                if (snaps != null) db.delete(T_SNAP, null, null);
-                if (rechs != null) db.delete(T_RECH, null, null);
+                /* ⚠️ 空数组和 null 是两回事，但破坏力一样：
+                   刚装好时导出的备份 snapshots 是 []（不是 null），
+                   无条件 delete 会把现有的 90 天历史清空，然后插入 0 条，
+                   提示还是"已恢复 0 条余额记录" —— 用户以为成功，其实全没了。
+                   语义应该是：备份里没有历史，就不动现有历史。 */
+                if (snaps != null && snaps.length() > 0) db.delete(T_SNAP, null, null);
+                if (rechs != null && rechs.length() > 0) db.delete(T_RECH, null, null);
                 if (snaps != null) {
                     for (int i = 0; i < snaps.length(); i++) {
                         org.json.JSONArray r = snaps.optJSONArray(i);

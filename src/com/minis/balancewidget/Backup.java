@@ -154,7 +154,18 @@ public final class Backup {
                之后在任何已配置的机器上恢复它 —— 以前会先 clear() 再什么都不写，
                于是 keys_json_v2 / custom_json / clash_subs（整份订阅 yaml）/
                mimo_session / lock_hash / thr_* 全部清空，提示还写着"已恢复 0 条"。 */
-            if (prefs == null || prefs.length() == 0) {
+            /* 只带主题的备份同样算"没有任何配置"：导出时如果只改过主题，
+               prefs 里就只有一个 __ui_theme 键 —— 放它过去，clear() 之后只写回主题，
+               keys_json_v2 / custom_json / clash_subs / mimo_session / lock_hash
+               全部净身出户，而提示会说"已恢复"。 */
+            int realKeys = 0;
+            if (prefs != null) {
+                java.util.Iterator<String> it0 = prefs.keys();
+                while (it0.hasNext()) {
+                    if (!"__ui_theme".equals(it0.next())) realKeys++;
+                }
+            }
+            if (prefs == null || realKeys == 0) {
                 return "这份备份里没有任何配置（可能是刚装好时导出的），已取消恢复，"
                         + "现有数据未改动";
             }
@@ -219,7 +230,7 @@ public final class Backup {
             /* 还原 stats_opt（旧备份没有这个字段就跳过） */
             try {
                 JSONObject soj = root.optJSONObject("statsOpt");
-                if (soj != null) {
+                if (soj != null && soj.length() > 0) {
                     SharedPreferences.Editor soe = c.getSharedPreferences(
                             StatsOpt.PREF_NAME, Context.MODE_PRIVATE).edit();
                     soe.clear();
@@ -261,6 +272,9 @@ public final class Backup {
             /* 备份里有 N 条、实际只写进 M 条 = 导入中途失败（存储满 / 库锁）。
                以前两种结果都回"已恢复 M 条"，用户看不出历史已经不全了。 */
             int want = snaps == null ? 0 : snaps.length();
+            if (want == 0) {
+                return "配置已恢复；这份备份里没有余额历史，现有历史已保留" + when;
+            }
             if (want > 0 && n <= 0) {
                 return "配置已恢复，但历史记录写入失败（可能是存储空间不足）。"
                         + "当前历史为空，可稍后重试恢复" + when;
