@@ -181,8 +181,11 @@ public final class WidgetRenderer {
            这里不再 setBackgroundResource / setTextViewTextSize ——
            两套机制同时存在迟早会不同步。 */
         v.setTextViewText(R.id.w2_title, "API 管理助手");
+        /* 从来没有过数据时不说"正在刷新" —— 那会一直挂着，
+           用户以为在转圈，其实一次网络请求都没发出去。 */
+        boolean ever = WidgetCache.lastAtMs(ctx) > 0;
         v.setTextViewText(R.id.w2_total, "…");
-        v.setTextViewText(R.id.w2_sub, "正在刷新");
+        v.setTextViewText(R.id.w2_sub, ever ? "正在刷新" : "暂无数据 · 点一下刷新");
         v.setTextViewText(R.id.w2_page, "");
         hideAll(v);
         bind(ctx, v, id, style);
@@ -224,11 +227,22 @@ public final class WidgetRenderer {
         }
 
         v.setTextViewText(R.id.w2_title, "API 管理助手");
-        v.setTextViewText(R.id.w2_total, "¥" + String.format("%.2f", r.totalCny));
+        /* 一个平台都没取到就别报 ¥0.00 —— 那是假的。
+           用户会以为余额真的是 0，实际只是这轮全失败了（弱网/Doze/被墙）。 */
+        int okN = WidgetCache.okCount(r);
+        if (okN == 0 && r.failed > 0) {
+            v.setTextViewText(R.id.w2_total, "——");
+        } else {
+            v.setTextViewText(R.id.w2_total, "¥" + String.format("%.2f", r.totalCny));
+        }
 
         StringBuilder sub = new StringBuilder();
-        sub.append("1USD=").append(String.format("%.2f", r.rate));
-        if (r.failed > 0) sub.append("  ·  ").append(r.failed).append(" 项失败");
+        if (okN == 0 && r.failed > 0) {
+            sub.append("全部 ").append(r.failed).append(" 项查询失败");
+        } else {
+            sub.append("1USD=").append(String.format("%.2f", r.rate));
+            if (r.failed > 0) sub.append("  ·  ").append(r.failed).append(" 项失败");
+        }
         String t = WidgetCache.lastAt(ctx);
         if (t.length() > 0) sub.append("  ·  ").append(t);
         v.setTextViewText(R.id.w2_sub, sub.toString());
