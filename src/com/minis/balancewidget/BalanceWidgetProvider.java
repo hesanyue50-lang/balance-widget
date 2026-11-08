@@ -149,13 +149,43 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
         try {
-            /* 系统按 updatePeriodMillis 发起的周期更新，本质上就是后台刷新：
-               走精简模式（跳过汇率查询、失败不重试）。原来按前台全量跑，
+            /* 系统按 updatePeriodMillis（30 分钟）发起的**保底**唤醒。
+               这条必须留着：国内 ROM 清理掉 AlarmManager 闹钟时，它是唯一
+               还会把数据刷新的机制。曾经为了"不和闹钟叠加"把它改成 0，
+               结果是闹钟一旦被清，组件永远停在旧数据上，而且毫无提示。
+
+               但也不能无条件联网 —— 用户设 60 分钟时系统每 30 分钟刷一次
+               等于把设置废掉了。所以按"距上次真实抓取"判断：
+               不到用户间隔的八成（给 Doze 的抖动留余地）就只重绘缓存。 */
+            if (shouldDeferToInterval(ctx)) {
+                BalanceFetcher.diag(ctx, "系统保底唤醒：距上次不足 "
+                        + RefreshScheduler.bgMinutes(ctx) + " 分钟的 80%，只重绘");
+                paintFromCache(ctx, mgr, allWidgetIds(ctx, mgr));
+                return;
+            }
+            /* 走精简模式（跳过汇率查询、失败不重试）。原来按前台全量跑，
                每 30 分钟串行查一次汇率，还和 RefreshScheduler 的闹钟互不知情。 */
             fetchAndRender(ctx, mgr, ids, true);
         } catch (Throwable t) {
             BalanceFetcher.diag(ctx, "onUpdate 异常: " + t);
             safeRedraw(ctx);
+        }
+    }
+
+    /**
+     * 系统保底唤醒是否应该让路给用户设定的间隔。
+     *
+     * <p>只在 {@link #onUpdate} 里用 —— 用户主动打开 App、三击强刷都不受它约束。
+     * 从没成功刷新过（{@code lastAtMs == 0}）时返回 false：那种情况必须真的去取一次。
+     */
+    private static boolean shouldDeferToInterval(Context ctx) {
+        try {
+            long last = WidgetCache.lastAtMs(ctx);
+            if (last <= 0) return false;
+            long gap = Math.max(5, RefreshScheduler.bgMinutes(ctx)) * 60000L;
+            return System.currentTimeMillis() - last < gap * 8 / 10;
+        } catch (Throwable t) {
+            return false;                 // 判断本身出错就别拦，宁可多刷一次
         }
     }
 

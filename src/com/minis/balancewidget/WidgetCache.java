@@ -79,6 +79,16 @@ public final class WidgetCache {
         } catch (Throwable ignored) { }
     }
 
+    /** 上次成功刷新的**毫秒**时间戳（0 = 从没成功过）。
+     *  <p>{@link #lastAt} 给人看（HH:mm），这个给"该不该联网"判断用。 */
+    public static long lastAtMs(Context c) {
+        try {
+            return sp(c).getLong(K_LAST_AT, 0);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
     /** 上次成功刷新的时刻（HH:mm），没有则空串 */
     public static String lastAt(Context c) {
         try {
