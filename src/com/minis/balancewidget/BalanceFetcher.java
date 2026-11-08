@@ -2977,7 +2977,8 @@ public class BalanceFetcher {
                     if (!it.noData) it.ok = true;
                 } catch (Exception e) {
                     it.ok = false;
-                    it.error = (e.getMessage() == null) ? "查询失败" : e.getMessage();
+                    /* 服务器错误页 / 长 JSON 片段会原样进卡片，一段红字铺满整屏 */
+                    it.error = (e.getMessage() == null) ? "查询失败" : clip(e.getMessage(), 120);
                     it.amount = "\u2014";
                 }
                 return it;
@@ -2999,7 +3000,7 @@ public class BalanceFetcher {
                 try { fill(ctx, it, null, fallbackRate, timeoutMs); if (!it.noData) it.ok = true; }
                 catch (Exception e) {
                     it.ok = false;
-                    it.error = e.getMessage();
+                    it.error = clip(e.getMessage() == null ? "查询失败" : e.getMessage(), 120);
                     it.amount = "\u2014";
                 }
                 return it;
@@ -3147,11 +3148,15 @@ public class BalanceFetcher {
         if (!r.numeric) {
             /* 纯文本模式：直接展示，没有数值语义。
                阈值一并归零 —— 不然 Alert 会拿 bal=0 去比阈值，永远"低于预警"。 */
-            it.amount = r.display;
+            /* ⚠️ 金额位必须截断。整页文本模式下 r.display 是**整页字数**，
+               原样放进 27sp 的金额位会把卡片撑到几百 dp，把整页挤得只剩这一张；
+               小组件的格子是 wrap_content，长文本还会把别的格子顶出组件。
+               全文保留在详情里（点卡片能看到）。 */
+            it.amount = clip(r.display, 14);
             it.cny = 0;
             it.bal = 0;
             it.threshold = 0;
-            it.rows = "文本  " + clip(r.display, 40);
+            it.rows = "文本  " + clip(r.display, 120);
             return;
         }
         it.bal = r.value;

@@ -53,6 +53,34 @@ public class SettingsBinder {
      */
     public static SettingsBinder active;
 
+    /**
+     * 整库被换掉之后（恢复备份 / 导入平台包）必须调这个。
+     *
+     * <p>为什么：这些操作是**整表覆盖**，而设置页的三份列表（内置平台 / 自定义 /
+     * 高级平台）都捕获了构建时的下标。只刷新主卡片的话，用户看到的还是旧列表，
+     * 点某行「删除」时按旧下标去新列表里删 —— **删掉的是另一个平台**，
+     * 连带它的 Key 被清、后面的平台整体前移。
+     */
+    public static void refreshAllLists() {
+        SettingsBinder b = active;
+        if (b == null || b.act == null || b.act.isFinishing()) return;
+        try {
+            b.act.runOnUiThread(new Runnable() {
+                public void run() {
+                    SettingsBinder x = active;
+                    if (x == null) return;
+                    try {
+                        x.renderKeys();
+                        x.renderCustoms();
+                        x.renderWebs();
+                        x.renderBackups();
+                        x.kick();
+                    } catch (Throwable ignored) { }
+                }
+            });
+        } catch (Throwable ignored) { }
+    }
+
     public SettingsBinder(Activity a, View r, Runnable onChanged) {
         this.act = a; this.root = r; this.onChanged = onChanged;
     }
@@ -2658,6 +2686,16 @@ public class SettingsBinder {
             });
             row.addView(del);
             box.addView(row);
+        }
+        if (cs.isEmpty()) {
+            /* web 区同位置一直有这条提示，自定义区缺 —— 用户看到的是一段突兀的空档，
+               分不清是"还没加"还是"坏了"。 */
+            TextView t = new TextView(act);
+            t.setText("还没有添加。适合任意 OpenAI 兼容接口；只有地址、没有余额接口的服务，"
+                    + "可以只填「显示文字」当静态卡。");
+            t.setTextColor(color(R.attr.c_tx3));
+            t.setTextSize(12);
+            box.addView(t);
         }
         if (first) Anim.staggerChildren(box, 0, 10);
     }

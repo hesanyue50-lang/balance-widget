@@ -1677,6 +1677,9 @@ public class MainActivity extends Activity {
                 try {
                     if (vpnBinder != null) vpnBinder.refreshAfterImport();
                 } catch (Throwable ignored) { }
+                /* 整库换了，设置页的三份列表也必须重建 —— 否则它们还按旧下标渲染，
+                   点「删除」会删到别的平台上（连带清掉别人的 Key）。 */
+                SettingsBinder.refreshAllLists();
                 try { refresh(true); } catch (Throwable ignored) { }
             }
             return;
@@ -1684,6 +1687,9 @@ public class MainActivity extends Activity {
         /* 平台配置的 .bwp 导出 / 导入 */
         if (PlatformPack.onResult(this, req, res, data)) {
             if (req == PlatformPack.REQ_IMPORT) {
+                /* 导入走文件这条路以前不重画设置页（走剪贴板那条会重画）——
+                   表现是"导入成功但列表里看不到，删掉 App 重进才出现"。 */
+                SettingsBinder.refreshAllLists();
                 try { refresh(true); } catch (Throwable ignored) { }
             }
             return;
@@ -2257,6 +2263,19 @@ public class MainActivity extends Activity {
             tTotal.setText("—");
             tSub.setText(R.string.not_configured);
             tSub.setTextColor(Theme.c(this, R.attr.c_tx2));
+            return;
+        }
+        /* 一个都还没拿到（首刷 / 恢复后）：给一行占位，别留一大块纯空白 ——
+           网络慢的时候（12 秒预算）那块空白看起来就是"列表加载失败"。 */
+        if (r.items == null || r.items.isEmpty()) {
+            TextView wait = new TextView(this);
+            wait.setText("正在拉取 " + r.configured + " 个平台…");
+            wait.setTextColor(Theme.c(this, R.attr.c_tx3));
+            wait.setTextSize(12);
+            wait.setGravity(android.view.Gravity.CENTER);
+            int pad = (int) (getResources().getDisplayMetrics().density * 24);
+            wait.setPadding(pad, pad, pad, pad);
+            cards.addView(wait);
             return;
         }
 
