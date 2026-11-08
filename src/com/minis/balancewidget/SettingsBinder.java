@@ -1782,7 +1782,9 @@ public class SettingsBinder {
         final TextView loginBtn = Form.wide(act, "🌐 打开网页登录", null);
         fd.add(loginBtn, 14);
         final TextView cookieInfo = Form.note(act, box,
-                hasCookieHeader(w0.headers) ? "已记录登录态（含 Cookie）" : "还没有登录态");
+                (hasCookieHeader(w0.headers) ? "已记录登录态（含 Cookie）" : "还没有登录态")
+                        + "\n只要站点还在正常响应，登录态会自己续下去；"
+                        + "只有服务端真的作废了才会让你重新登录。");
 
         loginBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {

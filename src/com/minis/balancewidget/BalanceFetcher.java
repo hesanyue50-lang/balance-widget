@@ -672,8 +672,8 @@ public class BalanceFetcher {
      *
      * @param oldName 改动前的值，用来在存档里认出目标项（name 允许被用户改掉）
      */
-    public static void putCustom(Context ctx, Custom c,
-                                 String oldName, String oldUrl, String oldText) {
+    public static synchronized void putCustom(Context ctx, Custom c,
+                                              String oldName, String oldUrl, String oldText) {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         JSONObject nv = customToJson(c, false);
         try {
@@ -2545,7 +2545,7 @@ public class BalanceFetcher {
                         /* 国外平台给双倍预算：境内访问境外站点常卡在 TLS 握手，
                            12 秒总预算切成 9 秒单地址往往不够，网络明明是通的。 */
                         int budget = it.foreign ? per * 2 : per;
-                        if (w != null)            fillWeb(it, w, rate, budget, viaProxy);
+                        if (w != null)            fillWeb(ctx, it, w, rate, budget, viaProxy);
                         else if (c == null)       fill(ctx, it, ak, rate, budget);
                         else                      fillCustom(ctx, it, c, rate, per);
                         /* 不能无条件置 true：fill() 内部有些分支已经明确判定失败
@@ -2797,7 +2797,7 @@ public class BalanceFetcher {
                 boolean vpx = Clash.enabled(ctx) && Clash.isRunning()
                         && Clash.shouldProxy(ctx, it.platform, w.foreign);
                 try {
-                    fillWeb(it, w, rate2, w.foreign ? timeoutMs * 2 : timeoutMs, vpx);
+                    fillWeb(ctx, it, w, rate2, w.foreign ? timeoutMs * 2 : timeoutMs, vpx);
                     if (!it.noData) it.ok = true;
                 } catch (Exception e) {
                     it.ok = false;
@@ -2951,8 +2951,20 @@ public class BalanceFetcher {
      *                 不要在这里再算一遍 —— 两处规则迟早跑偏（部分模式下用户勾了
      *                 web:0 走代理，这里自己算就会把勾选吞掉）。
      */
-    private static void fillWeb(Item it, WebCustom w, double rate, int t, boolean viaProxy) throws Exception {
+    private static void fillWeb(Context ctx, Item it, WebCustom w, double rate, int t,
+                                boolean viaProxy) throws Exception {
         WebCustom.Result r = w.fetch(viaProxy, t);
+        /* 服务端在响应里下发过新 cookie → 写回这条平台的请求头。
+           这一步就是"自动续期"：多数站点的 session 是滑动过期的，
+           只要把新凭据接住继续用，就不用隔几天重新登录一次。 */
+        String fresh = w.refreshedCookie;
+        if (fresh != null && fresh.length() > 0 && ctx != null) {
+            try {
+                w.headers = WebCustom.mergeHeader(w.headers, "Cookie", fresh);
+                WebCustom.putOne(ctx, w, w.name, w.url);
+                diag(ctx, "登录态已续期 " + w.name + "（" + CookieJar.names(fresh) + "）");
+            } catch (Throwable ignored) { }
+        }
         if (!r.numeric) {
             /* 纯文本模式：直接展示，没有数值语义。
                阈值一并归零 —— 不然 Alert 会拿 bal=0 去比阈值，永远"低于预警"。 */

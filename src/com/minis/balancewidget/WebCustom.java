@@ -43,6 +43,14 @@ public class WebCustom {
     public String name = "";
     public String url = "";
 
+    /**
+     * 最近一次抓取里服务端下发的新 Cookie（没人发就是 null）。
+     *
+     * 不直接在这里写盘：fetch() 没有 Context，而且全量刷新是并发的，
+     * 「读整表-改一条-写整表」并发跑会互相覆盖。交回调用方，由它加锁落盘。
+     */
+    public String refreshedCookie;
+
     /** 提取模式：auto / json / regex / between / text */
     public String mode = "auto";
     /** json 模式：点分路径，支持数组下标（data.balance / list.0.total），可用 | 分隔多候选 */
@@ -153,7 +161,11 @@ public class WebCustom {
      *
      * @param oldName 改动前的值，用来认出目标项（name / url 都允许被改）
      */
-    public static void putOne(Context ctx, WebCustom w, String oldName, String oldUrl) {
+    /**
+     * 注意 {@code synchronized}：整表「读-改-写」在多线程并发时必然互相覆盖，
+     * 全量刷新是并发的，不加锁会丢平台（或把续期后的 cookie 写回旧值）。
+     */
+    public static synchronized void putOne(Context ctx, WebCustom w, String oldName, String oldUrl) {
         JSONObject nv = w.toJson();
         try {
             JSONArray arr = new JSONArray(sp(ctx).getString(KEY, "[]"));
@@ -603,7 +615,22 @@ public class WebCustom {
 
     // ---------------- HTTP ----------------
 
+    /** 从「名字: 值」多行请求头里取某个头的值（不区分大小写），没有返回空串 */
+    private String headerOf(String name) {
+        if (headers == null || headers.length() == 0) return "";
+        String[] lines = headers.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            int p = lines[i].indexOf(':');
+            if (p <= 0) continue;
+            if (lines[i].substring(0, p).trim().equalsIgnoreCase(name)) {
+                return lines[i].substring(p + 1).trim();
+            }
+        }
+        return "";
+    }
+
     private String http(boolean viaProxy, int timeoutMs) throws Exception {
+        List<String> setCookies = null;
         URL u = new URL(url);
         HttpURLConnection c;
         if (viaProxy) {
@@ -659,6 +686,17 @@ public class WebCustom {
             }
         }
         int code = c.getResponseCode();
+        /* 顺手接住服务端下发的 Set-Cookie —— 很多站点的 session 是滑动过期的，
+           只读不写的话那份 cookie 就成了死字符串，用几天必失效。 */
+        try {
+            java.util.Map<String, java.util.List<String>> hf = c.getHeaderFields();
+            for (java.util.Map.Entry<String, java.util.List<String>> e : hf.entrySet()) {
+                if (e.getKey() == null) continue;
+                if (!"set-cookie".equalsIgnoreCase(e.getKey())) continue;
+                if (setCookies == null) setCookies = new ArrayList<String>();
+                if (e.getValue() != null) setCookies.addAll(e.getValue());
+            }
+        } catch (Throwable ignored) { }
         InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
         String cs = (charset == null || charset.trim().length() == 0) ? "UTF-8" : charset.trim();
         StringBuilder sb = new StringBuilder();
@@ -680,6 +718,16 @@ public class WebCustom {
             try { if (r != null) r.close(); } catch (Throwable ig) { }
             try { c.disconnect(); } catch (Throwable ig) { }
         }
+        /* 先合并，再判断成败：401 页面上也可能回一条"清空 session"的 Set-Cookie，
+           漏掉它反而会把已失效的凭据继续用下去。 */
+        try {
+            if (setCookies != null && !setCookies.isEmpty()) {
+                String cur = headerOf("Cookie");
+                String merged = CookieJar.merge(cur, setCookies);
+                if (!CookieJar.same(cur, merged)) refreshedCookie = merged;
+            }
+        } catch (Throwable ignored) { }
+
         if (code < 200 || code >= 300) {
             throw new Exception("HTTP " + code + "，响应开头：" + clip(sb.toString(), 120));
         }
