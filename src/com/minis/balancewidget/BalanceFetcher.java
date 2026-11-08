@@ -44,6 +44,22 @@ public class BalanceFetcher {
     private static volatile String sessionCache;
     private static volatile boolean sessionCached = false;
 
+    /**
+     * 有没有登录过 MiMo —— **不解密**，只判存档里有没有密文。
+     *
+     * <p>给"要不要在后台跑刷新"这类布尔判断用：它们跑在广播接收器的主线程，
+     * 而 {@link #mimoSession} 每次都要过一次 TEE 解密（几十毫秒）。
+     */
+    public static boolean hasMimoSession(Context c) {
+        try {
+            String s = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString(K_MIMO_SESSION, "");
+            return s != null && s.trim().length() > 4;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /** 取 MiMo 会话音（空 = 还没登录过 / 已被清掉） */
     public static String mimoSession(Context c) {
         if (sessionCached) return sessionCache;
@@ -782,6 +798,15 @@ public class BalanceFetcher {
                 sp.edit().putString("custom_json", out.toString()).commit();
             }
         } catch (Throwable ignored) { }
+    }
+
+    /** 两个阈值里取最小的正数（都 <=0 时返回 0 = 不预警） */
+    private static double minPositive(double a, double b) {
+        boolean pa = a > 0, pb = b > 0;
+        if (pa && pb) return Math.min(a, b);
+        if (pa) return a;
+        if (pb) return b;
+        return 0;
     }
 
     private static boolean eqStr(String a, String b) {
@@ -2756,6 +2781,8 @@ public class BalanceFetcher {
                 new java.util.LinkedHashMap<String, Item>();
         /* 顺便记下每个平台由哪些密钥组成：合并后 it.id 会被改写成平台标识，
            而账本快照是按密钥 id 存的 —— 预测要按密钥查，所以这里先留一份。 */
+        final java.util.LinkedHashMap<String, java.util.List<String>> detMap =
+                new java.util.LinkedHashMap<String, java.util.List<String>>();
         final java.util.LinkedHashMap<String, java.util.ArrayList<String>> platKeys =
                 new java.util.LinkedHashMap<String, java.util.ArrayList<String>>();
         for (int i = 0; i < res.items.size(); i++) {
@@ -2773,9 +2800,27 @@ public class BalanceFetcher {
                 byPlat.put(plat, it);
             } else {
                 prev.mergeCount++;
+                /* 记下每个密钥各自的余额：合并卡只显示最大的那个，
+                   如果这些 Key 其实是**独立账户**，用户会觉得"钱少了"却看不出原因。
+                   把这些数字摊在详情里，他自己一眼就能判断。 */
+                java.util.List<String> acc = detMap.get(plat);
+                if (acc == null) { acc = new java.util.ArrayList<String>(); detMap.put(plat, acc); }
+                if (prev.label != null && prev.bal >= 0) {
+                    acc.add(prev.label + " " + money(prev.bal, "USD".equals(prev.tag)));
+                }
+                if (it.label != null && it.bal >= 0) {
+                    acc.add(it.label + " " + money(it.bal, "USD".equals(it.tag)));
+                }
+                /* 阈值取组内**最小的有效值**：合并卡只保留一条条目，
+                   如果阈值跟着"余额最大的那把 Key"走，另一把 Key 跌破自己的阈值
+                   就永远不告警（而且规则会随余额大小翻转，用户无法预期）。 */
+                double thrMin = minPositive(prev.threshold, it.threshold);
                 if (it.ok && (!prev.ok || it.bal > prev.bal)) {
                     it.mergeCount = prev.mergeCount;
+                    it.threshold = thrMin;
                     byPlat.put(plat, it);
+                } else {
+                    prev.threshold = thrMin;
                 }
             }
         }
@@ -2794,8 +2839,19 @@ public class BalanceFetcher {
                     res.totalCny += it.cny;
                     if (it.estimated) res.totalEstimated = true;
                 }
-                if (it.mergeCount > 1 && it.rows != null) {
-                    it.rows = it.rows + "\n（同平台 " + it.mergeCount + " 个密钥，取最大）";
+                if (it.mergeCount > 1) {
+                    java.util.List<String> acc = detMap.get(it.platform);
+                    if (acc != null && !acc.isEmpty()) {
+                        StringBuilder sb = new StringBuilder();
+                        for (int ai = 0; ai < acc.size(); ai++) {
+                            if (ai > 0) sb.append(" · ");
+                            sb.append(acc.get(ai));
+                        }
+                        it.rows = (it.rows == null || it.rows.length() == 0 ? "" : it.rows + "\n")
+                                + "同平台 " + it.mergeCount + " 个密钥：" + sb + "（卡片取最大）";
+                    } else if (it.rows != null) {
+                        it.rows = it.rows + "\n（同平台 " + it.mergeCount + " 个密钥，取最大）";
+                    }
                 }
             } else {
                 res.failed++;
@@ -3292,10 +3348,14 @@ public class BalanceFetcher {
                 }
                 it.ok = true;
                 it.bal = avail;
-                it.cny = 0;
+                /* 以前这里写 0：卡片显示 $20.00、曲线按汇率画出 ¥142、总资产一分不加
+                   —— 同一笔钱三个口径。美元余额必须折进 cny。 */
+                it.tag = "USD";
+                it.cny = avail * rate;
                 it.kind = "balance";
                 it.low = false;
                 it.amount = money(avail, true);
+                it.conv = "≈¥" + (long) (avail * rate);
                 double granted = findNum(root, new String[] { "total_granted", "totalGranted" });
                 double used = findNum(root, new String[] { "total_used", "totalUsed" });
                 it.rows = "剩余  " + money(avail, true);
@@ -3363,7 +3423,7 @@ public class BalanceFetcher {
             JSONArray accounts = root.optJSONArray("accounts");
             if (accounts == null) accounts = new JSONArray();
 
-            double total = 0, totalCap = 0;
+            double total = 0, totalCap = 0, totalCapped = 0;
             int n = 0, cooling = 0;
             StringBuilder sb = new StringBuilder();
             String firstName = "";
@@ -3379,8 +3439,18 @@ public class BalanceFetcher {
                 /* 积分上限：接口给的是 credits_total（总额度） */
                 double cap = num(a, "credits_total");
 
+                /* 分子分母必须同源：以前是"所有账号的积分都进分子、只有带 credits_total
+                   的账号进分母"，一个账号 900/1000、另一个 500/无上限时，算出 1400/1000
+                   → 夹到 100%，卡片显示"剩余 100%"，而明细里明明只剩 90%。 */
+                /* total 是"卡片上显示的总积分"（所有账号）；
+                   totalCapped 只累计**有分母**的账号 —— 百分比必须分子分母同源，
+                   否则一个账号 900/1000、另一个 500/无上限时算成 1400/1000 → 夹到 100%，
+                   卡片显示"剩余 100%"，明细里却明明只剩 90%。 */
                 total += c;
-                if (!Double.isNaN(cap) && cap > 0) totalCap += cap;
+                if (!Double.isNaN(cap) && cap > 0) {
+                    totalCap += cap;
+                    totalCapped += c;
+                }
                 n++;
                 if (cool) cooling++;
                 if (i == 0) firstName = nick;
@@ -3419,14 +3489,15 @@ public class BalanceFetcher {
                那是这轮额度的总量，剩下 2442/2650 = 92.2%。 */
             int pct = -1;
             if (totalCap > 0) {
-                pct = (int) Math.round(total / totalCap * 100.0);
+                pct = (int) Math.round(totalCapped / totalCap * 100.0);
                 if (pct > 100) pct = 100;
                 if (pct < 0) pct = 0;
             }
             it.pctLeft = pct;
             /* 标一下"这个平台是有额度分母的"，供 UI 在数据未到时显示占位。
                不靠 amount 是否为空判断 —— 那太间接，别的平台也可能为空。 */
-            it.hasQuota = true;
+            /* 没有分母就别摆出"额度统计中…"的架子 —— 那行会永远停在那里 */
+            it.hasQuota = totalCap > 0;
             /* 折算金额恒定显示 —— 卡片上写着 2442 积分，用户自然想知道值多少钱，
                这是"信息展示"，跟"要不要计入总资产"是两码事。
                开关只管 it.cny（汇总口径），不管显示。 */
@@ -3550,6 +3621,11 @@ public class BalanceFetcher {
                     it.bal = available;
                     it.cny = usd ? available * rate : available;
                     it.amount = money(available, usd);
+                    /* ⚠️ 预设里 dashscope 是 "sub"（订阅制），但走到这个分支说明用户选的是
+                       **余额制**、而且拿到了真实余额。不改 kind 的话：
+                       不计入总资产、不参与低余额预警（订阅制只看到期天数）、
+                       统计页只有一条"无数据"的零线 —— 三处全错，而卡片上明明写着 ¥500。 */
+                    it.kind = "balance";
 
                     StringBuilder sb = new StringBuilder();
                     sb.append("可用余额  ").append(money(available, usd));

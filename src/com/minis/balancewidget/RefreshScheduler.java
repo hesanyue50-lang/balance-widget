@@ -131,6 +131,29 @@ public final class RefreshScheduler {
         } catch (Throwable ignored) { }
     }
 
+    /**
+     * 立刻排一次刷新（用于开机后、App 更新后）。
+     *
+     * <p>用同一个 PendingIntent，所以这里设的时间会覆盖掉 {@link #schedule} 排的那次 ——
+     * 但调用方都是"先 schedule 再 refreshSoon"或只调其一，覆盖是预期行为：
+     * 早一点刷总比拿着 20 分钟前的数据强。
+     *
+     * @param delayMs 延迟；给几秒是为了避开"刚开机网络还没起来"这类瞬态失败
+     */
+    public static void refreshSoon(Context ctx, long delayMs) {
+        try {
+            AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+            if (am == null) return;
+            long at = System.currentTimeMillis() + (delayMs > 0 ? delayMs : 1000L);
+            PendingIntent pi = pending(ctx);
+            if (Build.VERSION.SDK_INT >= 23) {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+            } else {
+                am.set(AlarmManager.RTC_WAKEUP, at, pi);
+            }
+        } catch (Throwable ignored) { }
+    }
+
     /** 取消后台刷新（应用回到前台时用，改由 Handler 接管） */
     public static void cancel(Context ctx) {
         try {

@@ -28,7 +28,7 @@ public final class Backup {
     public static final String EXT = "apibak";
     /** 自定义 MIME，便于系统把这类文件与本应用关联起来 */
     public static final String MIME = "application/x-apibak";
-    private static final String MAGIC = "api-manager-assistant";
+    public static final String MAGIC = "api-manager-assistant";
     private static final int FORMAT = 1;
 
     private Backup() { }
@@ -148,9 +148,19 @@ public final class Backup {
                 return "这不是本应用的备份文件";
             }
 
+            JSONObject prefs = root.optJSONObject("prefs");
+            /* ⚠️ 必须在 ed.clear() **之前**拒绝空配置段。
+               来源很现实：刚装好、什么都没配的时候点一次导出，就得到一个 prefs={} 的备份；
+               之后在任何已配置的机器上恢复它 —— 以前会先 clear() 再什么都不写，
+               于是 keys_json_v2 / custom_json / clash_subs（整份订阅 yaml）/
+               mimo_session / lock_hash / thr_* 全部清空，提示还写着"已恢复 0 条"。 */
+            if (prefs == null || prefs.length() == 0) {
+                return "这份备份里没有任何配置（可能是刚装好时导出的），已取消恢复，"
+                        + "现有数据未改动";
+            }
+
             SharedPreferences.Editor ed = sp(c).edit();
             ed.clear();
-            JSONObject prefs = root.optJSONObject("prefs");
             if (prefs != null) {
                 Iterator<String> it = prefs.keys();
                 while (it.hasNext()) {
@@ -234,8 +244,8 @@ public final class Backup {
             } catch (Throwable ignored) { }
 
             Ledger lg = Ledger.get(c);
-            int n = lg.importAll(root.optJSONArray("snapshots"),
-                    root.optJSONArray("recharges"));
+            JSONArray snaps = root.optJSONArray("snapshots");
+            int n = lg.importAll(snaps, root.optJSONArray("recharges"));
 
             /* 缓存类字段要清掉：它们是上一次运行的产物（比如 MiMo 会话的内存缓存），
                恢复后继续沿用旧的会读到已经不存在的密钥。 */
@@ -247,6 +257,16 @@ public final class Backup {
                 when = "（备份于 " + new java.text.SimpleDateFormat(
                         "yyyy-MM-dd HH:mm", java.util.Locale.US)
                         .format(new java.util.Date(at)) + "）";
+            }
+            /* 备份里有 N 条、实际只写进 M 条 = 导入中途失败（存储满 / 库锁）。
+               以前两种结果都回"已恢复 M 条"，用户看不出历史已经不全了。 */
+            int want = snaps == null ? 0 : snaps.length();
+            if (want > 0 && n <= 0) {
+                return "配置已恢复，但历史记录写入失败（可能是存储空间不足）。"
+                        + "当前历史为空，可稍后重试恢复" + when;
+            }
+            if (want > 0 && n < want) {
+                return "已恢复 " + n + "/" + want + " 条余额记录（部分失败）" + when;
             }
             return "已恢复 " + n + " 条余额记录" + when;
         } catch (Throwable t) {

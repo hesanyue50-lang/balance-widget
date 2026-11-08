@@ -932,6 +932,23 @@ public class MainActivity extends Activity {
             groups = sorted;
         }
 
+        /* 自定义 / 高级平台也要进分组。
+           它们的账本键是 custom:N / web:N，不补进 groups 的话统计页永远看不到它们的曲线
+           —— 用户会以为这平台一直没数据（实际上每 6 小时都在记）。 */
+        final java.util.List<BalanceFetcher.Custom> csAll = BalanceFetcher.loadCustom(this);
+        final java.util.List<WebCustom> wsAll = WebCustom.loadAll(this);
+        final java.util.HashMap<String, String> unitOfPlat = new java.util.HashMap<String, String>();
+        for (int i = 0; i < csAll.size(); i++) {
+            String plat = "custom:" + i;
+            unitOfPlat.put(plat, csAll.get(i).unit);
+            if (!groups.containsKey(plat)) groups.put(plat, new java.util.ArrayList<KeyStore.ApiKey>());
+        }
+        for (int i = 0; i < wsAll.size(); i++) {
+            String plat = "web:" + i;
+            unitOfPlat.put(plat, wsAll.get(i).unit);
+            if (!groups.containsKey(plat)) groups.put(plat, new java.util.ArrayList<KeyStore.ApiKey>());
+        }
+
         /* 登录型平台（小米 MiMo）：凭据是账号会话音，KeyStore 里可能一条 Key 都没有，
            但卡片和账本里其实是有它的数据的（fetch 补位时用平台 id 当条目 id）。
            以前只遍历 KeyStore，结果就是「卡片上有余额、统计页却没这条线」。 */
@@ -962,26 +979,27 @@ public class MainActivity extends Activity {
             java.util.List<KeyStore.ApiKey> ks = e.getValue();
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
             String kind = p == null ? "balance" : p.kind;
-            boolean usd = p != null && "USD".equals(p.unit);
+            boolean usd = p != null ? "USD".equals(p.unit)
+                    : "USD".equals(unitOfPlat.get(plat));
             double mul = usd ? rate : 1.0;
             String name = p == null ? plat : p.name;
+            /* 自定义 / 高级平台没有 Preset，名字去已读好的列表里取。
+               ⚠️ 别在这里读 loadCustom()/loadAll()：那是每个平台解析一遍整份 JSON，
+               20 个平台就是 40 次（统计页卡顿的主要来源之一）。 */
             if (p == null && plat.startsWith("custom")) {
-                /* 自定义平台没有 Preset，名字得去 custom_json 里找 —— 否则图例上写的是 "custom:0" */
                 try {
                     String n = plat.startsWith("custom:") ? plat.substring(7) : plat.substring(6);
                     int ci = Integer.parseInt(n);
-                    java.util.List<BalanceFetcher.Custom> cs0 = BalanceFetcher.loadCustom(this);
-                    if (ci >= 0 && ci < cs0.size() && cs0.get(ci).name != null
-                            && cs0.get(ci).name.length() > 0) name = cs0.get(ci).name;
+                    if (ci >= 0 && ci < csAll.size() && csAll.get(ci).name != null
+                            && csAll.get(ci).name.length() > 0) name = csAll.get(ci).name;
                 } catch (Throwable ignored) { }
             }
             if (p == null && plat.startsWith("web")) {
                 try {
                     String n = plat.startsWith("web:") ? plat.substring(4) : plat.substring(3);
                     int ci = Integer.parseInt(n);
-                    java.util.List<WebCustom> ws0 = WebCustom.loadAll(this);
-                    if (ci >= 0 && ci < ws0.size() && ws0.get(ci).name.length() > 0) {
-                        name = ws0.get(ci).name;
+                    if (ci >= 0 && ci < wsAll.size() && wsAll.get(ci).name.length() > 0) {
+                        name = wsAll.get(ci).name;
                     }
                 } catch (Throwable ignored) { }
             }
@@ -1129,9 +1147,13 @@ public class MainActivity extends Activity {
                 if (!Double.isNaN(live)) own[DAYS - 1] = live * mul;
             }
 
-            totalCons += platCons;
-            totalCharged += platCharged;
+            /* ⚠️ 合计必须跟着"显示中"的平台走。
+               以前这两行在 if (anyDraw) 之外：用户在图例里关掉平台 B，
+               明细只剩 A 的「消耗 ¥10」，底部却仍写「总消耗 ¥30.00」——
+               差出来的 20 找不到出处。 */
             if (anyDraw) {
+                totalCons += platCons;
+                totalCharged += platCharged;
                 for (int d = 0; d < DAYS; d++)
                     if (!Double.isNaN(dayCons[d])) consDay[d] += dayCons[d];
                 detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
@@ -1452,15 +1474,15 @@ public class MainActivity extends Activity {
             BalanceFetcher.Item it = liveItems.get(i);
             if (it.noData || !it.ok) continue;
             if (!plat.equals(it.platform)) continue;
-            /* 统一走统计口径：钱的平台恒为 true；积分类由用户开关决定。
-               注意别再单独判 kind —— 那会把 kind=asset 的积分类提前跳过，
-               开关打开了也永远出不来数据。 */
-            if (!BalanceFetcher.countsInTotal(this, it)) continue;
-            /* 积分类要折算成人民币才能跟别的平台画在同一条纵轴上
-               （否则 2458 积分和 ¥30 会被当成同一量纲） */
-            double v = "balance".equals(it.kind)
-                     ? it.bal
-                     : it.bal * StatsOpt.rate(this, it.platform);
+            /* ⚠️ 这里**不能再乘折算率**：调用方拿到结果后统一乘 mul
+               （asset 时 mul = StatsOpt.rate），这里乘一次就是 rate²。
+               典型症状：网关卡片 2442 积分 ≈ ¥48.84，曲线最后一格却显示 ¥0.98。
+               返回原币种，"要不要换算"由调用方决定。
+
+               也不再拿 countsInTotal 过滤 —— 那是"要不要计入总资产"的开关，
+               和"要不要画这条线"是两件事（后者由 inChart 在外面判过）。
+               用它过滤会让"只开统计图、关掉汇总"的用户看到最新点凭空消失。 */
+            double v = it.bal;
             if (Double.isNaN(best) || v > best) best = v;
         }
         return best;
@@ -1752,10 +1774,17 @@ public class MainActivity extends Activity {
                    而且没有 finally 复位 loading 的话，刷新会永久卡在"进行中"。 */
                 try {
                 final BalanceFetcher.Result r = BalanceFetcher.fetch(ctx, 12000);
-                // 到点在账本里落一条快照：这样即使桌面没摆小组件，统计页也有曲线
-                BalanceFetcher.sampleIfDue(ctx, r);
-                // 判定阈值并发通知（内部有防重复，重复调用安全）
-                Alert.check(ctx, r);
+                /* fromCache = 另一轮还在跑，这轮拿到的是上次的缓存。
+                   拿它记账会在账本里写一个"现在"的旧余额；
+                   拿它判阈值会按旧余额发"余额不足"（用户刚充完值又被提醒）。 */
+                if (r.fromCache) {
+                    BalanceFetcher.diag(ctx, "App 内本轮结果来自缓存，跳过记账与预警");
+                } else {
+                    // 到点在账本里落一条快照：这样即使桌面没摆小组件，统计页也有曲线
+                    BalanceFetcher.sampleIfDue(ctx, r);
+                    // 判定阈值并发通知（内部有防重复，重复调用安全）
+                    Alert.check(ctx, r);
+                }
                 /* 到点就自动备份一份。放后台线程 ——
                    导出要读整个账本，不能压在 UI 上 */
                 Backup.maybeAutoBackup(ctx);
@@ -1769,7 +1798,9 @@ public class MainActivity extends Activity {
                            此后所有自动/手动刷新都被 if (loading) return 挡掉，
                            下拉指示器也不再消失，只能杀进程重开。 */
                         loading = false;
-                        lastRefreshAt = System.currentTimeMillis();
+                        /* 缓存轮次不算"刷过了"：否则接下来 60 秒内的自动刷新
+                           会被 lastRefreshAt 挡住，用户以为点了没反应。 */
+                        if (!r.fromCache) lastRefreshAt = System.currentTimeMillis();
                         if (isFinishing() || isDestroyed()) return;
                         render(r);
                         if (statsRebuildAfterRefresh && PageStore.K_STATS.equals(curKey)) {

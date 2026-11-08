@@ -47,6 +47,9 @@ public final class WidgetCache {
     }
 
     public static void save(Context c, BalanceFetcher.Result r, int page) {
+        /* 缓存轮次不许落盘：否则 last_at 会被刷成"现在"，
+           小组件上显示的更新时间是假的，数据其实是几小时前的。 */
+        if (r != null && r.fromCache) return;
         try {
             /* toJson 异常时返回空串，以前照样写盘 —— 把原本可用的缓存覆盖成空，
                此后 read 返回 null，小组件一直停在"正在刷新"，

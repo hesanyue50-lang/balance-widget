@@ -156,13 +156,22 @@ public final class Ledger extends SQLiteOpenHelper {
 
                 if (delta > 0.02) {
                     // 余额涨了 → 充过值
+                    /* ⚠️ 档位只认「跟净增几乎相等」的那个。
+                       matchTier 找的是"大于等于净增的最小档"，净增 4000 会匹配到 5000 —— 差额
+                       1000 被当成"期间消费"，于是：
+                         · 这一段的消耗凭空多出 1000（统计页多一笔假消费）
+                         · Prediction 把 5000 当真充值算进 Δ，日均被放大几十倍
+                         · 卡片显示"按近期速度，约剩 1 天"，而且一个月都不变
+                       容差取 max(1 元, 2%)：真实充值基本是整数档，对不上就老实按净增记。 */
                     double tier = matchTier(delta, usd);
-                    double amount = tier > 0 ? tier : delta;
+                    boolean tierOk = tier > 0
+                            && Math.abs(tier - delta) <= Math.max(1.0d, delta * 0.02d);
+                    double amount = tierOk ? tier : delta;
                     ContentValues cv = new ContentValues();
                     cv.put("key_id", keyId);
                     cv.put("ts", now);
                     cv.put("delta", delta);
-                    if (tier > 0) cv.put("matched", tier);
+                    if (tierOk) cv.put("matched", tier);
                     cv.put("amount", amount);
                     db.insert(T_RECH, null, cv);
 
@@ -170,7 +179,7 @@ public final class Ledger extends SQLiteOpenHelper {
                     consumed = Math.max(0, amount - delta);
                     BalanceFetcher.diag(c, "检测到充值 " + keyId
                             + " 净增 " + fmt(delta)
-                            + (tier > 0 ? (" → 匹配档位 " + fmt(tier)) : " → 未匹配档位")
+                            + (tierOk ? (" → 匹配档位 " + fmt(tier)) : " → 按净增记")
                             + "，期间消费 " + fmt(consumed));
                 } else {
                     consumed = Math.max(0, -delta);

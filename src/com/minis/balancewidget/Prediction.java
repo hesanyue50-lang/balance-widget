@@ -126,7 +126,13 @@ public final class Prediction {
             }
         }
 
-        if (hours < MIN_VALID_HOURS) return none;
+        /* 数据不足也要把已积累的小时数带出去 —— 界面靠它显示
+           「消耗速度积累中（还需约 N 小时）」。以前一律返回 0，
+           于是那句提示的判据（validDays > 0）永远为假，用户永远看到空白。 */
+        if (hours < MIN_VALID_HOURS) {
+            double[] partial = { -1d, hours };
+            return partial;
+        }
 
         double perDay = consumed / (hours / 24d);
         if (bad(perDay) || perDay < MIN_BURN) return none;

@@ -61,7 +61,17 @@ public class ClashVpnService extends VpnService {
 
     /** 当前持有的 tun fd（-1 = 没有）。停止时负责关闭。 */
     private static int tunFd = -1;
-    private static boolean running;
+    /** 工作线程写、UI 线程读，必须 volatile（同类里 starting 加了，这个是漏改） */
+    private static volatile boolean running;
+    /**
+     * 本轮启动是否已被要求停止。
+     *
+     * <p>为什么必须有：点"系统全局"后要 1~8 秒才真正起来（establish + 内核轮询），
+     * 这段时间按钮显示的还是「启动加速」（因为端口还没监听），用户很容易再点一下 ——
+     * 那一下走的是停止分支。以前 stopVpn() 只关 fd、置 running=false，
+     * 后台线程毫不知情，接着 establish() 又把 tun 建起来：用户明确关掉的 VPN 自己连回来了。
+     */
+    private static volatile boolean stopRequested;
 
     private ParcelFileDescriptor tunPfd;
 
@@ -123,6 +133,7 @@ public class ClashVpnService extends VpnService {
             return;
         }
 
+        stopRequested = false;
         /* 前台通知建不起来就别继续了。
            ⚠️ 早先是 catch 掉异常继续跑：服务没有前台身份，系统 5 秒后以
            "没有调用 startForeground" 把整个进程杀掉（用户看到的是闪退），
@@ -179,7 +190,18 @@ public class ClashVpnService extends VpnService {
             /* 排除自己：本应用仍旧走本地 HTTP 代理那条通路，避免自我循环 */
             try { b.addDisallowedApplication(getPackageName()); } catch (Throwable ig) { }
 
+            if (stopRequested) {
+                BalanceFetcher.diag(this, "启动过程中已被要求停止，放弃建 tun");
+                return;
+            }
             tunPfd = b.establish();
+            if (stopRequested) {
+                /* 建到一半用户点了停止：这个 fd 没人要了，必须自己关掉，
+                   否则系统 VPN 会一直挂着一个没有主人的 tun。 */
+                try { tunPfd.close(); } catch (Throwable ig) { }
+                BalanceFetcher.diag(this, "tun 建立完成但已被要求停止，已关闭");
+                return;
+            }
             if (tunPfd == null) {
                 BalanceFetcher.diag(this, "建立 tun 失败（establish 返回 null）");
                 stopSelf();
@@ -191,6 +213,10 @@ public class ClashVpnService extends VpnService {
 
             /* ③ 生成带 tun 段的配置并启动内核 */
             String cfg = Clash.buildTunConfig(sub.yaml, tunFd);
+            if (stopRequested) {
+                BalanceFetcher.diag(this, "启动过程中已被要求停止，放弃拉起内核");
+                return;
+            }
             String err = Clash.startWithFd(this, cfg, tunFd);
             /* 配置解析失败（机场塞了残缺正文）→ 回滚到上一版再试一次。
                没有这一步的话，用户会卡在"代理起不来 → 订阅下不了（订阅要走代理）"
@@ -214,6 +240,11 @@ public class ClashVpnService extends VpnService {
                 return;
             }
 
+            if (stopRequested) {
+                BalanceFetcher.diag(this, "内核已起来但用户已要求停止，立刻收掉");
+                Clash.stop(this);
+                return;
+            }
             running = true;
             BalanceFetcher.diag(this, "系统级 VPN 已启动，tun fd=" + tunFd);
             updateNotification("已接管全部应用流量");
@@ -238,6 +269,9 @@ public class ClashVpnService extends VpnService {
     // ---------------- 停止 ----------------
 
     private void stopVpn() {
+        /* 先告诉正在启动的那条线程"别继续了" —— 它在 establish()/startWithFd()
+           里可能还要跑好几秒，不打招呼的话它会把 tun 重新建起来。 */
+        stopRequested = true;
         running = false;
         try {
             Clash.stop(this);

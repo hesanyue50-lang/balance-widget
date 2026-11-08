@@ -567,16 +567,28 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                         }
                     }
 
-                    Alert.check(ctx, r);           // 阈值判定 + 发通知（有防重复）
+                    /* ⚠️ fromCache = 另一轮还没跑完，这次给的是上次的缓存，不是新数据。
+                       拿它判阈值会按**旧余额**发"余额不足"通知（用户刚充完值又被提醒），
+                       拿它落盘会把 last_at 刷成"现在"（时间戳造假）。
+                       渲染照做（有数据总比空白强），预警与记账一律跳过。 */
+                    if (r.fromCache) {
+                        BalanceFetcher.diag(ctx, "本轮结果来自缓存，跳过预警与落盘");
+                    } else {
+                        Alert.check(ctx, r);       // 阈值判定 + 发通知（有防重复）
 
-                    /* 每 6 小时记一次快照（统计页曲线的来源）。
-                       逻辑已抽到 BalanceFetcher.sampleIfDue —— 打开 App 刷新时也会走一遍，
-                       免得「不摆小组件就永远没曲线」。 */
-                    BalanceFetcher.sampleIfDue(ctx, r);
+                        /* 每 6 小时记一次快照（统计页曲线的来源）。
+                           逻辑已抽到 BalanceFetcher.sampleIfDue —— 打开 App 刷新时也会走一遍，
+                           免得「不摆小组件就永远没曲线」。 */
+                        BalanceFetcher.sampleIfDue(ctx, r);
+                        /* 自动备份也在这里补一次：以前只有"打开 App 刷新"会备份，
+                           只用小组件、从不打开 App 的用户永远没有自动备份 ——
+                           而配置丢失时他们最需要那份备份。 */
+                        try { Backup.maybeAutoBackup(ctx); } catch (Throwable ignored) { }
+                    }
 
                     int page = 0;
                     if (hasWidget) page = clampPage(ctx, mgr, r, ids);
-                    WidgetCache.save(ctx, r, page);
+                    if (!r.fromCache) WidgetCache.save(ctx, r, page);
 
                     /* 用 allWidgetIds 而不是入参 ids：onUpdate 传进来的 ids 只含
                        "当前这个 Provider"的实例，另外 7 个风格的组件永远等不到

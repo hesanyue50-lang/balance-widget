@@ -109,11 +109,12 @@ public final class BackupStore {
      */
     public static String save(Context c, String json, String uri, String displayName) {
         if (json == null || json.length() == 0) return null;
+        File f = null;
         try {
             String name = PREFIX + new java.text.SimpleDateFormat(
                     "yyyyMMdd-HHmmss", java.util.Locale.US)
                     .format(new java.util.Date()) + SUFFIX;
-            File f = new File(dir(c), name);
+            f = new File(dir(c), name);
             FileOutputStream os = new FileOutputStream(f);
             try {
                 os.write(json.getBytes("UTF-8"));
@@ -135,6 +136,12 @@ public final class BackupStore {
             return name;
         } catch (Throwable t) {
             BalanceFetcher.diag(c, "本机备份记录写入失败：" + t);
+            /* 写一半留下的残档必须删掉：列表只判 size>0，它会作为"有效备份"显示出来，
+               用户点恢复才发现打不开（导入侧解析失败不会破坏数据，但白折腾一次）。 */
+            try {
+                if (f != null && f.exists()) f.delete();
+                if (f != null) metaFile(f).delete();
+            } catch (Throwable ignored) { }
             return null;
         }
     }

@@ -206,18 +206,77 @@ public final class BackupUi {
         /* 只认自己的备份文件 —— 万一系统把别的文件也派发过来，别乱恢复 */
         if (last == null || !last.toLowerCase().endsWith("." + Backup.EXT)) return false;
 
-        ui(act, "正在从备份恢复…");
+        /* ⚠️ 以前是「点开就恢复」：Manifest 主动把 .apibak 关联到本应用，
+           用户在文件管理器里点一下（哪怕只是想看看是什么）就会立刻覆盖
+           全部平台、密钥、订阅与历史，没有确认、没有恢复前快照、界面还不刷新。
+           现在先给摘要 + 二次确认；确认后先自动存一份当前状态再导入。 */
         new Thread(new Runnable() {
             public void run() {
-                String text = readText(act, u);
+                final String text = readText(act, u);
                 if (text == null) {
                     ui(act, "读不到备份文件");
                     return;
                 }
-                ui(act, Backup.importJson(act, text));
+                final String summary = summarize(text);
+                if (summary == null) {
+                    ui(act, "这不是本应用的备份文件");
+                    return;
+                }
+                post(act, new Runnable() {
+                    public void run() {
+                        new android.app.AlertDialog.Builder(act)
+                                .setTitle("用这个备份覆盖当前数据？")
+                                .setMessage(summary)
+                                .setPositiveButton("恢复", new android.content.DialogInterface.OnClickListener() {
+                                    public void onClick(android.content.DialogInterface d, int w) {
+                                        ui(act, "正在从备份恢复…");
+                                        new Thread(new Runnable() {
+                                            public void run() {
+                                                /* 先给当前状态留一份退路：恢复是整体替换，
+                                                   用户点错了还能从"恢复前"那份找回来。 */
+                                                try {
+                                                    BackupStore.save(act,
+                                                            Backup.exportJson(act),
+                                                            null, "恢复前自动备份");
+                                                } catch (Throwable ignored) { }
+                                                ui(act, Backup.importJson(act, text));
+                                            }
+                                        }).start();
+                                    }
+                                })
+                                .setNegativeButton("取消", null)
+                                .show();
+                    }
+                });
             }
         }).start();
         return true;
+    }
+
+    /**
+     * 给确认框用的摘要：这份备份是什么时候的、有多少条历史。
+     * @return null = 不是本应用的备份
+     */
+    private static String summarize(String text) {
+        try {
+            org.json.JSONObject o = new org.json.JSONObject(text);
+            if (!Backup.MAGIC.equals(o.optString("app"))) return null;
+            org.json.JSONArray sn = o.optJSONArray("snapshots");
+            org.json.JSONObject prefs = o.optJSONObject("prefs");
+            int n = sn == null ? 0 : sn.length();
+            String at = o.optString("exportedAt", "");
+            StringBuilder sb = new StringBuilder();
+            sb.append("备份时间：").append(at.length() > 0 ? at : "未知").append('\n');
+            sb.append("余额记录：").append(n).append(" 条\n");
+            sb.append("配置项：").append(prefs == null ? 0 : prefs.length()).append(" 项\n\n");
+            if (prefs == null || prefs.length() == 0) {
+                sb.append("⚠️ 这份备份里没有任何配置 —— 恢复会把当前所有平台和密钥清空。\n\n");
+            }
+            sb.append("恢复会替换现在的全部平台、密钥、订阅与历史记录，无法撤销。");
+            return sb.toString();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     // ---------- 文件读写 ----------

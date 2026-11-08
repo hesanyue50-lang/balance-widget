@@ -21,7 +21,13 @@ public class RefreshReceiver extends BroadcastReceiver {
 
         // 开机后重新排期（闹钟在重启后会被清除）
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
-            if (hasKeys(context)) RefreshScheduler.schedule(context);
+            if (hasKeys(context)) {
+                RefreshScheduler.schedule(context);
+                /* 开机后排了期就完事的话，桌面要显示 20~60 分钟的旧缓存。
+                   补一次"稍后立刻刷"：延迟 15 秒 —— 刚开机时网络栈常常还没就绪，
+                   立刻刷会全平台失败，用户开机会看到一屏红字。 */
+                RefreshScheduler.refreshSoon(context, 15 * 1000L);
+            }
             resumeVpnIfWanted(context);
             return;
         }
@@ -34,7 +40,10 @@ public class RefreshReceiver extends BroadcastReceiver {
             Intent redraw = new Intent(ac, BalanceWidgetProvider.class);
             redraw.setAction(BalanceWidgetProvider.ACTION_FORCE_REDRAW);
             ac.sendBroadcast(redraw);
-            if (hasKeys(ac)) RefreshScheduler.schedule(ac);
+            if (hasKeys(ac)) {
+                RefreshScheduler.schedule(ac);
+                RefreshScheduler.refreshSoon(ac, 5 * 1000L);   // 更新后立刻把数据刷一遍
+            }
             /* 更新后 VpnService 一定已经断了（进程被杀），而用户的开关还开着 ——
                恢复了才不会让更新变成"莫名其妙断网"。 */
             resumeVpnIfWanted(ac);
@@ -45,8 +54,18 @@ public class RefreshReceiver extends BroadcastReceiver {
 
         Context app = context.getApplicationContext();
 
-        // 没配置任何 Key 就不必打扰系统
-        if (!hasKeys(app)) return;
+        /* ⚠️ 先排下一次，再判断要不要取数。
+           以前是「没配置来源就直接 return」，而 return 在 schedule() 之前 ——
+           闹钟是一次性的，跳过一次就再也不响。而 hasKeys 当时只认 API Key，
+           只配了 MiMo（登录态）或只配了高级平台的用户会被判成"没配任何东西"，
+           后台刷新与低余额预警从此彻底停止，且日志里一个字都没有。 */
+        RefreshScheduler.schedule(app);
+
+        if (!hasKeys(app)) {
+            BalanceFetcher.diag(app, "后台刷新跳过：没有可用来源"
+                    + "（API Key / MiMo 登录态 / 自定义平台都没有）");
+            return;
+        }
 
         // 交给小组件那条链路统一处理：取数 → 阈值判定/发通知 → 渲染
         // （即使当前没有小组件，Provider 内部也会取数并做预警）
@@ -56,9 +75,7 @@ public class RefreshReceiver extends BroadcastReceiver {
            （跳过汇率、失败不重试），减少后台耗电。 */
         refresh.putExtra(BalanceWidgetProvider.EXTRA_BG, true);
         app.sendBroadcast(refresh);
-
-        // 排下一次
-        RefreshScheduler.schedule(app);
+        /* 下一次已经在方法开头排好了（见那里的注释：提前返回也必须续命） */
     }
 
     /**
@@ -72,6 +89,10 @@ public class RefreshReceiver extends BroadcastReceiver {
         try {
             if (KeyStore.hasAnyConfigured(ctx)) return true;
             if (BalanceFetcher.hasAnyCustom(ctx)) return true;
+            /* 这两类都不在 KeyStore 里，漏掉就是"只配了 MiMo / 只配了网页平台"
+               的用户后台永远不刷新。全部走"看存档有没有东西"，不解密。 */
+            if (BalanceFetcher.hasMimoSession(ctx)) return true;
+            if (WebCustom.hasAny(ctx)) return true;
         } catch (Throwable ignored) { }
         return false;
     }

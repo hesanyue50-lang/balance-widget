@@ -659,6 +659,9 @@ public class SettingsBinder {
         int f = clampInterval(eFg, RefreshScheduler.FG_MIN);
         int b = clampInterval(eBg, RefreshScheduler.BG_MIN);
         RefreshScheduler.setIntervals(act, f, b);
+        /* 已挂着的闹钟还按旧间隔排着 —— 只写 prefs 不重排的话，
+           用户把 20 分钟改成 360 分钟，要等下一次（旧间隔）响了才生效。 */
+        try { RefreshScheduler.schedule(act); } catch (Throwable ignored) { }
     }
 
     /**

@@ -216,6 +216,18 @@ public class WebCustom {
         } catch (Throwable ignored) { }
     }
 
+    /** 有没有配置过任何高级平台（不解密、不解析，只看存档非空） */
+    public static boolean hasAny(Context ctx) {
+        try {
+            String s = sp(ctx).getString(KEY, "[]");
+            if (s == null) return false;
+            String v = s.trim();
+            return v.length() > 2 && !"[]".equals(v);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /** 原始存档条数（含 ready()==false 的隐藏项）。-1 = 读不出来，调用方保守保留 */
     public static int rawCount(Context ctx) {
         try {
