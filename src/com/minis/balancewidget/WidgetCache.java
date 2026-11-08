@@ -60,7 +60,10 @@ public final class WidgetCache {
                  .putString(K_JSON, json)
                  .putString("last_total", String.format("%.2f", r.totalCny))
                  .putLong(K_LAST_AT, System.currentTimeMillis())
-                 .putInt(K_PAGE, page)
+                 /* 页码**不在这里写**：翻页动作和刷新完成是两条并发路径，
+                   刷新线程算完 page 再落盘的这几微秒里，用户可能刚点过「下一页」，
+                   于是 setPage(1) 被 save(page=0) 覆盖，组件莫名其妙弹回第一页。
+                   页码只由翻页动作和越界收回（单独 setPage）维护。 */
                  .apply();
         } catch (Throwable ignored) { }
     }

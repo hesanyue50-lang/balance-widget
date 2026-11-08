@@ -1443,6 +1443,34 @@ public class BalanceFetcher {
     }
 
     /**
+     * 带超时的域名解析。
+     *
+     * <p>{@code InetAddress.getAllByName} 既没有超时参数、也不响应 {@code interrupt()} ——
+     * 运营商 DNS 黑洞时会一直挂着。调用方到点就 {@code interrupt()} 它，
+     * 只能设置线程标志位，线程照样卡在原生解析里，于是每轮刷新都多留一个僵尸线程，
+     * 弱网刷久了就是"越用越卡、最后闪退"。
+     *
+     * <p>这里把它挪到一条独立线程上等 {@code ms} 毫秒，超时返回 null，
+     * 调用方随即走 DoH 兜底（那条路径自带 6 秒总预算）。
+     */
+    private static InetAddress[] resolveWithTimeout(final String host, long ms) {
+        final InetAddress[][] box = new InetAddress[1][];
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    box[0] = InetAddress.getAllByName(host);
+                } catch (Throwable ignored) { }
+            }
+        });
+        t.setDaemon(true);
+        try {
+            t.start();
+            t.join(ms);
+        } catch (Throwable ignored) { }
+        return box[0];
+    }
+
+    /**
      * 域名解析：先走系统 DNS，失败再用 **DoH（DNS over HTTPS）** 兜底。
      *
      * 为什么要兜底：部分运营商会干扰境外域名的解析（返回空或污染地址），
@@ -1455,8 +1483,8 @@ public class BalanceFetcher {
         boolean freshNet = System.currentTimeMillis() - netChangedAt < 60_000L;
         if (!freshNet) {
             try {
-                InetAddress[] all = InetAddress.getAllByName(host);
-                for (int i = 0; i < all.length; i++) {
+                InetAddress[] all = resolveWithTimeout(host, 1500L);
+                for (int i = 0; all != null && i < all.length; i++) {
                     if (all[i] instanceof Inet4Address) v4.add(all[i]);
                     else if (all[i] instanceof Inet6Address) v6.add(all[i]);
                 }
@@ -2443,6 +2471,11 @@ public class BalanceFetcher {
             empty.items = new ArrayList<Item>();
             empty.rawItems = new ArrayList<Item>();
             empty.fromCache = true;                 // 空结果更不能记账
+            /* ★ configured = -1 是"未知"哨兵，不是"零个平台"。
+               没缓存 + 撞上别人正在刷新时只能返回空，而调用方拿 configured==0
+               会直接渲染成"还没有配置任何平台，去设置里添加" —— 用户的 Key
+               明明都在，只是另一轮还没跑完。用 -1 让界面能说"正在获取"。 */
+            empty.configured = -1;
             return empty;
         }
         try {
@@ -2734,7 +2767,12 @@ public class BalanceFetcher {
         }
         /* 全局总预算：最慢的一档（foreign 双倍）+ 收尾余量。所有线程共用这一个上限，
            不再按项累加 —— 这就是「n 个平台最坏 n × timeout」的根治。 */
-        long budgetAll = (per * 2L) + 2000L;
+        /* ⚠️ 总预算必须落在 goAsync 的广播窗口内（约 10 秒）。
+           原来 per=8000 时这里是 18 秒，而小组件那边 8.5 秒就超窗收尾 ——
+           抓取线程跑完时广播早结束了，进程随时可能被回收，
+           这一轮的结果既不落盘也不发预警，弱网下组件会长期停在旧数据。
+           7500ms 给"结果写盘 + 重绘"留出约 1 秒，仍在 8.5 秒兜底之内。 */
+        long budgetAll = Math.min((per * 2L) + 2000L, 7500L);
         try {
             latch.await(budgetAll, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (InterruptedException ignored) { }

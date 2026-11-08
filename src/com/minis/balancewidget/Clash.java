@@ -147,8 +147,14 @@ public final class Clash {
         return platformViaProxy(c, platform, foreign);
     }
 
-    private static Process proc;
-    private static long startAt;
+    /* proc 必须 volatile：startInternal 的"等端口"轮询已经移到锁外，
+       期间 stop() 可能在另一个线程把 proc 置空 —— 没有可见性保证的话，
+       这边还会对着一个已经死掉的进程对象反复探测。 */
+    private static volatile Process proc;
+    private static volatile long startAt;
+    /* stop() 置位，让还在轮询的 startInternal 提前认输（否则用户点了停止，
+       它还要把剩下的几秒 sleep 走完，期间"启动成功"或"启动超时"的结论都会写日志） */
+    private static volatile boolean coreStopRequested;
 
     private Clash() { }
 
@@ -316,10 +322,28 @@ public final class Clash {
         return startInternal(c, cfgText, -1);
     }
 
-    private static synchronized String startInternal(Context c, String cfgText, int tunFd) {
+    /**
+     * 启动内核。
+     *
+     * <p>⚠️ **不能整个方法 synchronized**：下面"等控制端口"要 sleep 最多 8 秒，
+     * 而 {@link #stop} 也是 synchronized —— 用户在启动过程中点一次「停止」，
+     * 主线程就会在这把类锁上阻塞 8 秒，表现为界面完全冻住，严重时弹 ANR。
+     *
+     * <p>所以拆成两段：持锁的 {@link #startLocked} 只做"写配置 + 起进程"（几十毫秒），
+     * 轮询放到锁外。停止请求通过 {@link #coreStopRequested} 传达，不必抢锁。
+     */
+    private static String startInternal(Context c, String cfgText, int tunFd) {
         if (!available(c)) {
             return "内核不可用（此设备架构没有内置内核，仅支持 arm64）";
         }
+        coreStopRequested = false;
+        String err = startLocked(c, cfgText, tunFd);
+        if (err != null) return err;
+        return waitForApi(c);
+    }
+
+    /** 持锁段：只做启动，不做任何等待。 */
+    private static synchronized String startLocked(Context c, String cfgText, int tunFd) {
         if (isRunning()) return null;              // 已在跑，直接当成功
 
         try {
@@ -351,10 +375,26 @@ public final class Clash {
             pb.directory(dir);
             proc = pb.start();
             startAt = System.currentTimeMillis();
+        } catch (Throwable t) {
+            BalanceFetcher.diag(c, "内核启动异常：" + t);
+            return "内核启动失败：" + t;
+        }
+        return null;
+    }
 
+    /** 锁外段：等控制端口起来。 */
+    private static String waitForApi(Context c) {
+        File dir = workDir(c);
+        File log = new File(dir, "core.log");
+        try {
             /* 等控制端口起来：内核解析配置 + 建立节点连接需要一点时间，
                轮询 /version 最直接（比 sleep 固定时长稳）。 */
             for (int i = 0; i < 40; i++) {         // 最多约 8 秒
+                if (coreStopRequested) {
+                    /* 用户已经点了停止：别再把剩下的秒数睡完，也别下"启动失败"的结论 */
+                    BalanceFetcher.diag(c, "启动过程中收到停止请求，放弃等待");
+                    return "启动已取消";
+                }
                 if (!isRunning()) {
                     /* core.log 在**私有目录**，用户/排查工具读不到 ——
                        顺手抄一份到诊断日志里，否则"内核启动失败"永远只有结论没有原因。 */
@@ -380,6 +420,10 @@ public final class Clash {
     }
 
     public static synchronized void stop(Context c) {
+        /* 先举手：还在锁外轮询等端口的 startInternal 看到它就会立刻收手，
+           不必把剩下的几秒 sleep 走完。不设它的话，用户点「停止」之后
+           启动流程还会继续跑完并可能把 proc 又启回来。 */
+        coreStopRequested = true;
         try {
             if (proc != null) {
                 proc.destroy();

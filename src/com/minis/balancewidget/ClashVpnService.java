@@ -273,6 +273,12 @@ public class ClashVpnService extends VpnService {
            里可能还要跑好几秒，不打招呼的话它会把 tun 重新建起来。 */
         stopRequested = true;
         running = false;
+        /* ⚠️ starting 必须一起复位。
+           它原来只在启动线程的 finally 里清 —— 于是「启动还在跑（最多 8 秒）时点停止、
+           然后马上再点开启」会命中下面的 if (running || starting) 直接 return：
+           用户点了没反应，也不会重试，看起来就是"开关坏了"。
+           停止是用户的明确意图，旧代次的启动一律作废。 */
+        starting = false;
         try {
             Clash.stop(this);
         } catch (Throwable ignored) { }
@@ -308,6 +314,10 @@ public class ClashVpnService extends VpnService {
         /* 用户在系统里撤销了 VPN 授权（或别的 VPN 抢占了）：必须干净退出 */
         BalanceFetcher.diag(this, "VPN 授权被撤销，自动停止");
         stopVpn();
+        /* 开关也要关掉：enabled=true 而服务已经停了，界面会一直显示"运行中"，
+           实际流量没走代理 —— 用户得点一下「关闭」再点一下「开启」才能恢复，
+           而且完全看不出问题出在哪。 */
+        try { Clash.setEnabled(this, false); } catch (Throwable ignored) { }
         stopSelf();
         super.onRevoke();
     }

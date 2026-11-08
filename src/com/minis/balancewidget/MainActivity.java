@@ -2277,6 +2277,23 @@ public class MainActivity extends Activity {
         cards.removeAllViews();
         BalanceFetcher.diag(this, "卡片渲染 " + r.items.size() + " 项");
 
+        /* -1 = "还不知道有几个平台"（撞上另一轮刷新、又没缓存）。
+           不能说成"没配置" —— 用户的 Key 都在，只是这一轮没轮到它取数。 */
+        if (r.configured < 0) {
+            tSub.setText("等待另一轮刷新完成…");
+            tSub.setTextColor(Theme.c(this, R.attr.c_tx2));
+            if (cards.getChildCount() == 0) {
+                TextView wait2 = new TextView(this);
+                wait2.setText("有一轮刷新正在进行，稍等几秒");
+                wait2.setTextColor(Theme.c(this, R.attr.c_tx3));
+                wait2.setTextSize(12);
+                wait2.setGravity(android.view.Gravity.CENTER);
+                int pad2 = (int) (getResources().getDisplayMetrics().density * 24);
+                wait2.setPadding(pad2, pad2, pad2, pad2);
+                cards.addView(wait2);
+            }
+            return;
+        }
         if (r.configured == 0) {
             tTotal.setText("—");
             tSub.setText(R.string.not_configured);

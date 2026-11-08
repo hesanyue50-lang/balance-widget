@@ -92,8 +92,17 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
     private static final int FETCH_TIMEOUT_MS = 8000;
 
     /** 刷新节流：同一时刻只允许一轮，两轮之间至少隔 2 秒 */
-    private static final java.util.concurrent.atomic.AtomicBoolean FETCHING =
-            new java.util.concurrent.atomic.AtomicBoolean(false);
+    /* 闸门用「代次 + 开始时间」而不是一个布尔。
+       原来是无条件 set(false)：上一轮的 finally 会把**下一轮**的闸门清掉
+       （看门狗 8.5 秒放行、用户这时点刷新进了 B 轮，A 轮线程接着返回又把 B 清了），
+       于是短时间内多轮并发，LAST_FETCH_AT 被反复改写、数字闪回旧值。
+       代次能保证"只清自己的"；开始时间保证"上一轮真的卡死了也能被新一代顶掉"。 */
+    private static final java.util.concurrent.atomic.AtomicInteger FETCH_SEQ =
+            new java.util.concurrent.atomic.AtomicInteger();
+    private static volatile int FETCH_CUR = 0;
+    private static volatile long FETCH_START_AT = 0L;
+    /** 超过这么久还没收尾，就认定上一轮卡死了，允许新一轮顶掉它 */
+    private static final long FETCH_STALE_MS = 30000L;
     private static volatile long LAST_FETCH_AT = 0L;
     private static final long MIN_GAP_MS = 2000L;
     /** 下一次刷新要不要跳过节流（小组件三击置一次） */
@@ -186,6 +195,16 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             return System.currentTimeMillis() - last < gap * 8 / 10;
         } catch (Throwable t) {
             return false;                 // 判断本身出错就别拦，宁可多刷一次
+        }
+    }
+
+    /** 只清自己那一代的闸门；被别人顶掉之后什么都不做。 */
+    private static void releaseFetch(int gen) {
+        synchronized (BalanceWidgetProvider.class) {
+            if (FETCH_CUR == gen) {
+                FETCH_CUR = 0;
+                FETCH_START_AT = 0L;
+            }
         }
     }
 
@@ -395,7 +414,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                 final long[] wait = { 1500L, 3000L, 5000L };
                 for (int i = 0; i < wait.length; i++) {
                     try { Thread.sleep(wait[i]); } catch (InterruptedException ig) { return; }
-                    if (!FETCHING.get()) {
+                    if (FETCH_CUR == 0) {
                         FORCE_ONCE.set(true);
                         Intent it = new Intent(ctx, BalanceWidgetProvider.class);
                         it.setAction(ACTION_REFRESH);
@@ -511,7 +530,8 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             paintFromCache(ctx, mgr, ids);
             return;
         }
-        if (!FETCHING.compareAndSet(false, true)) {
+        int curGen = FETCH_CUR;
+        if (curGen != 0 && now - FETCH_START_AT < FETCH_STALE_MS) {
             BalanceFetcher.diag(ctx, force ? "强制刷新：上一轮仍在进行中，稍后重试"
                     : "跳过刷新：上一轮仍在进行中");
             /* 强制刷新遇到并发时等一下再试，别直接放弃 —— 用户明确点了要重拉 */
@@ -522,6 +542,10 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             paintFromCache(ctx, mgr, ids);
             return;
         }
+        /* 抢到闸门：记下本轮的代次，退出时只有代次还等于自己才清 */
+        final int myGen = FETCH_SEQ.incrementAndGet();
+        FETCH_CUR = myGen;
+        FETCH_START_AT = now;
         LAST_FETCH_AT = now;
 
         /* 先把缓存画出来，别让人对着「刷新中」干等 */
@@ -553,7 +577,7 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
             public void run() {
                 if (done.get()) return;
                 try {
-                    FETCHING.set(false);
+                    releaseFetch(myGen);
                     paintFromCache(ctx, mgr, allWidgetIds(ctx, mgr));
                     BalanceFetcher.diag(ctx, "刷新超窗，已回退到缓存显示");
                 } catch (Throwable ignored) { }
@@ -633,14 +657,14 @@ public class BalanceWidgetProvider extends AppWidgetProvider {
                 } catch (Throwable t) {
                     BalanceFetcher.diag(ctx, "刷新异常: " + t);
                 } finally {
-                    FETCHING.set(false);
+                    releaseFetch(myGen);
                     finishOnce.run();
                 }
             }
         }).start();
         } catch (Throwable t) {
             /* 线程都没起来（极端内存）：闸门不能留着，finish 也不能漏 */
-            FETCHING.set(false);
+            releaseFetch(myGen);
             finishOnce.run();
             BalanceFetcher.diag(ctx, "刷新线程启动失败: " + t);
         }

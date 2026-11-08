@@ -28,7 +28,12 @@ public class RefreshReceiver extends BroadcastReceiver {
                    立刻刷会全平台失败，用户开机会看到一屏红字。 */
                 RefreshScheduler.refreshSoon(context, 15 * 1000L);
             }
-            resumeVpnIfWanted(context);
+            /* ⚠️ 必须 goAsync：恢复加速要先 sleep 8 秒（等网络栈/授权就绪），
+               而 onReceive 一 return，进程就进入"可随时回收"状态 ——
+               开机那一刻内存压力本来就大，进程被收掉的话这次恢复永远不会发生，
+               用户的开关还显示"已开启"，实际没加速。 */
+            final PendingResult bootPr = goAsync();
+            resumeVpnIfWanted(context, bootPr);
             return;
         }
 
@@ -46,7 +51,8 @@ public class RefreshReceiver extends BroadcastReceiver {
             }
             /* 更新后 VpnService 一定已经断了（进程被杀），而用户的开关还开着 ——
                恢复了才不会让更新变成"莫名其妙断网"。 */
-            resumeVpnIfWanted(ac);
+            final PendingResult upPr = goAsync();
+            resumeVpnIfWanted(ac, upPr);
             return;
         }
 
@@ -108,17 +114,25 @@ public class RefreshReceiver extends BroadcastReceiver {
      * 立刻 startCore 多半失败。失败也没关系 —— 开关保持不动，
      * 用户下次打开 App 时那套"开关开着但内核没跑"的逻辑会再拉一次。
      */
-    private void resumeVpnIfWanted(final Context ctx) {
+    private void resumeVpnIfWanted(final Context ctx,
+                                    final android.content.BroadcastReceiver.PendingResult pr) {
+        final Runnable finish = new Runnable() {
+            public void run() {
+                try { if (pr != null) pr.finish(); } catch (Throwable ignored) { }
+            }
+        };
         try {
-            if (!Clash.enabled(ctx)) return;
-            /* 系统全局代理不自动起 —— 它接管整机流量还要弹授权框，
-               这个决定留给用户自己做。部分/应用内模式才自动接上。 */
-            if (!Clash.autoStartAllowed(ctx)) return;
+            if (!Clash.enabled(ctx) || !Clash.autoStartAllowed(ctx)) {
+                /* 系统全局代理不自动起 —— 它接管整机流量还要弹授权框，
+                   这个决定留给用户自己做。部分/应用内模式才自动接上。 */
+                finish.run();
+                return;
+            }
             final Context ac = ctx.getApplicationContext();
-            new Thread(new Runnable() {
+            Thread t = new Thread(new Runnable() {
                 public void run() {
-                    try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
                     try {
+                        Thread.sleep(8000);
                         if (!Clash.enabled(ac)) return;   // 等待期间用户关了就别启
                         if (Clash.isRunning()) return;
                         SubStore.Sub a = SubStore.active(ac);
@@ -127,9 +141,15 @@ public class RefreshReceiver extends BroadcastReceiver {
                         BalanceFetcher.diag(ac, "开机/更新后已自动恢复加速");
                     } catch (Throwable t) {
                         BalanceFetcher.diag(ac, "自动恢复加速失败：" + t.getClass().getSimpleName());
+                    } finally {
+                        finish.run();
                     }
                 }
-            }).start();
-        } catch (Throwable ignored) { }
+            });
+            t.setDaemon(true);
+            t.start();
+        } catch (Throwable ignored) {
+            finish.run();
+        }
     }
 }

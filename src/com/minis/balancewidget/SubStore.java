@@ -212,7 +212,7 @@ public final class SubStore {
     // ---------- 写 ----------
 
     /** 新增一份订阅，返回它的 id */
-    public static String add(Context c, String name, String url) {
+    public static synchronized String add(Context c, String name, String url) {
         List<Sub> l = all(c);
         Sub s = new Sub();
         s.id = UUID.randomUUID().toString().substring(0, 8);
@@ -224,7 +224,7 @@ public final class SubStore {
         return s.id;
     }
 
-    public static void update(Context c, Sub sub) {
+    public static synchronized void update(Context c, Sub sub) {
         if (sub == null) return;
         List<Sub> l = all(c);
         for (int i = 0; i < l.size(); i++) {
@@ -246,7 +246,7 @@ public final class SubStore {
     }
 
     /** 内核起不来时回滚到上一版配置；没有可回滚的返回 false */
-    public static boolean rollback(Context c, String id) {
+    public static synchronized boolean rollback(Context c, String id) {
         Sub s = byId(c, id);
         if (s == null) return false;
         if (s.prevYaml == null || s.prevYaml.length() < 200) return false;
@@ -261,7 +261,7 @@ public final class SubStore {
         return true;
     }
 
-    public static void remove(Context c, String id) {
+    public static synchronized void remove(Context c, String id) {
         List<Sub> l = all(c);
         for (int i = l.size() - 1; i >= 0; i--) {
             if (l.get(i).id.equals(id)) l.remove(i);
@@ -273,7 +273,7 @@ public final class SubStore {
     }
 
     /** 重命名 */
-    public static void rename(Context c, String id, String name) {
+    public static synchronized void rename(Context c, String id, String name) {
         Sub s = byId(c, id);
         if (s == null) return;
         s.name = name == null ? "" : name.trim();
