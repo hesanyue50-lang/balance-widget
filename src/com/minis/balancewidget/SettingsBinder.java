@@ -929,13 +929,20 @@ public class SettingsBinder {
         TextView del = mkBtn("删除", color(R.attr.c_danger));
         del.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                Busy.run(act, "正在删除…", new Runnable() {
-                    public void run() {
-                        KeyStore.remove(act, k.id);
-                        renderKeys();
-                        kick();
-                    }
-                });
+                confirmDelete("删除这条密钥？",
+                        (k.label == null || k.label.length() == 0 ? "这条密钥" : "「" + k.label + "」")
+                                + " 删除后无法恢复，需要去平台后台重新生成。",
+                        new Runnable() {
+                            public void run() {
+                                Busy.run(act, "正在删除…", new Runnable() {
+                                    public void run() {
+                                        KeyStore.remove(act, k.id);
+                                        renderKeys();
+                                        kick();
+                                    }
+                                });
+                            }
+                        });
             }
         });
         row.addView(del);
@@ -1701,6 +1708,34 @@ public class SettingsBinder {
             TextView del = mkBtn("删除", color(R.attr.c_danger));
             del.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
+                    confirmDelete("删除这个高级平台？",
+                            "它的密钥和余额历史会一起删掉，无法恢复。",
+                            new Runnable() {
+                                public void run() {
+                                    doDeleteWeb(idx);
+                                }
+                            });
+                }
+            });
+            row.addView(del);
+            box.addView(row);
+        }
+
+
+        if (ws.isEmpty()) {
+            TextView t = new TextView(act);
+            t.setText("还没有添加。适合监控任意网页上的一串数字 —— 比如自己搭的服务、公司内部面板、论坛积分。");
+            t.setTextColor(color(R.attr.c_tx3));
+            t.setTextSize(12);
+            box.addView(t);
+        }
+        if (first) Anim.staggerChildren(box, 0, 10);
+    }
+
+        /** 真正执行删除（确认框点了「删除」之后才走到这里）。 */
+        private void doDeleteWeb(final int idx) {
+            {
+                {
                     List<WebCustom> list = WebCustom.loadAll(act);
                     if (idx < list.size()) {
                         WebCustom del = list.get(idx);
@@ -1737,19 +1772,8 @@ public class SettingsBinder {
                         }
                     });
                 }
-            });
-            row.addView(del);
-            box.addView(row);
+            }
         }
-        if (ws.isEmpty()) {
-            TextView t = new TextView(act);
-            t.setText("还没有添加。适合监控任意网页上的一串数字 —— 比如自己搭的服务、公司内部面板、论坛积分。");
-            t.setTextColor(color(R.attr.c_tx3));
-            t.setTextSize(12);
-            box.addView(t);
-        }
-        if (first) Anim.staggerChildren(box, 0, 10);
-    }
 
     /** 抓一次并在对话框里显示识别结果（成功：值 + 识别方式；失败：原文片段） */
     private void testWeb(final int idx) {
@@ -2649,40 +2673,50 @@ public class SettingsBinder {
             TextView del = mkBtn("删除", color(R.attr.c_danger));
             del.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
-                    List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
-                    if (idx < list.size()) {
-                        /* 按内容删，不整表写回 —— loadCustom() 已经滤掉了隐藏条目，
-                           拿它整表覆盖会把那些条目永久删掉。 */
-                        BalanceFetcher.Custom del = list.get(idx);
-                        BalanceFetcher.removeCustom(act, del.name, del.url, del.text);
-                        /* 同步清掉这个平台的 Key（孤儿 Key 会让统计页出现 custom:N）。
-                           ⚠️ 后面的平台会前移（custom:1 → custom:0），
-                           所以要把 idx 之后的所有平台 Key 都重排 —— 干脆全清重标。 */
-                        List<KeyStore.ApiKey> all = KeyStore.all(act);
-                        List<KeyStore.ApiKey> keep = new java.util.ArrayList<KeyStore.ApiKey>();
-                        for (int ki = 0; ki < all.size(); ki++) {
-                            KeyStore.ApiKey kk = all.get(ki);
-                            String pf = kk.platform == null ? "" : kk.platform;
-                            if (pf.startsWith("custom:")) {
-                                try {
-                                    int pi = Integer.parseInt(pf.substring(7));
-                                    if (pi == idx) continue;      // 被删平台的 Key，一起丢
-                                    if (pi > idx) {               // 后面的平台前移一位
-                                        kk.platform = "custom:" + (pi - 1);
-                                    }
-                                } catch (Throwable ig) { continue; }
+                /* 危险操作：先确认再动手 —— 列表在删除后整表重建、行会上移，
+                   用户"以为没生效又点一下"，第二次点中的就是下一条那行的删除按钮。 */
+                final Runnable doDelete = new Runnable() {
+                    public void run() {
+
+                        List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
+                        if (idx < list.size()) {
+                            /* 按内容删，不整表写回 —— loadCustom() 已经滤掉了隐藏条目，
+                               拿它整表覆盖会把那些条目永久删掉。 */
+                            BalanceFetcher.Custom del = list.get(idx);
+                            BalanceFetcher.removeCustom(act, del.name, del.url, del.text);
+                            /* 同步清掉这个平台的 Key（孤儿 Key 会让统计页出现 custom:N）。
+                               ⚠️ 后面的平台会前移（custom:1 → custom:0），
+                               所以要把 idx 之后的所有平台 Key 都重排 —— 干脆全清重标。 */
+                            List<KeyStore.ApiKey> all = KeyStore.all(act);
+                            List<KeyStore.ApiKey> keep = new java.util.ArrayList<KeyStore.ApiKey>();
+                            for (int ki = 0; ki < all.size(); ki++) {
+                                KeyStore.ApiKey kk = all.get(ki);
+                                String pf = kk.platform == null ? "" : kk.platform;
+                                if (pf.startsWith("custom:")) {
+                                    try {
+                                        int pi = Integer.parseInt(pf.substring(7));
+                                        if (pi == idx) continue;      // 被删平台的 Key，一起丢
+                                        if (pi > idx) {               // 后面的平台前移一位
+                                            kk.platform = "custom:" + (pi - 1);
+                                        }
+                                    } catch (Throwable ig) { continue; }
+                                }
+                                keep.add(kk);
                             }
-                            keep.add(kk);
+                            KeyStore.save(act, keep);
                         }
-                        KeyStore.save(act, keep);
+                        Busy.run(act, "正在更新…", new Runnable() {
+                            public void run() {
+                                Ledger.shiftKeys(act, "custom:", idx);
+                                renderCustoms(); renderKeys(); kick();
+                            }
+                        });
+                
                     }
-                    Busy.run(act, "正在更新…", new Runnable() {
-                        public void run() {
-                            Ledger.shiftKeys(act, "custom:", idx);
-                            renderCustoms(); renderKeys(); kick();
-                        }
-                    });
-                }
+                };
+                confirmDelete("删除这个平台？",
+                        "它的密钥和余额历史会一起删掉，无法恢复。", doDelete);
+            }
             });
             row.addView(del);
             box.addView(row);
@@ -2698,6 +2732,30 @@ public class SettingsBinder {
             box.addView(t);
         }
         if (first) Anim.staggerChildren(box, 0, 10);
+    }
+
+    /**
+     * 危险操作前的二次确认。
+     *
+     * <p>删除是**不可逆**的：Key 用 Keystore 加密存着，删了只能去平台后台重新生成；
+     * 平台删掉还会连带清掉它的 Key 和账本历史。而列表在删除后会**整表重建、行会上移** ——
+     * 用户"以为没生效又点一下"，第二次点中的就是下一条（同坐标）那行的删除按钮。
+     * 确认框同时也是这次误触的刹车。
+     */
+    private void confirmDelete(String title, String message, final Runnable go) {
+        try {
+            new android.app.AlertDialog.Builder(act)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setPositiveButton("删除", new android.content.DialogInterface.OnClickListener() {
+                        public void onClick(android.content.DialogInterface d, int w) { go.run(); }
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
+        } catch (Throwable t) {
+            /* 弹窗都弹不出来时宁可不动手 —— 删除是不可逆的 */
+            BalanceFetcher.diag(act, "确认框创建失败，已取消删除：" + t);
+        }
     }
 
     /**

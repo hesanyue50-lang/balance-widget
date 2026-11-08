@@ -113,13 +113,12 @@ public class MainActivity extends Activity {
            进程还活着时也要生效，不能等到下次进程重启 */
         CrashGuard.refreshDir(this);
         setContentView(R.layout.activity_main);
-        /* 打开应用顺手把小组件催一遍（带节流，重复调用不会造成风暴）。
-           刚更新完 App 时小组件常显示不出东西，这样至少开一次应用就能恢复。 */
-        try {
-            Intent kick = new Intent(this, BalanceWidgetProvider.class);
-            kick.setAction(BalanceWidgetProvider.ACTION_REFRESH);
-            sendBroadcast(kick);
-        } catch (Throwable ignored) { }
+        /* ⚠️ 这里**不再**催小组件刷新。
+           原来 onResume 里 App 自己要拉一轮，onCreate 又广播让小组件拉一轮，
+           两道闸门（IN_FLIGHT）只有一方能进 —— 输的那方拿到的是缓存，而且被标记
+           fromCache 于是不记账、不判预警。打开 App 首屏可能显示旧数据，
+           时间戳却写着"现在"。
+           桌面数据由 onResume 刷新成功后的回写（WidgetCache.save + 重绘）负责。 */
 
         /* 上次开着加速就自动拉起内核（约 1~2 秒）。放后台线程，别拖慢启动；
            内核是本应用的子进程，应用进程一死它就跟着走 —— 不会后台偷跑。
@@ -214,6 +213,14 @@ public class MainActivity extends Activity {
         handleImportIntent(getIntent());
         /* 冷启动就是"点开备份文件"进来的情况 */
         BackupUi.handleViewIntent(this, getIntent());
+        /* ⚠️ 处理完必须把 Intent 换掉。
+           getIntent() 永远是启动本 Activity 的那个 VIEW intent，而 onCreate 会因为
+           转屏 / 进程被回收后恢复而反复执行 —— 于是「导入订阅」的确认框会再弹一次，
+           用户再点一次导入就多出一条同名同地址的订阅（两条都参与自动更新）；
+           .apibak 恢复同理，会拿旧备份再覆盖一遍当前数据。 */
+        try {
+            setIntent(new android.content.Intent(this, MainActivity.class));
+        } catch (Throwable ignored) { }
 
         /* skill 铁律：每个可点元素必须有按下反馈。
            整树挂载一次（约 60+ 处点击绑定，手挂必漏）。 */
@@ -489,7 +496,13 @@ public class MainActivity extends Activity {
                        handleImportIntent()（切到加速页）之后才执行，
                        写死 0 会把已经请求的目标页覆盖回第一页
                        （表现：clash:// 导入进来却停在余额页）。 */
-                    int target = curPanel >= 0 ? curPanel : 0;
+                    /* ⚠️ 这里必须问 pager 的 pendingPage，不能用 curPanel。
+                       curPanel 只在 onPanelSettled 里赋值，而这段 post 跑在
+                       attach 之后、第一次 measure 之前 —— 那时它还是初值 0。
+                       结果就是"设了主页面=用量统计"、"clash:// 导入切到加速页"、
+                       托盘 goto_tab，全部被这里覆盖回第一页。 */
+                    int target = pager.getPendingPage();
+                    if (target < 0) target = curPanel >= 0 ? curPanel : 0;
                     pager.setPage(target, false);
                     onPanelSettled(target);
                 }
@@ -1622,6 +1635,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        /* 刷新没结束就退出时 setRefreshing(false) 永远不会被调用，
+           而呼吸动画是 INFINITE 的 ValueAnimator —— 它持有指示器 View，
+           进而持有整个 Activity：每进出几次就多一份泄漏 + 一个 60fps 的空转动画。 */
+        try { hidePullRefresh(); } catch (Throwable ignored) { }
         /* ⚠️ 必须停掉前台自动刷新的定时器：
            它 postDelayed 自己，Activity 销毁后仍会继续跑 ——
            既拖住整个 Activity 不放（内存泄漏），又会往已销毁的界面刷新。
@@ -1659,7 +1676,10 @@ public class MainActivity extends Activity {
         // 真正切到设置页时 onPanelSettled 会补一次，不会漏更新。
         if (settingsBinder != null && settingsPanelBuilt
                 && PageStore.K_SETTINGS.equals(curKey)) {
-            try { settingsBinder.refreshKeys(); } catch (Throwable ignored) { }
+            /* 只刷 Key 列表是不够的：用户可能在 SettingsActivity 里删/加过自定义平台
+               或高级平台，回来时这边仍是旧行。旧行捕获的是旧下标，点「删除」会删到
+               另一个平台（连带清掉它的 Key、后面整体前移）。 */
+            try { SettingsBinder.refreshAllLists(); } catch (Throwable ignored) { }
         }
         /* 回到前台就全量重抓 19 家平台，以前是无条件的 —— 频繁切前后台
            （看一眼通知再回来）就是反复 19 轮请求 + 一轮汇率。
@@ -1839,6 +1859,17 @@ public class MainActivity extends Activity {
                         /* 缓存轮次不算"刷过了"：否则接下来 60 秒内的自动刷新
                            会被 lastRefreshAt 挡住，用户以为点了没反应。 */
                         if (!r.fromCache) lastRefreshAt = System.currentTimeMillis();
+                        /* App 里刷成功的这一轮，桌面也必须看到。
+                           以前只有小组件自己那轮和单卡刷新会写缓存 ——
+                           下拉刷新后 App 变成 ¥100，桌面还是 ¥80，得等下一个后台周期。 */
+                        if (!r.fromCache) {
+                            try {
+                                WidgetCache.save(ctx, r, WidgetCache.page(ctx));
+                                Intent redraw = new Intent(ctx, BalanceWidgetProvider.class);
+                                redraw.setAction(BalanceWidgetProvider.ACTION_FORCE_REDRAW);
+                                ctx.sendBroadcast(redraw);
+                            } catch (Throwable ignored) { }
+                        }
                         if (isFinishing() || isDestroyed()) return;
                         render(r);
                         if (statsRebuildAfterRefresh && PageStore.K_STATS.equals(curKey)) {

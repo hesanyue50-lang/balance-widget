@@ -130,6 +130,20 @@ public class PullScrollView extends ScrollView {
         breath.start();
     }
 
+    /**
+     * 视图被摘掉时收掉动画。
+     *
+     * <p>刷新还没结束就退出页面时，{@code setRefreshing(false)} 不会被调用，
+     * 而呼吸动画是 {@code INFINITE} 的 —— 它会一直跑下去，
+     * 并且通过 updateListener 持有指示器 View → 持有已销毁的 Activity。
+     * 反复进出几次就是"越用越卡、后台还在耗电"。
+     */
+    @Override
+    protected void onDetachedFromWindow() {
+        try { stopBreath(); } catch (Throwable ignored) { }
+        super.onDetachedFromWindow();
+    }
+
     private void stopBreath() {
         if (breath != null) {
             try { breath.cancel(); } catch (Throwable ignored) { }

@@ -259,6 +259,13 @@ public class PanelPager extends HorizontalScrollView {
     /** 切页时如果视口宽度还没量出来，先记下来，等 onSizeChanged 再补上 */
     private int pendingPage = -1;
 
+    /** 还没量出宽度时排队的页码（-1 = 没有排队）。冷启动时页面宽度是 0，
+     *  {@code setPage()} 只把这个值记下来、等 {@code onSizeChanged} 才真正对齐，
+     *  所以在那之前想知道"用户要停在第几页"，只能问它 —— 问当前页会拿到旧值。 */
+    public int getPendingPage() {
+        return pendingPage;
+    }
+
     /** 切到某页（带动画） */
     public void setPage(int idx, boolean smooth) {
         int n = pageCount();
