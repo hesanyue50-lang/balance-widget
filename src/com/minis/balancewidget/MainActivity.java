@@ -1165,7 +1165,11 @@ public class MainActivity extends Activity {
                不能进「总消耗 ¥」—— 否则用户看到的是"用了 10 次 = ¥10.00"。
                曲线仍画（趋势有意义），只是不进金额合计。 */
             String platUnit = p != null ? p.unit : unitOfPlat.get(plat);
-            boolean moneyUnit = !"NONE".equals(platUnit);
+            /* 判"这条线是不是钱"，看的是**画出来的量纲**，不是单位填了什么：
+               asset 类（积分/额度）上面已经被 mul = StatsOpt.rate 折成 ¥，
+               所以它画出来就是钱 —— 哪怕单位填的是 POINT。
+               只有"余额制 + 单位=NONE"（纯数值平台）的线才是数量。 */
+            boolean moneyUnit = !"NONE".equals(platUnit) || isAsset;
             if (!moneyUnit) anyNonMoney = true;
             if (anyDraw) {
                 if (moneyUnit) {
