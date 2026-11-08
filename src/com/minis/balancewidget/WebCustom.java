@@ -332,6 +332,7 @@ public class WebCustom {
         w.scale = o.optDouble("scale", 1.0);
         w.template = o.optString("template", "");
         w.kind = o.optString("kind", "balance");
+        if (w.kind == null || w.kind.length() == 0) w.kind = "balance";   // 同 Custom：空串不是"没填"
         w.unit = o.optString("unit", "CNY");
         w.suffix = o.optString("suffix", "");
         w.foreign = o.optBoolean("foreign", false);

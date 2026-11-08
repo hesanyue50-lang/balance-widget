@@ -261,6 +261,13 @@ public final class Backup {
             /* 缓存类字段要清掉：它们是上一次运行的产物（比如 MiMo 会话的内存缓存），
                恢复后继续沿用旧的会读到已经不存在的密钥。 */
             BalanceFetcher.onDataRestored(c);
+            /* ★ 整库换掉之后必须重建设置页的三份列表，否则它们还按旧下标渲染 ——
+               用户点某行「删除」，删掉的是**另一个平台**，连带清掉它的 Key。
+               这条放在数据层而不是各个 UI 入口，是因为恢复有三条路径：
+               设置页选文件（onActivityResult）、本机备份记录、以及
+               从文件管理器点开 .apibak（走 onNewIntent，根本不经 onActivityResult）。
+               在入口上补，补一条漏两条。 */
+            SettingsBinder.refreshAllLists();
 
             String when = "";
             long at = root.optLong("exportedAt", 0);

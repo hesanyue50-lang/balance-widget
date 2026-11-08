@@ -326,6 +326,7 @@ public final class PlatformPack {
                         public void run() {
                             toast(act, msg);
                             BalanceFetcher.onDataRestored(act);   // 清缓存，让新平台立刻出现
+                            SettingsBinder.refreshAllLists();     // 列表整库重建（同 Backup：别指望每个入口都记得）
                         }
                     });
                 }

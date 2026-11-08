@@ -875,7 +875,12 @@ public class BalanceFetcher {
         }
         c.path = o.optString("path", "");
         c.unit = o.optString("unit", "CNY");
+        /* 空串不等于"没填"：optString 只在**键不存在**时给默认值，
+           键存在且值为 "" 时返回 ""。导入的平台包里出现空 kind，
+           统计页会把它判成"资产类"（!"balance".equals("") == true），
+           曲线单独一组、也不进账本，用户看不到它的历史。 */
         c.kind = o.optString("kind", "balance");
+        if (c.kind == null || c.kind.length() == 0) c.kind = "balance";
         c.suffix = o.optString("suffix", "");
         c.text = o.optString("text", "");
         c.threshold = o.optDouble("threshold", 0);
