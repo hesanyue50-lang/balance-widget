@@ -938,14 +938,20 @@ public class MainActivity extends Activity {
         final java.util.List<BalanceFetcher.Custom> csAll = BalanceFetcher.loadCustom(this);
         final java.util.List<WebCustom> wsAll = WebCustom.loadAll(this);
         final java.util.HashMap<String, String> unitOfPlat = new java.util.HashMap<String, String>();
+        /* 自定义平台没有 Preset，制式/单位只能从这里取 ——
+           否则「额度」「纯数值」都会按"钱"处理：次数差被画成 ¥ 曲线、
+           还进总消耗合计，用户看到"用了 10 次 = ¥10.00"。 */
+        final java.util.HashMap<String, String> kindOfPlat = new java.util.HashMap<String, String>();
         for (int i = 0; i < csAll.size(); i++) {
             String plat = "custom:" + i;
             unitOfPlat.put(plat, csAll.get(i).unit);
+            kindOfPlat.put(plat, csAll.get(i).kind);
             if (!groups.containsKey(plat)) groups.put(plat, new java.util.ArrayList<KeyStore.ApiKey>());
         }
         for (int i = 0; i < wsAll.size(); i++) {
             String plat = "web:" + i;
             unitOfPlat.put(plat, wsAll.get(i).unit);
+            kindOfPlat.put(plat, wsAll.get(i).kind);
             if (!groups.containsKey(plat)) groups.put(plat, new java.util.ArrayList<KeyStore.ApiKey>());
         }
 
@@ -978,7 +984,8 @@ public class MainActivity extends Activity {
             String plat = e.getKey();
             java.util.List<KeyStore.ApiKey> ks = e.getValue();
             BalanceFetcher.Preset p = BalanceFetcher.presetOf(plat);
-            String kind = p == null ? "balance" : p.kind;
+            String kind = p != null ? p.kind
+                    : (kindOfPlat.get(plat) == null ? "balance" : kindOfPlat.get(plat));
             boolean usd = p != null ? "USD".equals(p.unit)
                     : "USD".equals(unitOfPlat.get(plat));
             double mul = usd ? rate : 1.0;
@@ -1151,9 +1158,16 @@ public class MainActivity extends Activity {
                以前这两行在 if (anyDraw) 之外：用户在图例里关掉平台 B，
                明细只剩 A 的「消耗 ¥10」，底部却仍写「总消耗 ¥30.00」——
                差出来的 20 找不到出处。 */
+            /* 纯数值平台（单位=NONE，比如"次数""百分比"）的差值是数量不是钱，
+               不能进「总消耗 ¥」—— 否则用户看到的是"用了 10 次 = ¥10.00"。
+               曲线仍画（趋势有意义），只是不进金额合计。 */
+            String platUnit = p != null ? p.unit : unitOfPlat.get(plat);
+            boolean moneyUnit = !"NONE".equals(platUnit);
             if (anyDraw) {
-                totalCons += platCons;
-                totalCharged += platCharged;
+                if (moneyUnit) {
+                    totalCons += platCons;
+                    totalCharged += platCharged;
+                }
                 for (int d = 0; d < DAYS; d++)
                     if (!Double.isNaN(dayCons[d])) consDay[d] += dayCons[d];
                 detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
