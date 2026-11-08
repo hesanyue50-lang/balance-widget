@@ -808,6 +808,19 @@ public class SettingsActivity extends Activity {
                 /* ⚠️ 漏了这行会导致「隐藏 API」里设的隐藏状态在编辑一次后被重置回显示。
                    这里原先只跟了 draw，没跟 hideCard —— SettingsBinder:744 的同类保存是补齐的 */
                 k.hideCard = src.hideCard;
+                /* 密钥解不开时（重装 / 换机 / Keystore 被清）eKey 里是空串。
+                   此时若照常保存，enc("") 会把磁盘上的密文写成空 —— 那把 Key 就永久没了。
+                   带上 rawKey 等原字段，KeyStore.save 会原样写回密文。
+                   modelscope / dashscope 允许空 Key，所以这里拦不住，必须显式兜底。 */
+                if (k.key.length() == 0) {
+                    k.rawKey = src.rawKey;
+                    k.rawAccessKeyId = src.rawAccessKeyId;
+                    k.rawAccessKeySecret = src.rawAccessKeySecret;
+                    if (k.accessKeyId != null && k.accessKeyId.length() == 0) {
+                        k.accessKeyId = src.accessKeyId;
+                        k.accessKeySecret = src.accessKeySecret;
+                    }
+                }
                 /* 必须沿用 baseUrl：KeyStore.update 是整对象替换，
                    不带上就会被清空 —— workbuddy 网关地址就是这么丢的。 */
                 k.baseUrl = src.baseUrl;

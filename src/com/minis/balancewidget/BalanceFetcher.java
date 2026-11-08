@@ -202,11 +202,11 @@ public class BalanceFetcher {
                     if (isMoney || isAsset) {
                         /* 写入前先清掉历史假点：否则下一个点会以假值为基准算差值，
                            把 23.9 误判成"又充值了 9.38 元"。 */
-                        try { lg.dropCacheArtifacts(ctx, it.id); } catch (Throwable ig) { }
+                        try { lg.dropCacheArtifacts(ctx, ledgerKeyOf(it)); } catch (Throwable ig) { }
                         /* 积分类的变动刻度是 1 分，用"元"那套 0.005 阈值会把
                            每次刷新都记成一个点，图上全是没意义的密集点。 */
                         double eps = isMoney ? 0.005 : 0.5;
-                        lg.record(ctx, it.id, it.bal, -1, "USD".equals(it.tag), eps);
+                        lg.record(ctx, ledgerKeyOf(it), it.bal, -1, "USD".equals(it.tag), eps);
                         who.append(it.id).append(' ');
                         n++;
                     }
@@ -618,6 +618,14 @@ public class BalanceFetcher {
         public String console = "";
         /** 下次扣费日（毫秒，0 = 没填）。订阅制平台到期前提醒用 */
         public long renewAt = 0;
+        /**
+         * 磁盘上的原始密文（只在内存里，不参与导出）。
+         *
+         * 用途同 KeyStore.ApiKey.rawKey：KeyVault.dec 解不开时（重装、换机、
+         * Keystore 被清）只能返回空串，和"从未配置"无法区分。此时若照常落盘，
+         * enc("") 会把原密文写没 —— 用户所有自定义平台的 Key 就永久丢了。
+         */
+        public String rawKey = "";
 
         /** 配置完备吗？—— 静态文本模式不用填 URL，其余要有 URL */
         public boolean ready() {
@@ -699,6 +707,83 @@ public class BalanceFetcher {
         }
     }
 
+    /**
+     * 账本键：把 {@code custom0} / {@code web1} 归一成 {@code custom:0} / {@code web:1}。
+     *
+     * <p>为什么：平台标识（it.platform、Key 的归属、统计页分组）一律是「冒号」写法，
+     * 而账本早先用的是无冒号的下标写法。两套命名并存的结果是——
+     * 没有 KeyStore 记录的自定义平台，账本一直在写 {@code custom0}，
+     * 统计页拿 {@code custom:0} 去查，永远查不到：曲线空白，90 天后被 prune 删掉。
+     *
+     * <p>只改账本键，不动 {@code it.id} —— id 还被单卡刷新等路径按旧格式解析。
+     */
+    static String ledgerKeyOf(Item it) {
+        String id = it == null || it.id == null ? "" : it.id;
+        if (id.startsWith("custom:") || id.startsWith("web:")) return id;
+        if (id.startsWith("custom")) return "custom:" + id.substring(6);
+        if (id.startsWith("web")) return "web:" + id.substring(3);
+        return id;
+    }
+
+    /**
+     * 一次性把账本里的旧下标键改成冒号写法。
+     *
+     * <p>不迁移的话，历史曲线会在改版那一刻断掉（新键从零积累），
+     * 用户会看到「还能用几天」突然消失。
+     */
+    public static void migrateLedgerKeys(Context ctx) {
+        try {
+            SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            if (sp.getBoolean("ledger_keys_colon_v1", false)) return;
+            Ledger.migrateIndexKeysToColon(ctx);
+            sp.edit().putBoolean("ledger_keys_colon_v1", true).commit();
+            diag(ctx, "账本键已迁移为冒号写法（custom0 → custom:0）");
+        } catch (Throwable ignored) { }
+    }
+
+    /**
+     * 原始存档条数（含 ready()==false 的隐藏项）。
+     *
+     * <p>判断「custom:N 这个下标还有没有效」必须用它，不能用 loadCustom().size()：
+     * loadCustom 会过滤掉配置不完整的条目，拿过滤后的长度去比，
+     * 后面所有合法平台都会被误判成"孤儿"，它们的 Key 会被清掉。
+     *
+     * @return -1 = 存档读不出来（调用方应保守处理：一律保留）
+     */
+    public static int rawCustomCount(Context ctx) {
+        try {
+            JSONArray arr = new JSONArray(ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString("custom_json", "[]"));
+            return arr.length();
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /**
+     * 按内容删一条（不信下标）。用 loadCustom()+saveCustom() 删会把隐藏项一起抹掉 ——
+     * 那些用户在界面上看不见，但确实是他的配置。
+     */
+    public static synchronized void removeCustom(Context ctx, String name, String url, String text) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        try {
+            JSONArray arr = new JSONArray(sp.getString("custom_json", "[]"));
+            JSONArray out = new JSONArray();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o != null && eqStr(o.optString("name", ""), name)
+                        && eqStr(o.optString("url", ""), url)
+                        && eqStr(o.optString("text", ""), text)) {
+                    continue;
+                }
+                if (o != null) out.put(o);
+            }
+            if (out.length() != arr.length()) {
+                sp.edit().putString("custom_json", out.toString()).commit();
+            }
+        } catch (Throwable ignored) { }
+    }
+
     private static boolean eqStr(String a, String b) {
         if (a == null) a = "";
         if (b == null) b = "";
@@ -730,7 +815,15 @@ public class BalanceFetcher {
         try {
             o.put("name", c.name);
             o.put("url", c.url);
-            o.put("key", plain ? c.key : KeyVault.enc(c.key));
+            if (plain) {
+                o.put("key", c.key);
+            } else {
+                /* 解不开时 key 是空串，enc("") -> ""，会把磁盘上的密文写成空。
+                   有 rawKey 就原样写回去 —— 换回原设备或原系统还能救。 */
+                o.put("key", (c.key == null || c.key.length() == 0)
+                        && c.rawKey != null && c.rawKey.length() > 0
+                        ? c.rawKey : KeyVault.enc(c.key));
+            }
             o.put("path", c.path);
             o.put("unit", c.unit);
             o.put("kind", c.kind);
@@ -749,7 +842,12 @@ public class BalanceFetcher {
         c.name = o.optString("name", "");
         c.url = o.optString("url", "");
         String k = o.optString("key", "");
-        c.key = stored ? KeyVault.dec(k) : k;
+        if (stored) {
+            c.rawKey = k;          // 记住原始密文，保存时用它兜底
+            c.key = KeyVault.dec(k);
+        } else {
+            c.key = k;
+        }
         c.path = o.optString("path", "");
         c.unit = o.optString("unit", "CNY");
         c.kind = o.optString("kind", "balance");
@@ -2668,7 +2766,7 @@ public class BalanceFetcher {
                 kl = new java.util.ArrayList<String>();
                 platKeys.put(plat, kl);
             }
-            kl.add(it.id);
+            kl.add(ledgerKeyOf(it));   // 与账本写入同一个键，否则预测永远查不到
             Item prev = byPlat.get(plat);
             if (prev == null) {
                 it.mergeCount = 1;
@@ -2982,8 +3080,11 @@ public class BalanceFetcher {
         String fresh = w.refreshedCookie;
         if (fresh != null && fresh.length() > 0 && ctx != null) {
             try {
-                w.headers = WebCustom.mergeHeader(w.headers, "Cookie", fresh);
-                WebCustom.putOne(ctx, w, w.name, w.url);
+                /* ⚠️ 只改 headers，不整条写：这个 w 是抓取开始时的快照，
+                   整条写回会把用户此刻正在编辑的阈值/按钮冲掉。 */
+                String merged = WebCustom.mergeHeader(w.headers, "Cookie", fresh);
+                w.headers = merged;
+                WebCustom.putHeaders(ctx, w.name, w.url, merged);
                 diag(ctx, "登录态已续期 " + w.name + "（" + CookieJar.names(fresh) + "）");
             } catch (Throwable ignored) { }
         }

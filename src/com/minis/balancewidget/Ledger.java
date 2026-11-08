@@ -74,7 +74,7 @@ public final class Ledger extends SQLiteOpenHelper {
                 + "balance REAL NOT NULL,"          // 余额（原币种，便于比对充值档位）
                 + "topped_up REAL"                  // 累计充值（平台不给则 NULL）
                 + ")");
-        db.execSQL("CREATE INDEX idx_snap ON " + T_SNAP + "(key_id, ts)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_snap ON " + T_SNAP + "(key_id, ts)");
 
         db.execSQL("CREATE TABLE " + T_RECH + " ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -84,14 +84,15 @@ public final class Ledger extends SQLiteOpenHelper {
                 + "matched REAL,"                   // 匹配到的档位（NULL = 没匹配上）
                 + "amount REAL NOT NULL"            // 记账金额（匹配值，或净增）
                 + ")");
-        db.execSQL("CREATE INDEX idx_rech ON " + T_RECH + "(key_id, ts)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_rech ON " + T_RECH + "(key_id, ts)");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
-        // 结构变了就重建 —— 这个库是纯记录，重建的代价只是丢历史，不会影响功能
-        db.execSQL("DROP TABLE IF EXISTS " + T_SNAP);
-        db.execSQL("DROP TABLE IF EXISTS " + T_RECH);
+        /* ⚠️ 早先这里是 DROP TABLE 再重建，注释还写着"代价只是丢历史，不影响功能" ——
+           恰恰相反：历史是这个 App 里最贵的用户数据（攒 90 天的曲线，
+           支撑统计页和"还能用几天"）。只要以后谁把 VER 加 1，用户全部历史当场清空。
+           改成幂等建表：表已存在就什么都不做，以后真要加列在这里写 ALTER TABLE。 */
         onCreate(db);
     }
 
@@ -377,6 +378,101 @@ public final class Ledger extends SQLiteOpenHelper {
             cur.close();
         } catch (Throwable ignored) { }
         return out;
+    }
+
+    /**
+     * 一次性迁移：{@code custom0 → custom:0}、{@code web1 → web:1}。
+     *
+     * <p>老账本的键是「下标不加冒号」写法，而平台标识、统计页查询一律用冒号写法。
+     * 两套并存时，没有 KeyStore 记录的自定义平台会一直往 {@code custom0} 写，
+     * 统计页拿 {@code custom:0} 查 —— 永远空白，90 天后被 prune 删掉。
+     *
+     * <p>由 {@code BalanceFetcher.migrateLedgerKeys()} 保证只跑一次。
+     */
+    public static void migrateIndexKeysToColon(Context c) {
+        try {
+            SQLiteDatabase db = get(c).getWritableDatabase();
+            db.beginTransaction();
+            try {
+                String[] tables = { T_SNAP, T_RECH };
+                for (int i = 0; i < tables.length; i++) {
+                    String t = tables[i];
+                    /* SUBSTR 是 1-based：'custom0' 从第 7 位起 = "0"；'web0' 从第 4 位起 = "0" */
+                    db.execSQL("UPDATE " + t + " SET key_id = 'custom:' || SUBSTR(key_id, 7) "
+                            + "WHERE key_id LIKE 'custom%' AND key_id NOT LIKE 'custom:%'");
+                    db.execSQL("UPDATE " + t + " SET key_id = 'web:' || SUBSTR(key_id, 4) "
+                            + "WHERE key_id LIKE 'web%' AND key_id NOT LIKE 'web:%'");
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        } catch (Throwable ignored) {
+            /* 迁移失败不影响使用：新数据会用新键，旧数据只是查不到曲线 */
+        }
+    }
+
+    /**
+     * 平台被删除后，把账本里 idx 之后的键前移一位。
+     *
+     * <p>为什么要做：自定义 / 高级平台的账本键是 {@code custom0}、{@code web1} 这种**下标**。
+     * 删掉第 2 个之后，原来的第 3 个改叫第 2 个，而它继承的却是第 2 个的历史曲线 ——
+     * 表现为统计图突然跳变、"还能用几天"算错，而且错得很像真的。
+     *
+     * <p>必须和 Key 重排同步做：密钥按 {@code custom:N} 存、账本按 {@code customN} 存，
+     * 两套下标要一起动，否则密钥与曲线会错配到不同平台。
+     *
+     * @param prefix     {@code "custom"} 或 {@code "web"}
+     * @param removedIdx 被删掉的下标
+     */
+    public static void shiftKeys(Context c, String prefix, int removedIdx) {
+        if (c == null || prefix == null || removedIdx < 0) return;
+        try {
+            SQLiteDatabase db = get(c).getWritableDatabase();
+            java.util.TreeSet<Integer> idxs = new java.util.TreeSet<Integer>();
+            String[] tables = { T_SNAP, T_RECH };
+            for (int ti = 0; ti < tables.length; ti++) {
+                Cursor cu = db.rawQuery(
+                        "SELECT DISTINCT key_id FROM " + tables[ti] + " WHERE key_id LIKE ?",
+                        new String[] { prefix + "%" });
+                try {
+                    while (cu.moveToNext()) {
+                        String k = cu.getString(0);
+                        if (k == null || k.length() <= prefix.length()) continue;
+                        try {
+                            idxs.add(Integer.parseInt(k.substring(prefix.length())));
+                        } catch (Exception ignored) { }
+                    }
+                } finally {
+                    cu.close();
+                }
+            }
+            if (idxs.isEmpty()) return;
+
+            db.beginTransaction();
+            try {
+                /* 先删被删平台自己的历史（留着就是一条看不见的幽灵曲线，
+                   以后新平台占了同一个下标就会继承它）。 */
+                db.delete(T_SNAP, "key_id=?", new String[] { prefix + removedIdx });
+                db.delete(T_RECH, "key_id=?", new String[] { prefix + removedIdx });
+                /* 再**升序**前移：先 3→2，被删的 2 已经空了；
+                   降序会撞上还没搬走的邻居。 */
+                for (java.util.Iterator<Integer> it = idxs.iterator(); it.hasNext(); ) {
+                    int i = it.next();
+                    if (i <= removedIdx) continue;
+                    ContentValues v = new ContentValues();
+                    v.put("key_id", prefix + (i - 1));
+                    String from = prefix + i;
+                    db.update(T_SNAP, v, "key_id=?", new String[] { from });
+                    db.update(T_RECH, v, "key_id=?", new String[] { from });
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        } catch (Throwable ignored) {
+            /* 账本重排失败不该让"删除平台"这个操作整体失败 */
+        }
     }
 
     // ---------- 预测 ----------
@@ -684,7 +780,22 @@ public final class Ledger extends SQLiteOpenHelper {
     // ---------- 清理 ----------
 
     /** 只留最近 N 天（设置里可调） */
+    /**
+     * 清理超期数据。
+     *
+     * <p>⚠️ 早先每次成功刷新（最短 5 分钟一次）都会跑一遍 —— 而 {@code DELETE ... WHERE ts<?}
+     * 用不上 {@code idx_snap(key_id, ts)}（首列是 key_id），是整表扫。
+     * 十几万行时每次几十毫秒、还占着写事务，低端机上是白耗电，也会和预测的读查询抢库锁。
+     * 现在改成 12 小时最多一次：清理本来就不需要那么勤。
+     */
     public int prune(Context c, int keepDays) {
+        try {
+            android.content.SharedPreferences sp =
+                    c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
+            long last = sp.getLong("last_prune_at", 0);
+            if (System.currentTimeMillis() - last < 12L * 3600L * 1000L) return 0;
+            sp.edit().putLong("last_prune_at", System.currentTimeMillis()).apply();
+        } catch (Throwable ignored) { }
         try {
             long cut = System.currentTimeMillis() - (long) keepDays * 24 * 3600 * 1000L;
             SQLiteDatabase db = getWritableDatabase();

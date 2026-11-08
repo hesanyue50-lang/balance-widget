@@ -123,6 +123,18 @@ public final class WidgetCache {
            都靠它们。丢了 subEndMs 订阅到期提醒不再触发，丢了 pctLeft/hasQuota
            积分卡片的"剩余 %"消失，丢了 estimated 总额的 ≈ 标记也没了。 */
         x.put("subEndMs", it.subEndMs);
+        /* keyIds 必须存：缓存复用时 Alert.mark 仍会算预测，
+           而合并卡的 it.id 是平台标识、账本按密钥记账 —— 没有 keyIds 就永远查不到，
+           表现为一次并发刷新后所有卡片的"约剩 N 天"集体消失。 */
+        try {
+            org.json.JSONArray ka = new org.json.JSONArray();
+            if (it.keyIds != null) {
+                for (int ki = 0; ki < it.keyIds.length; ki++) ka.put(it.keyIds[ki]);
+            }
+            x.put("keyIds", ka);
+        } catch (Throwable ignored) { }
+        x.put("daysLeft", it.daysLeft);
+        x.put("forecastHint", it.forecastHint == null ? "" : it.forecastHint);
         x.put("estimated", it.estimated);
         x.put("pctLeft", it.pctLeft);
         x.put("hasQuota", it.hasQuota);
@@ -151,6 +163,15 @@ public final class WidgetCache {
         it.gatewayUrl = x.optString("gatewayUrl", "");
         it.gatewayDown = x.optBoolean("gatewayDown", false);
         it.subEndMs = x.optLong("subEndMs", 0);
+        try {
+            org.json.JSONArray ka = x.optJSONArray("keyIds");
+            if (ka != null && ka.length() > 0) {
+                it.keyIds = new String[ka.length()];
+                for (int ki = 0; ki < ka.length(); ki++) it.keyIds[ki] = ka.optString(ki, "");
+            }
+        } catch (Throwable ignored) { }
+        it.daysLeft = x.optInt("daysLeft", -1);
+        it.forecastHint = x.optString("forecastHint", "");
         it.estimated = x.optBoolean("estimated", false);
         it.pctLeft = x.optInt("pctLeft", -1);
         it.hasQuota = x.optBoolean("hasQuota", false);

@@ -13,6 +13,14 @@ public class App extends Application {
            必须留下堆栈才查得动（这台机器的 logcat 对 shell 是空的） */
         CrashGuard.install(this);
 
+        /* 账本键一次性迁移（custom0 → custom:0）。放后台线程：这是几万行的
+           UPDATE，压在启动首帧前会肉眼可见地卡一下；内部有 prefs 标记，只跑一次。 */
+        new Thread(new Runnable() {
+            public void run() {
+                try { BalanceFetcher.migrateLedgerKeys(App.this); } catch (Throwable ignored) { }
+            }
+        }, "ledger-key-migrate").start();
+
         /* 上次崩溃了？在**任何**可能崩的组件初始化之前，先把提示页顶出来。
            做法：这里只置一个标记，由启动页（MainActivity 在 setContentView 前）
            检查并跳转 —— Application 里直接 startActivity 有 ROM 不认，

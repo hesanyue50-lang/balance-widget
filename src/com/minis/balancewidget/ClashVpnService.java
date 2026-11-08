@@ -123,7 +123,17 @@ public class ClashVpnService extends VpnService {
             return;
         }
 
-        startForegroundSafely();
+        /* 前台通知建不起来就别继续了。
+           ⚠️ 早先是 catch 掉异常继续跑：服务没有前台身份，系统 5 秒后以
+           "没有调用 startForeground" 把整个进程杀掉（用户看到的是闪退），
+           而界面上的 running 还是 true、通知写着"已接管全部流量" —— 状态全错。
+           宁可启动失败（明确报错），也不要假装启动成功。 */
+        if (!startForegroundSafely()) {
+            BalanceFetcher.diag(this, "前台通知建不起来，VPN 不启动");
+            starting = false;
+            stopSelf();
+            return;
+        }
 
         /* ⚠️ 必须放到后台线程。
            onStartCommand 是在**主线程**跑的，而下面这段里有两处会阻塞：
@@ -276,7 +286,8 @@ public class ClashVpnService extends VpnService {
 
     // ---------------- 前台通知 ----------------
 
-    private void startForegroundSafely() {
+    /** @return false = 前台通知没建起来，调用方必须放弃启动（否则系统会杀进程） */
+    private boolean startForegroundSafely() {
         try {
             if (Build.VERSION.SDK_INT >= 26) {
                 NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -302,8 +313,10 @@ public class ClashVpnService extends VpnService {
             nb.setContentIntent(pi);
 
             startForeground(NOTI_ID, nb.build());
+            return true;
         } catch (Throwable t) {
             BalanceFetcher.diag(this, "前台通知创建失败 " + t);
+            return false;
         }
     }
 

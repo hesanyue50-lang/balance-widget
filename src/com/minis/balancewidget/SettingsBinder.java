@@ -715,17 +715,21 @@ public class SettingsBinder {
                 KeyStore.ApiKey k = all.get(i);
                 String pf = k.platform == null ? "" : k.platform;
                 boolean orphan = false;
+                /* ⚠️ 必须用**原始存档条数**，不能用 loadCustom().size()：
+                   后者会过滤掉配置不完整（name 为空之类）的隐藏条目，
+                   拿过滤后的长度比，后面所有合法平台都会被判成孤儿，
+                   它们的 Key 就被静默删掉了。 */
                 if (pf.startsWith("custom:")) {
                     try {
                         int pi = Integer.parseInt(pf.substring(7));
-                        List<BalanceFetcher.Custom> cs = BalanceFetcher.loadCustom(act);
-                        orphan = pi < 0 || pi >= cs.size();
+                        int n = BalanceFetcher.rawCustomCount(act);
+                        orphan = n >= 0 && (pi < 0 || pi >= n);
                     } catch (Throwable ig) { orphan = false; }   // 读不出来就保留，别当孤儿删掉
                 } else if (pf.startsWith("web:")) {
                     try {
                         int pi = Integer.parseInt(pf.substring(4));
-                        List<WebCustom> ws = WebCustom.loadAll(act);
-                        orphan = pi < 0 || pi >= ws.size();
+                        int n = WebCustom.rawCount(act);
+                        orphan = n >= 0 && (pi < 0 || pi >= n);
                     } catch (Throwable ig) { orphan = false; }   // 同理
                 }
                 if (orphan) {
@@ -1668,12 +1672,13 @@ public class SettingsBinder {
                 public void onClick(View v) {
                     List<WebCustom> list = WebCustom.loadAll(act);
                     if (idx < list.size()) {
-                        list.remove(idx);
-                        WebCustom.saveAll(act, list);
-                        /* ⚠️ 不能只删被删平台自己的 Key：删掉 web:1 之后，
-                           原来的 web:2 会变成新的 web:1 —— 后面所有平台的 Key
-                           都挂在旧 id 上，等于全部错配（还会留下孤儿）。
-                           所以 idx 及之后的旧映射一律清掉（和删自定义平台同一套处理）。 */
+                        WebCustom del = list.get(idx);
+                        WebCustom.removeOne(act, del.name, del.url);
+                        /* 删掉 web:1 之后，原来的 web:2 会变成新的 web:1 ——
+                           后面所有平台的 Key 都挂在旧 id 上，不处理就是全部错配。
+                           ⚠️ 早先这里是「idx 及之后一律清掉」，注释写着重排、代码没做：
+                           用户删一个高级平台，后面每个高级平台的密钥都被静默删除，
+                           还得一个个重填。现在按自定义平台同一套逻辑**前移一位**。 */
                         List<KeyStore.ApiKey> all = KeyStore.all(act);
                         List<KeyStore.ApiKey> keep = new java.util.ArrayList<KeyStore.ApiKey>();
                         for (int ki = 0; ki < all.size(); ki++) {
@@ -1682,7 +1687,10 @@ public class SettingsBinder {
                             if (pf.startsWith("web:")) {
                                 try {
                                     int pi = Integer.parseInt(pf.substring(4));
-                                    if (pi >= idx) continue;   // 被删平台及其后的旧映射
+                                    if (pi == idx) continue;      // 被删平台的 Key，一起丢
+                                    if (pi > idx) {               // 后面的平台前移一位
+                                        kk.platform = "web:" + (pi - 1);
+                                    }
                                 } catch (Throwable ig) { continue; }
                             }
                             keep.add(kk);
@@ -1690,7 +1698,12 @@ public class SettingsBinder {
                         KeyStore.save(act, keep);
                     }
                     Busy.run(act, "正在更新…", new Runnable() {
-                        public void run() { renderWebs(); kick(); }
+                        public void run() {
+                            /* 账本重排要改两张表、几十个键，放主线程会在遮罩还没盖上时
+                               僵一下；挪进 Busy 的 heavy 里正好被遮住 */
+                            Ledger.shiftKeys(act, "web:", idx);
+                            renderWebs(); kick();
+                        }
                     });
                 }
             });
@@ -2607,8 +2620,10 @@ public class SettingsBinder {
                 public void onClick(View v) {
                     List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(act);
                     if (idx < list.size()) {
-                        list.remove(idx);
-                        BalanceFetcher.saveCustom(act, list);
+                        /* 按内容删，不整表写回 —— loadCustom() 已经滤掉了隐藏条目，
+                           拿它整表覆盖会把那些条目永久删掉。 */
+                        BalanceFetcher.Custom del = list.get(idx);
+                        BalanceFetcher.removeCustom(act, del.name, del.url, del.text);
                         /* 同步清掉这个平台的 Key（孤儿 Key 会让统计页出现 custom:N）。
                            ⚠️ 后面的平台会前移（custom:1 → custom:0），
                            所以要把 idx 之后的所有平台 Key 都重排 —— 干脆全清重标。 */
@@ -2631,7 +2646,10 @@ public class SettingsBinder {
                         KeyStore.save(act, keep);
                     }
                     Busy.run(act, "正在更新…", new Runnable() {
-                        public void run() { renderCustoms(); renderKeys(); kick(); }
+                        public void run() {
+                            Ledger.shiftKeys(act, "custom:", idx);
+                            renderCustoms(); renderKeys(); kick();
+                        }
                     });
                 }
             });

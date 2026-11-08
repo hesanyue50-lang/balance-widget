@@ -91,9 +91,17 @@ public class Alert {
                     if (est != null) {
                         it.daysLeft = Prediction.daysLeft(it.bal, est.perDay);
                         if (it.daysLeft <= 0 && est.validDays > 0) {
-                            int need = (int) Math.ceil(24 - est.validDays * 24);
-                            if (need < 1) need = 1;
-                            it.forecastHint = "消耗速度积累中（还需约 " + need + " 小时）";
+                            double have = est.validDays * 24;
+                            if (have < 24) {
+                                int need = (int) Math.ceil(24 - have);
+                                if (need < 1) need = 1;
+                                it.forecastHint = "消耗速度积累中（还需约 " + need + " 小时）";
+                            } else {
+                                /* 有足够长的数据却算不出速率 = 这段时间余额没怎么下降。
+                                   以前这里会算成 need = 24 - 168 = 负数 → 夹到 1，
+                                   于是永远显示"还需约 1 小时"，等到天荒地老也不变。 */
+                                it.forecastHint = "近期余额没有明显下降，暂不预测";
+                            }
                         }
                     }
                 }

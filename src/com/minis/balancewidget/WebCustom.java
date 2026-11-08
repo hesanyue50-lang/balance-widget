@@ -189,6 +189,62 @@ public class WebCustom {
         }
     }
 
+    /**
+     * 只回写 headers 一个字段（刷新线程专用）。
+     *
+     * <p>为什么不能像普通保存那样整条写：后台刷新手里拿的是**抓取开始时**的对象快照，
+     * 用户这时候可能正在设置页改阈值/按钮/扣费日。整条 all-in 会把他的编辑冲掉
+     * （UI 还会说"已保存"），或者把刚续期的 Cookie 回退成旧的。
+     *
+     * <p>按 name+url 定位；对不上就**什么都不做** —— 宁可丢一次续期，
+     * 也不能 append 出一条重复平台（那会让后面所有 web:N 下标后移，
+     * Key 与账本全错位）。
+     */
+    public static synchronized void putHeaders(Context ctx, String name, String url, String headers) {
+        try {
+            JSONArray arr = new JSONArray(sp(ctx).getString(KEY, "[]"));
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                if (!eq(o.optString("name", ""), name)) continue;
+                if (!eq(o.optString("url", ""), url)) continue;
+                o.put("headers", headers == null ? "" : headers);
+                arr.put(i, o);
+                sp(ctx).edit().putString(KEY, arr.toString()).commit();
+                return;
+            }
+        } catch (Throwable ignored) { }
+    }
+
+    /** 原始存档条数（含 ready()==false 的隐藏项）。-1 = 读不出来，调用方保守保留 */
+    public static int rawCount(Context ctx) {
+        try {
+            JSONArray arr = new JSONArray(sp(ctx).getString(KEY, "[]"));
+            return arr.length();
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /** 按内容删一条（不信下标，也不丢隐藏项） */
+    public static synchronized void removeOne(Context ctx, String name, String url) {
+        try {
+            JSONArray arr = new JSONArray(sp(ctx).getString(KEY, "[]"));
+            JSONArray out = new JSONArray();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o != null && eq(o.optString("name", ""), name)
+                        && eq(o.optString("url", ""), url)) {
+                    continue;
+                }
+                if (o != null) out.put(o);
+            }
+            if (out.length() != arr.length()) {
+                sp(ctx).edit().putString(KEY, out.toString()).commit();
+            }
+        } catch (Throwable ignored) { }
+    }
+
     private static boolean eq(String a, String b) {
         if (a == null) a = "";
         if (b == null) b = "";

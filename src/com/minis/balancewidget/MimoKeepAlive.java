@@ -40,6 +40,16 @@ public final class MimoKeepAlive {
     private static final long DEADLINE_MS = 30 * 1000L;
 
     private static WebView web;
+    /**
+     * 代次号：每次 start() 递增。
+     *
+     * 为什么需要：finish() 收尾后那个 30 秒兜底定时器**还挂在主线程队列里**
+     * （View.postDelayed 挂在 AttachInfo 的 Handler 上，View 销毁不影响它）。
+     * 这期间只要再起一轮（forceNow 会把 lastAt 清零），到点旧定时器就会作用到
+     * **新的** WebView 上：把它当场 destroy（保活白跑），并把 busy 误置 false
+     * 导致第三个实例挂上去没人收。回调只认自己那一代就能根治。
+     */
+    private static int gen;
     private static boolean busy;
     private static long lastAt;
     /** 收尾时还要写日志/落盘，Activity 可能已经不可用 → 存 application context */
@@ -80,6 +90,7 @@ public final class MimoKeepAlive {
     }
 
     private static void start(final Activity act) {
+        final int myGen = ++gen;
         final WebView w;
         try {
             busy = true;
@@ -110,6 +121,7 @@ public final class MimoKeepAlive {
             /* onPageFinished 收尾；loaded 标志保证只收尾一次 */
             w.setWebViewClient(new WebViewClient() {
                 public void onPageFinished(WebView v, String url) {
+                    if (myGen != gen) return;      // 已经是上一代了，别动现在的实例
                     /* 不能只看路径里有没有 "/login"：小米 SSO 会跳到
                        account.xiaomi.com（路径不含 /login），加载失败页也没有。
                        判据改成"是否还在控制台域名下" —— 离开就是会话失效。 */
@@ -119,7 +131,7 @@ public final class MimoKeepAlive {
                     BalanceFetcher.diag(appCtx, "MiMo 保活：页面加载完成"
                             + (toLogin ? "（被弹回登录页 → 会话已失效）" : "（仍在控制台）")
                             + " " + (System.currentTimeMillis() - t0) + "ms");
-                    finish(toLogin);
+                    finishLater(w, toLogin);
                 }
             });
             w.loadUrl(BalanceFetcher.MIMO_HOST + "/console/balance");
@@ -127,8 +139,9 @@ public final class MimoKeepAlive {
             /* 兜底收尾：网络卡住时不能无限等 */
             w.postDelayed(new Runnable() {
                 public void run() {
+                    if (myGen != gen) return;      // 上一代的定时器，别收这一代
                     BalanceFetcher.diag(appCtx, "MiMo 保活：超时兜底收尾");
-                    finish(false);
+                    finishLater(w, false);
                 }
             }, DEADLINE_MS);
         } catch (Throwable t) {
@@ -143,6 +156,24 @@ public final class MimoKeepAlive {
      * 这一步是关键 —— CookieManager 和 App 存的那份是两份独立数据，
      * 不同步的话保活白做（页面是刷新了，但真正拿去查余额的还是老 cookie）。
      */
+    /**
+     * 把收尾挪到 WebView 回调栈之外。
+     *
+     * <p>直接在 {@code onPageFinished} 里 removeView + stopLoading + destroy 是危险的：
+     * AwContents 正在回调栈上，销毁会撞上 "destroy() called while still executing"。
+     * 而且必须确认要收的就是那一代实例 —— 否则会销毁错的 WebView，
+     * 还会按错的 toLogin 去写"登录已失效"标记。
+     */
+    private static void finishLater(final WebView who, final boolean toLogin) {
+        if (who == null || who != web) return;
+        who.post(new Runnable() {
+            public void run() {
+                if (who != web) return;
+                finish(toLogin);
+            }
+        });
+    }
+
     private static void finish(boolean toLogin) {
         try {
             if (web != null) {
