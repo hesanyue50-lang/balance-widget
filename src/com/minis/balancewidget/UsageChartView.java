@@ -104,6 +104,10 @@ public class UsageChartView extends View {
     /** 按住时的提示框画笔（原来每帧 new 一个，按住拖动时持续产生垃圾） */
     private final Paint pTip = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final String[] yLabels = new String[5];
+    /* Y 轴单位前缀。默认 ¥ —— 这个组件本来是给"钱"画的，
+       但纯数值平台（单位=次数/百分比）也会走同一套坐标轴，
+       固定标 ¥ 就等于把"用了 10 次"写成"¥10.00"。 */
+    private String yPrefix = "¥";
     private double yLabelMax = Double.NaN;
     private int yLabelH = -1;
     private LinearGradient fillGrad;
@@ -144,6 +148,15 @@ public class UsageChartView extends View {
         pMark.setFakeBoldText(true);
         pLegend.setTextSize(26f);
         pLegend.setFakeBoldText(true);
+    }
+
+    /** Y 轴单位前缀：全金额传 "¥"，有非金额平台传 ""（混合量纲不该标任一单位）。 */
+    public void setYPrefix(String prefix) {
+        String n = prefix == null ? "" : prefix;
+        if (!n.equals(yPrefix)) {
+            yPrefix = n;
+            yLabelMax = -1;          // 强制下一帧重算刻度文字
+        }
     }
 
     public void setData(List<Series> series, double[] bars, String[] labels,
@@ -199,7 +212,7 @@ public class UsageChartView extends View {
         pAxis.setColor(0xFF6E7887);
         if (yLabelMax != maxLine || yLabelH != (int) ch) {
             for (int g = 0; g <= 4; g++) {
-                yLabels[g] = "¥" + fmt(maxLine * (4 - g) / 4f);
+                yLabels[g] = yPrefix + fmt(maxLine * (4 - g) / 4f);
             }
             yLabelMax = maxLine;
             yLabelH = (int) ch;

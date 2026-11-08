@@ -977,6 +977,9 @@ public class MainActivity extends Activity {
         double totalCons = 0;
         double totalCharged = 0;
         int balIdx = 0;
+        /* 组里有没有非金额平台 —— 决定 Y 轴能不能标 ¥、明细写不写「¥」。
+           必须在循环**外**：循环内声明的话，出循环就用不到了（Y 轴在循环后设）。 */
+        boolean anyNonMoney = false;
 
         for (java.util.Iterator<java.util.Map.Entry<String, java.util.List<KeyStore.ApiKey>>> it =
                 groups.entrySet().iterator(); it.hasNext(); ) {
@@ -1163,6 +1166,7 @@ public class MainActivity extends Activity {
                曲线仍画（趋势有意义），只是不进金额合计。 */
             String platUnit = p != null ? p.unit : unitOfPlat.get(plat);
             boolean moneyUnit = !"NONE".equals(platUnit);
+            if (!moneyUnit) anyNonMoney = true;
             if (anyDraw) {
                 if (moneyUnit) {
                     totalCons += platCons;
@@ -1170,8 +1174,15 @@ public class MainActivity extends Activity {
                 }
                 for (int d = 0; d < DAYS; d++)
                     if (!Double.isNaN(dayCons[d])) consDay[d] += dayCons[d];
-                detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
-                      .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
+                if (moneyUnit) {
+                    detail.append(name).append("   充值 ¥").append(String.format("%.2f", platCharged))
+                          .append("   消耗 ¥").append(String.format("%.2f", platCons)).append("\n");
+                } else {
+                    /* 纯数值平台写「¥」就是错的：这是次数/百分比，不是钱 */
+                    String u = platUnit == null || platUnit.length() == 0 ? "" : platUnit;
+                    detail.append(name).append("   变化 ").append(String.format("%.0f", platCons))
+                          .append(u).append("\n");
+                }
                 int lineColor0 = CHART_PALETTE[balIdx % CHART_PALETTE.length];
                 int lineColor = StatsOpt.effectiveColor(this, plat, lineColor0);
                 platformColor.put(plat, Integer.valueOf(lineColor));
@@ -1193,6 +1204,9 @@ public class MainActivity extends Activity {
            某些设备/重打包后 findViewById 会返回 null，一切到统计页就 NPE 崩。
            文件开头注释本身就记录过这个现象。 */
         if (chart != null) {
+            /* 只要组里有非金额平台，Y 轴就不标 ¥：
+               混着"次数"和"元"的刻度标哪个都是错的，不如不标。 */
+            chart.setYPrefix(anyNonMoney ? "" : "¥");
             chart.setData(series, showBars ? consDay : null, labels, showBars, showGrid, showLegend);
         }
         statsSeries = series;
