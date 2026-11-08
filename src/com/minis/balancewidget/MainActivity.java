@@ -2444,6 +2444,12 @@ public class MainActivity extends Activity {
                     } else {
                         daysTv.setVisibility(View.GONE);
                     }
+                } else if (it.forecastHint != null && it.forecastHint.length() > 0) {
+                    /* 数据还不够 24 小时：明确告诉用户在攒，而不是留一片空白 ——
+                       空白会被理解成"功能没做"或"坏了"。 */
+                    daysTv.setVisibility(View.VISIBLE);
+                    daysTv.setText(it.forecastHint);
+                    daysTv.setTextColor(Theme.c(this, R.attr.c_tx3));
                 } else {
                     daysTv.setVisibility(View.GONE);
                 }
@@ -2556,6 +2562,28 @@ public class MainActivity extends Activity {
      */
     private void showRelogin(final BalanceFetcher.Item it) {
         final String p = it.platform == null ? "" : it.platform;
+
+        /* 小米 MiMo：会话只有十几分钟，绝大多数"失效"其实是 App 很久没进前台、
+           没人去触发那次静默续期。先续一次 —— 续得上就不用麻烦用户，
+           这也正是他要的"只有彻底过期才找我"。 */
+        if ("mimo".equals(p)) {
+            Toast.makeText(this, "正在尝试自动续期…", Toast.LENGTH_SHORT).show();
+            MimoKeepAlive.forceNow(this);
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+                public void run() {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (BalanceFetcher.mimoExpired(MainActivity.this)) {
+                        Toast.makeText(MainActivity.this, "自动续期没成功，请重新登录小米账号",
+                                Toast.LENGTH_LONG).show();
+                        startActivity(new android.content.Intent(MainActivity.this,
+                                MimoLoginActivity.class));
+                    } else {
+                        refresh(true);
+                    }
+                }
+            }, 6000);
+            return;
+        }
         if (p.startsWith("web:")) {
             int t = -1;
             try { t = Integer.parseInt(p.substring(4)); } catch (Exception ignored) { }

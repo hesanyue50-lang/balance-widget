@@ -781,6 +781,8 @@ public class BalanceFetcher {
         public long subEndMs = 0;       // 订阅制最近到期时间戳（按到期天数报警用）
         /** 按近期消耗速度还能用几天（-1 = 算不出来 / 不该显示） */
         public int daysLeft = -1;
+        /** 预测可用前的提示（"速度积累中，还需 12 小时"）。空串 = 不显示 */
+        public String forecastHint = "";
         public int mergeCount = 1;      // 合并了多少个密钥（同平台，卡片按平台合并时用）
         /** 这张卡背后是哪些密钥 id（账本按密钥记账，预测必须用它们查，
             不能用合并后的 platform —— 那是个永远查不到历史的平台标识） */
@@ -1288,6 +1290,26 @@ public class BalanceFetcher {
         }
         if (m.contains("403") || m.contains("Forbidden")) {
             return "服务端拒绝访问（403）—— Key 可能没开通对应权限，或该地区被限制（可尝试走代理）";
+        }
+        /* ---- 以下四类是"用户能自己修"的，必须给出能动手的方向 ---- */
+        if (m.contains("404") || m.contains("Not Found")) {
+            return "地址不对（404）—— 接口路径可能变了，或这条平台的网址填错了。"
+                    + "去编辑里核对一下 URL";
+        }
+        if (m.matches(".*\\b5\\d\\d\\b.*")) {
+            return "平台服务异常（5xx）—— 不是你这边的问题，下次刷新会自动重试";
+        }
+        if (e instanceof org.json.JSONException
+                || m.contains("Unrecognized token") || m.contains("No value for")
+                || m.contains("Value ") && m.contains(" at ")) {
+            /* 页面改版最典型的症状：昨天还好，今天突然解析不出东西。
+               用户看到 "JSONException: ..." 只会以为 App 坏了。 */
+            return "返回内容解析不了 —— 接口可能改版了。"
+                    + "自定义平台请去编辑里调整「字段路径」，或改成正则提取";
+        }
+        if (m.length() == 0 || "null".equals(m)) {
+            return "服务器返回了空内容 —— 可能是登录态失效（需要 Cookie 的平台），"
+                    + "也可能该接口暂时不可用";
         }
         return (m.length() > 0 ? m : cls);
     }

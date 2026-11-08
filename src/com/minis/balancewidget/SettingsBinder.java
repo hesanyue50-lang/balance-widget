@@ -2826,8 +2826,24 @@ public class SettingsBinder {
         final EditText eUrl = Form.input(act, box, "https://api.example.com/v1", c0.url);
         Form.uri(eUrl);      // URI 变体 + 关联想：输入法不会自动大写、往长 URL 里插空格
 
-        Form.label(act, box, "API Key（仅用于此请求）");
-        final EditText eKey = Form.secret(act, box, "sk-…（可留空）", c0.key);
+        /* Key 有两个入口，但只有一个是**真的在被使用的**：fillCustom 里
+           KeyStore（设置页「API 密钥」）优先，Custom.key 只是没有密钥记录时的兜底。
+           界面上不把这件事说清，用户就会在弹窗里填一个新的、发现不生效、
+           而且怎么都找不到原因。 */
+        final boolean keyManaged = isEdit
+                && !KeyStore.get(act, "custom:" + editIdx).isEmpty();
+        Form.label(act, box, keyManaged
+                ? "API Key（已由「API 密钥」管理，这里改不动）" : "API Key（可选）");
+        final EditText eKey = Form.secret(act, box, keyManaged ? null : "sk-…（可留空）", c0.key);
+        if (keyManaged) {
+            eKey.setEnabled(false);
+            eKey.setTextColor(Theme.c(act, R.attr.c_tx3));
+            Form.note(act, box, "这条平台已经挂了一个密钥，以「API 密钥」里的为准。"
+                    + "要换 Key 请去那里改。");
+        } else if (!isEdit) {
+            Form.note(act, box, "填在这里的 Key 只给这个平台用；"
+                    + "想要统一管理（一个平台挂多把），去设置页「API 密钥」里加。");
+        }
 
         Form.label(act, box, "余额字段路径（JSON 路径，如 data.balance）");
         final EditText ePath = Form.noSuggest(Form.input(act, box, "可留空，自动识别", c0.path));
@@ -2917,7 +2933,8 @@ public class SettingsBinder {
                 BalanceFetcher.Custom c = new BalanceFetcher.Custom();
                 c.name = eName.getText().toString().trim();
                 c.url = normUrl(eUrl.getText().toString());
-                c.key = eKey.getText().toString().trim();
+                /* 被禁用的框里放着的是 KeyStore 那份的明文，别拿它回写 c.key */
+                c.key = keyManaged ? c0.key : eKey.getText().toString().trim();
                 c.path = ePath.getText().toString().trim();
                 c.text = eText.getText().toString().trim();
                 /* 用户没点过 chip 就保留原值 —— 老数据里有 sub / free / usage

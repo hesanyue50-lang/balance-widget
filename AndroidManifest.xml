@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.minis.balancewidget"
-    android:versionCode="738"
-    android:versionName="26.11.738">
+    android:versionCode="743"
+    android:versionName="26.11.743">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
@@ -81,7 +81,8 @@
         <activity
             android:name=".SettingsActivity"
             android:label="@string/cfg_title"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <!-- 系统级 VPN（真正全局）：接管整机流量交给内置内核处理。
              只在用户显式选择「系统全局」模式时才会启动。 -->

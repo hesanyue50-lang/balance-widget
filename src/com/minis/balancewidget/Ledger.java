@@ -415,6 +415,7 @@ public final class Ledger extends SQLiteOpenHelper {
         Ledger lg = get(c);
         java.util.HashSet<String> seen = new java.util.HashSet<String>();
         double sumRate = 0d, sumHours = 0d;
+        double collectedHours = 0d;   // 已积累的有效时长（含不足以出速率的部分）
         long newestTs = Long.MIN_VALUE;
         double newestBal = Double.NaN;
 
@@ -449,6 +450,10 @@ public final class Ledger extends SQLiteOpenHelper {
             }
 
             double[] st = Prediction.burnStats(ts, bal, rts, ramt, from);
+            /* 有效小时数要**无条件**累加：速率算不出来（不足 24h）时它是唯一能告诉
+               界面"还差多少"的信息。只累加成功的那部分，界面就只能显示空白，
+               用户会以为功能没做。 */
+            if (st[1] > 0) collectedHours += st[1];
             if (st[0] > 0 && st[1] > 0) {
                 sumRate += st[0] * st[1];
                 sumHours += st[1];
@@ -456,6 +461,7 @@ public final class Ledger extends SQLiteOpenHelper {
         }
 
         est.balance = newestBal;
+        est.validDays = collectedHours / 24d;      // 给"积累中"提示用
         if (!(sumHours > 0) || newestBal != newestBal) return est;   // 无有效数据 → 保持 -1
 
         double perDay = sumRate / sumHours;

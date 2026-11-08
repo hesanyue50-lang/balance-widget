@@ -29,6 +29,8 @@ public class Alert {
     public static final String CHANNEL_ID = "balance_low";
     private static final String THR_PREFIX = "thr_";
     private static final String ALERTED_PREFIX = "alerted_";
+    private static final String AUTH_NOTIFIED_PREFIX = "authnotified_";
+    public static final String CHANNEL_AUTH = "balance_auth";
 
     private static SharedPreferences sp(Context c) {
         return c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
@@ -83,7 +85,18 @@ public class Alert {
                    遍历全部平台的地方（应用内、小组件、单卡刷新都会经过），
                    在渲染循环里算会变成"每张卡一次 SQL"，那才是真的慢。 */
                 it.daysLeft = -1;
-                if (it.ok && !it.noData && it.bal > 0) it.daysLeft = forecastDays(c, it);
+                it.forecastHint = "";
+                if (it.ok && !it.noData && it.bal > 0) {
+                    Prediction.Estimate est = forecast(c, it);
+                    if (est != null) {
+                        it.daysLeft = Prediction.daysLeft(it.bal, est.perDay);
+                        if (it.daysLeft <= 0 && est.validDays > 0) {
+                            int need = (int) Math.ceil(24 - est.validDays * 24);
+                            if (need < 1) need = 1;
+                            it.forecastHint = "消耗速度积累中（还需约 " + need + " 小时）";
+                        }
+                    }
+                }
             }
             if (it.low) lows.add(it);
         }
@@ -97,17 +110,16 @@ public class Alert {
      * {@link Prediction}。数据不足（< 24 小时）时返回 -1，
      * 界面据此整行隐藏，不显示"还剩 -- 天"这种没法解释的东西。
      */
-    private static int forecastDays(Context c, BalanceFetcher.Item it) {
+    /** 预测本体（可能返回"算不出来"的 Estimate，不返回 null 以外的错误） */
+    static Prediction.Estimate forecast(Context c, BalanceFetcher.Item it) {
         try {
             /* 优先用「这张卡由哪几个密钥组成」去查 —— 合并卡的 it.id 是平台标识，
                账本里没有这个键，直接查永远是"数据不足"。 */
             String[] kids = (it.keyIds != null && it.keyIds.length > 0)
                     ? it.keyIds : new String[] { it.id };
-            Prediction.Estimate est = Ledger.estimate(c, kids, 7);
-            if (!est.ok()) return -1;
-            return Prediction.daysLeft(it.bal, est.perDay);
+            return Ledger.estimate(c, kids, 7);
         } catch (Throwable t) {
-            return -1;      // 预测永远不能把预警流程搞崩
+            return null;    // 预测永远不能把预警流程搞崩
         }
     }
 
@@ -137,6 +149,9 @@ public class Alert {
      */
     public static void check(Context c, BalanceFetcher.Result r) {
         List<BalanceFetcher.Item> lows = mark(c, r);
+        /* 凭证失效单独一类通知：它和"余额低"是两件事，混在一起会互相干扰
+           （余额机正常时也会因为登录过期而查不到值）。 */
+        try { checkAuth(c, r.items); } catch (Throwable ignored) { }
 
         // 找出"本次刚开始低"的（上次未告警）
         List<BalanceFetcher.Item> fresh = new ArrayList<BalanceFetcher.Item>();
@@ -175,6 +190,93 @@ public class Alert {
         ed.commit();
 
         notifyLow(c, fresh);
+    }
+
+    /**
+     * 凭证失效通知：某个平台连续失败到被判"需要重新登录"时，主动说一声。
+     *
+     * <p>为什么必须有：真实发生过——小米 MiMo 的会话在后台断了 10 小时，
+     * 每半小时撞一次 401，界面上只是红字「查询失败」，用户完全不知道。
+     * 这类"静默失败"比功能缺失更消耗信任。
+     *
+     * <p>幂等：每平台只在「正常 → 需要重登」的跳变时发一次；恢复后自动复位，
+     * 下次再失效还能提醒。
+     */
+    public static void checkAuth(Context c, List<BalanceFetcher.Item> items) {
+        if (items == null || items.isEmpty()) return;
+        SharedPreferences p = sp(c);
+        List<BalanceFetcher.Item> need = new ArrayList<BalanceFetcher.Item>();
+        SharedPreferences.Editor ed = p.edit();
+        boolean touched = false;
+
+        for (int i = 0; i < items.size(); i++) {
+            BalanceFetcher.Item it = items.get(i);
+            String plat = it.platform == null ? "" : it.platform;
+            if (plat.length() == 0) continue;
+            String key = AUTH_NOTIFIED_PREFIX + plat;
+            boolean needLogin = !it.ok && AuthFail.needLogin(c, plat);
+            if (needLogin) {
+                if (!p.getBoolean(key, false)) need.add(it);
+            } else if (it.ok && p.getBoolean(key, false)) {
+                ed.putBoolean(key, false);      // 恢复了：复位，下次还能提醒
+                touched = true;
+            }
+        }
+        if (touched) ed.commit();
+        if (need.isEmpty() || !canNotify(c)) return;
+
+        for (int i = 0; i < need.size(); i++) {
+            String plat = need.get(i).platform == null ? "" : need.get(i).platform;
+            ed.putBoolean(AUTH_NOTIFIED_PREFIX + plat, true);
+        }
+        ed.commit();
+        notifyAuth(c, need);
+    }
+
+    private static void notifyAuth(Context c, List<BalanceFetcher.Item> items) {
+        try {
+            NotificationManager nm =
+                    (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL_AUTH) == null) {
+                NotificationChannel ch = new NotificationChannel(CHANNEL_AUTH,
+                        "登录状态", NotificationManager.IMPORTANCE_DEFAULT);
+                ch.setDescription("当某个平台的登录态彻底失效、需要重新登录时提醒");
+                nm.createNotificationChannel(ch);
+            }
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < items.size(); i++) {
+                if (i > 0) sb.append("\n");
+                BalanceFetcher.Item it = items.get(i);
+                sb.append(it.label).append("：登录态已失效");
+                if ("mimo".equals(it.platform)) sb.append("（打开 App 会自动尝试续期）");
+            }
+
+            Intent open = new Intent(c, MainActivity.class);
+            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
+            PendingIntent pi = PendingIntent.getActivity(c, 1, open, flags);
+
+            /* 跟 notifyLow 用同一套 Notification.Builder —— 项目没有 androidx，
+               NotificationCompat 根本不在 classpath 里 */
+            Notification.Builder b;
+            if (Build.VERSION.SDK_INT >= 26) {
+                b = new Notification.Builder(c, CHANNEL_AUTH);
+            } else {
+                b = new Notification.Builder(c);
+            }
+            b.setSmallIcon(R.drawable.ic_refresh)
+             .setContentTitle("有平台需要重新登录")
+             .setContentText(items.size() == 1
+                     ? items.get(0).label + " 登录态已失效"
+                     : items.size() + " 个平台登录态已失效")
+             .setStyle(new Notification.BigTextStyle().bigText(sb.toString()))
+             .setContentIntent(pi)
+             .setAutoCancel(true);
+            nm.notify(9001, b.build());
+        } catch (Throwable ignored) { }
     }
 
     private static void notifyLow(Context c, List<BalanceFetcher.Item> items) {
