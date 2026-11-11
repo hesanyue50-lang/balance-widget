@@ -64,6 +64,8 @@ public class ClashVpnService extends VpnService {
        没有可见性保证的话，停止时可能还看到 -1 → 跳过关闭 → tun 设备不释放，
        之后每次 establish 都失败，只能杀进程。 */
     private static volatile int tunFd = -1;
+    /** 这个 fd 属于哪一代启动。跨代用同一个静态字段会互相关掉对方的 tun。 */
+    private static volatile int tunFdGen = -1;
     /** 工作线程写、UI 线程读，必须 volatile（同类里 starting 加了，这个是漏改） */
     private static volatile boolean running;
     /**
@@ -224,22 +226,29 @@ public class ClashVpnService extends VpnService {
                 return;
             }
 
-            /* ② 取 fd 并清掉 FD_CLOEXEC，让 mihomo 能继承到它 */
-            tunFd = tunPfd.detachFd();
+            /* ② 取 fd 并清掉 FD_CLOEXEC，让 mihomo 能继承到它。
+               ⚠️ 全程用**局部 fd**，不再读写静态的 tunFd：
+               stopVpn 与下一代启动都可能在同一时刻碰这个静态字段，
+               谁先读到谁就把它关掉 —— 包括关掉别人刚建的那个。 */
+            final int fd = tunPfd.detachFd();
+            synchronized (ClashVpnService.class) {
+                if (stale(myGen)) {
+                    closeQuietly(fd);
+                    BalanceFetcher.diag(this, "tun 建立完成但启动已被作废，已关闭");
+                    return;
+                }
+                tunFd = fd;
+                tunFdGen = myGen;
+            }
 
             /* ③ 生成带 tun 段的配置并启动内核 */
-            String cfg = Clash.buildTunConfig(sub.yaml, tunFd);
+            String cfg = Clash.buildTunConfig(sub.yaml, fd);
             if (stale(myGen)) {
                 BalanceFetcher.diag(this, "启动过程已被作废，放弃拉起内核");
-                try {
-                    if (tunFd >= 0) {
-                        android.os.ParcelFileDescriptor.adoptFd(tunFd).close();
-                        tunFd = -1;
-                    }
-                } catch (Throwable ig) { }
+                releaseTun(myGen);
                 return;
             }
-            String err = Clash.startWithFd(this, cfg, tunFd);
+            String err = Clash.startWithFd(this, cfg, fd);
             /* 配置解析失败（机场塞了残缺正文）→ 回滚到上一版再试一次。
                没有这一步的话，用户会卡在"代理起不来 → 订阅下不了（订阅要走代理）"
                的死循环里。 */
@@ -251,7 +260,7 @@ public class ClashVpnService extends VpnService {
                     if (s2 != null && s2.ready()) {
                         BalanceFetcher.diag(this, "配置解析失败，回滚到上一版重试");
                         err = Clash.startWithFd(this,
-                                Clash.buildTunConfig(s2.yaml, tunFd), tunFd);
+                                Clash.buildTunConfig(s2.yaml, fd), fd);
                     }
                 }
             }
@@ -268,7 +277,7 @@ public class ClashVpnService extends VpnService {
                 return;
             }
             running = true;
-            BalanceFetcher.diag(this, "系统级 VPN 已启动，tun fd=" + tunFd);
+            BalanceFetcher.diag(this, "系统级 VPN 已启动，tun fd=" + fd);
             updateNotification("已接管全部应用流量");
         } catch (Throwable t) {
             BalanceFetcher.diag(this, "VPN 启动异常 " + t);
@@ -292,6 +301,36 @@ public class ClashVpnService extends VpnService {
     }
 
     // ---------------- 停止 ----------------
+
+    /** 关一个 fd（adoptFd 接管所有权，只关有效值）。 */
+    private static void closeQuietly(int fd) {
+        if (fd < 0) return;
+        try {
+            android.os.ParcelFileDescriptor.adoptFd(fd).close();
+        } catch (Throwable ignored) { }
+    }
+
+    /** 只释放**自己这一代**的 tun；被新一代接管后就别碰了。 */
+    private static void releaseTun(int gen) {
+        int fd;
+        synchronized (ClashVpnService.class) {
+            if (tunFdGen != gen) return;
+            fd = tunFd;
+            tunFd = -1;
+            tunFdGen = -1;
+        }
+        closeQuietly(fd);
+    }
+
+    /** 无条件取走当前 fd（停止是全局动作），并且只有一个人能拿到。 */
+    private static int takeTun() {
+        synchronized (ClashVpnService.class) {
+            int f = tunFd;
+            tunFd = -1;
+            tunFdGen = -1;
+            return f;
+        }
+    }
 
     /**
      * 这一代启动是否已经作废（用户点了停止，或新一轮启动顶掉了它）。
@@ -322,15 +361,10 @@ public class ClashVpnService extends VpnService {
            下次 establish 会失败。
            注意 Os.close 收的是 FileDescriptor 对象，这里只有一个 int，
            所以用 ParcelFileDescriptor.adoptFd 包一层再 close。 */
-        try {
-            if (tunFd >= 0) {
-                ParcelFileDescriptor p = ParcelFileDescriptor.adoptFd(tunFd);
-                p.close();
-                tunFd = -1;
-            }
-        } catch (Throwable t) {
-            BalanceFetcher.diag(this, "关闭 tun fd 失败 " + t);
-        }
+        /* 原子地"取走"这个 fd：谁取到谁关，另一个人拿到 -1 就什么都不做。
+           这样 stopVpn 与某一代的 releaseTun 不会把同一个 fd 关两次
+           （fd 号是 LIFO 复用的，第二次 close 会关掉无关的 socket/文件）。 */
+        closeQuietly(takeTun());
         try {
             if (tunPfd != null) {
                 tunPfd.close();

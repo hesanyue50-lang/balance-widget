@@ -220,7 +220,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:visibility="gone"
-                android:background="#22000000" />
+                android:background="@color/ws1_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row2"
@@ -326,7 +326,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:visibility="gone"
-                android:background="#22000000" />
+                android:background="@color/ws1_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row3"
@@ -432,7 +432,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:visibility="gone"
-                android:background="#22000000" />
+                android:background="@color/ws1_div" />
 
             <LinearLayout
                 android:id="@+id/w2_row4"

@@ -155,6 +155,21 @@ public final class Clash {
     /* stop() 置位，让还在轮询的 startInternal 提前认输（否则用户点了停止，
        它还要把剩下的几秒 sleep 走完，期间"启动成功"或"启动超时"的结论都会写日志） */
     private static volatile boolean coreStopRequested;
+    /**
+     * 停止序号。用于跨越"等锁窗口"传达停止意图。
+     *
+     * <p>⚠️ 只靠 {@code coreStopRequested} 这个布尔不够：
+     * 时间线 T2 —— stop 在锁外置 true（然后排在类锁上），此时用户又点了开启，
+     * 主线程的 start 也在等锁；锁一释放**start 先拿到**（监视器不保证 FIFO），
+     * 它执行 {@code coreStopRequested = false} —— **把刚按下的停止抹掉**；
+     * 随后 stopLocked 拿锁时 proc 还是 null，什么都不杀；startLocked 起进程，
+     * waitForApi 看到 false → 等 8 秒 → 返回"成功"。
+     * 用户点了停止，内核照样在跑。
+     *
+     * <p>序号在**进锁前**快照，进锁后比对：等锁期间有人按过停止就放弃本次启动。
+     */
+    private static final java.util.concurrent.atomic.AtomicInteger coreStopSeq =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     private Clash() { }
 
@@ -316,7 +331,12 @@ public final class Clash {
        8 秒轮询结束 —— 拆分被外层抵消，用户点「停止」时主线程照样冻 8 秒。
        真正需要互斥的只有 startLocked（proc 的创建），锁在它身上。 */
     public static String start(Context c, String cfgText) {
+        final int seq = coreStopSeq.get();      // 必须在进锁**之前**快照
         synchronized (Clash.class) {   // 只保护 proc 的读写，几十毫秒
+        if (coreStopSeq.get() != seq) {
+            BalanceFetcher.diag(c, "启动排队期间收到停止请求，放弃");
+            return "启动已取消";
+        }
         /* 清零放在这里（锁内），紧挨着 "确认当前状态" 的 killStaleCore。
            放在锁外的话会吃掉并发的 stop 请求，见 startInternal 里的说明。 */
         coreStopRequested = false;
@@ -446,6 +466,7 @@ public final class Clash {
            于是"停止信号"根本发不出去，只能干等轮询自然结束。
            这是本轮审查发现的：上一轮我拆了 startInternal 的锁，
            却被外层这两个 synchronized 抵消了。 */
+        coreStopSeq.incrementAndGet();   // 让"正在等锁的 start"知道有人按过停止
         coreStopRequested = true;
         stopLocked(c);
     }
@@ -688,7 +709,12 @@ public final class Clash {
            整机流量进了 tun，却没有任何进程在读这个 fd，结果是**全面断网**。
            常见触发：先在「应用内全局」开过内核，再切「系统全局」；
            或服务被 START_STICKY 重启时上个内核还活着。 */
+        final int seq = coreStopSeq.get();      // 同 start()：进锁前快照
         synchronized (Clash.class) {   // 同上：只保护 proc
+            if (coreStopSeq.get() != seq) {
+                BalanceFetcher.diag(c, "启动排队期间收到停止请求，放弃");
+                return "启动已取消";
+            }
             coreStopRequested = false;   // 同 start()：清零必须在锁内
             killStaleCore(c);
             if (proc != null) {
