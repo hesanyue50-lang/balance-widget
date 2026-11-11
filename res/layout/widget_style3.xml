@@ -118,13 +118,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot1"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -158,6 +159,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />
@@ -165,7 +169,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot2"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -199,6 +204,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />
@@ -208,21 +216,23 @@
             <TextView
                 android:id="@+id/w2_div1"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="1dp"
+                android:visibility="gone"
+                android:background="#22000000" />
 
             <LinearLayout
                 android:id="@+id/w2_row2"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot3"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -256,6 +266,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />
@@ -263,7 +276,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot4"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -297,6 +311,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />
@@ -306,21 +323,23 @@
             <TextView
                 android:id="@+id/w2_div2"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="1dp"
+                android:visibility="gone"
+                android:background="#22000000" />
 
             <LinearLayout
                 android:id="@+id/w2_row3"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot5"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -354,6 +373,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />
@@ -361,7 +383,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot6"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -395,6 +418,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />
@@ -404,21 +430,23 @@
             <TextView
                 android:id="@+id/w2_div3"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="1dp"
+                android:visibility="gone"
+                android:background="#22000000" />
 
             <LinearLayout
                 android:id="@+id/w2_row4"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot7"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -452,6 +480,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />
@@ -459,7 +490,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot8"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -493,6 +525,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="sans-serif-light"
                         android:textColor="@color/ws3_tx"
                         android:textSize="12.5sp" />

@@ -115,13 +115,14 @@
                 android:id="@+id/w2_row1"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot1"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -155,6 +156,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />
@@ -162,7 +166,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot2"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -196,6 +201,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />
@@ -214,13 +222,14 @@
                 android:id="@+id/w2_row2"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot3"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -254,6 +263,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />
@@ -261,7 +273,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot4"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -295,6 +308,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />
@@ -313,13 +329,14 @@
                 android:id="@+id/w2_row3"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot5"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -353,6 +370,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />
@@ -360,7 +380,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot6"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -394,6 +415,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />
@@ -412,13 +436,14 @@
                 android:id="@+id/w2_row4"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center_vertical">
 
 
                 <LinearLayout
                     android:id="@+id/w2_slot7"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -452,6 +477,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />
@@ -459,7 +487,8 @@
 
                 <LinearLayout
                     android:id="@+id/w2_slot8"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -493,6 +522,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:fontFamily="serif"
                         android:textColor="@color/ws2_tx"
                         android:textSize="15sp" />

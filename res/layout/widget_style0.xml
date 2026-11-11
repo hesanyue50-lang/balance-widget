@@ -90,6 +90,9 @@
             android:includeFontPadding="false"
             android:gravity="center"
         android:textStyle="bold"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:ellipsize="end"
             android:textColor="@color/ws0_tx"
             android:textSize="34sp"
             android:text="—" />
@@ -158,6 +161,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
@@ -200,6 +206,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
@@ -209,8 +218,9 @@
             <TextView
                 android:id="@+id/w2_div1"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="1dp"
+                android:visibility="gone"
+                android:background="#22000000" />
 
             <LinearLayout
                 android:id="@+id/w2_row2"
@@ -257,6 +267,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
@@ -299,6 +312,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
@@ -308,8 +324,9 @@
             <TextView
                 android:id="@+id/w2_div2"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="1dp"
+                android:visibility="gone"
+                android:background="#22000000" />
 
             <LinearLayout
                 android:id="@+id/w2_row3"
@@ -356,6 +373,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
@@ -398,6 +418,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
@@ -407,8 +430,9 @@
             <TextView
                 android:id="@+id/w2_div3"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="1dp"
+                android:visibility="gone"
+                android:background="#22000000" />
 
             <LinearLayout
                 android:id="@+id/w2_row4"
@@ -455,6 +479,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
@@ -497,6 +524,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="88dp"
                     android:textStyle="bold"
                         android:textColor="@color/ws0_tx"
                         android:textSize="15sp" />
