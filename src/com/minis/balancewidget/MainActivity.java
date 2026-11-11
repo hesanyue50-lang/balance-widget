@@ -271,7 +271,9 @@ public class MainActivity extends Activity {
                                                 boolean ok = true;
                                                 try {
                                                     Ledger.get(MainActivity.this)
-                                                            .prune(MainActivity.this, dd);
+                                                            /* force=true：用户手动点的一定要真跑，
+                                                               不能被 12 小时自动节流挡掉 */
+                                                            .prune(MainActivity.this, dd, true);
                                                 } catch (Throwable t) {
                                                     ok = false;
                                                 }

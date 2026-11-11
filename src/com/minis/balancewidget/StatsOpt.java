@@ -110,8 +110,17 @@ public class StatsOpt {
 
     /** 折算率（元/积分）。0 或负数视为未设置，回落到默认值。 */
     public static double rate(Context c, String platform) {
-        float v = sp(c).getFloat("rate_" + platform, 0f);
-        if (v <= 0f) v = (float) DEFAULT_RATE;
+        /* ⚠️ 不能直接用 getFloat。
+           从旧版本导出的备份里 rate_* 是裸数字（没有 __type 标记），
+           恢复时走的是 putInt —— 之后 getFloat 会抛
+           ClassCastException: Integer cannot be cast to Float，
+           而调用方（MainActivity.buildStats）在 UI 线程且外层没有 try → 统计页直接闪退。 */
+        double v = DEFAULT_RATE;
+        try {
+            Object o = sp(c).getAll().get("rate_" + platform);
+            if (o instanceof Number) v = ((Number) o).doubleValue();
+        } catch (Throwable ignored) { }
+        if (v <= 0) v = DEFAULT_RATE;
         return v;
     }
 

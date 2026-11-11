@@ -179,7 +179,14 @@ public class Alert {
             BalanceFetcher.Item it = r.items.get(i);
             if (!it.ok) continue;
             double thr = it.threshold > 0 ? it.threshold : threshold(c, it.id);
-            if (thr <= 0) continue;
+            /* ⚠️ 不要在这里 continue。thr <= 0 的语义是"当前不该低"，本来就该复位。
+           跳过的话：用户清空阈值 → 余额继续跌 → 再把阈值设回来（此时已经低于新阈值），
+           因为 alerted 标记还挂着 true，一条通知都不会发。
+           用户只觉得这功能"时灵时不灵"。 */
+        if (thr <= 0) {
+            ed.putBoolean(ALERTED_PREFIX + alertKey(it), false);
+            continue;
+        }
             if (!it.low) {
                 ed.putBoolean(ALERTED_PREFIX + alertKey(it), false);
                 anyReset = true;

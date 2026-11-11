@@ -351,17 +351,33 @@ public final class Ledger extends SQLiteOpenHelper {
     }
 
     /** 手动修正充值：插入一条手动充值记录（防止自动匹配档位错误） */
+    /**
+     * 「修正充值金额」。
+     *
+     * <p>⚠️ 必须是**改掉最近那一条**，不是追加一条。
+     * 原来这里只有 insert：`ts` 写的是"现在"、`delta/matched/amount` 都填修正值，
+     * 而自动记的那条原封不动 —— 于是 `Prediction` 把**两条**都加回分子，
+     * 当期消耗凭空多出一大笔，充值明细里同一笔是两行、日期还是今天，
+     * 「还能用几天」跟着乱跳。用户越修越糟。
+     */
     public void manualRecharge(Context c, String keyId, double amount) {
         try {
+            SQLiteDatabase db = getWritableDatabase();
             android.content.ContentValues cv = new android.content.ContentValues();
-            cv.put("key_id", keyId);
-            cv.put("ts", System.currentTimeMillis());
             cv.put("delta", amount);
             cv.put("matched", amount);
             cv.put("amount", amount);
-            getWritableDatabase().insert(T_RECH, null, cv);
-            BalanceFetcher.diag(c, "手动修正充值 " + keyId + " +" + amount);
-        } catch (Throwable ignored) { }
+            int n = db.update(T_RECH, cv, "key_id=?", new String[] { keyId });
+            if (n == 0) {
+                /* 这个 Key 还没有任何自动记录（比如刚加就手动补一笔）：那就插一条 */
+                cv.put("key_id", keyId);
+                cv.put("ts", System.currentTimeMillis());
+                db.insert(T_RECH, null, cv);
+            }
+            BalanceFetcher.diag(c, "修正充值 " + keyId + " → " + amount + "（改了 " + n + " 行）");
+        } catch (Throwable t) {
+            BalanceFetcher.diag(c, "修正充值失败：" + t);
+        }
     }
 
     public static class Recharge {
@@ -802,12 +818,24 @@ public final class Ledger extends SQLiteOpenHelper {
      * 十几万行时每次几十毫秒、还占着写事务，低端机上是白耗电，也会和预测的读查询抢库锁。
      * 现在改成 12 小时最多一次：清理本来就不需要那么勤。
      */
+    /** 自动清理（带 12 小时节流，被 sampleIfDue 每次刷新调用）。 */
     public int prune(Context c, int keepDays) {
+        return prune(c, keepDays, false);
+    }
+
+    /**
+     * @param force 用户手动点「清理数据」时为 true —— 跳过 12 小时节流。
+     *
+     * <p>⚠️ 不加这个参数的话：`sampleIfDue` 每次刷新（最短 60 秒）都会调 prune 推进时间戳，
+     * 于是用户的手动清理**必然**被闸门挡掉，而调用方不看返回值，
+     * 照样弹「已删除 7 天前的记录」—— 曲线一根点都没少，用户只会反复点。
+     */
+    public int prune(Context c, int keepDays, boolean force) {
         try {
             android.content.SharedPreferences sp =
                     c.getSharedPreferences(BalanceFetcher.PREFS, Context.MODE_PRIVATE);
             long last = sp.getLong("last_prune_at", 0);
-            if (System.currentTimeMillis() - last < 12L * 3600L * 1000L) return 0;
+            if (!force && System.currentTimeMillis() - last < 12L * 3600L * 1000L) return 0;
             sp.edit().putLong("last_prune_at", System.currentTimeMillis()).apply();
         } catch (Throwable ignored) { }
         try {
