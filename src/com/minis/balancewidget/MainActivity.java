@@ -1027,8 +1027,15 @@ public class MainActivity extends Activity {
                 } catch (Throwable ignored) { }
             }
 
-            boolean anyDraw = false;
-            for (int i = 0; i < ks.size(); i++) if (ks.get(i).draw) anyDraw = true;
+            /* 没有 Key 行的平台（MiMo / 免 Key 展示型）没有"每行 Key 的开关位"，
+               用平台级隐藏集代替；否则 anyDraw 恒 false，下面的线上/明细/提示全被挡掉。 */
+            boolean anyDraw;
+            if (ks.isEmpty()) {
+                anyDraw = !StatsOpt.platHidden(this, plat);
+            } else {
+                anyDraw = false;
+                for (int i = 0; i < ks.size(); i++) if (ks.get(i).draw) anyDraw = true;
+            }
             platformDraw.put(plat, Boolean.valueOf(anyDraw));
 
             /* 没有余额接口的平台（免费/无数据）：贴 0 直线，开关有可见效果。
@@ -1420,6 +1427,10 @@ public class MainActivity extends Activity {
                         t.draw = on;
                         KeyStore.update(MainActivity.this, t);
                     }
+                    if (ks.isEmpty()) {
+                        /* 没有 Key 行可写，落到平台级隐藏集上 —— 否则拨完立刻回弹 */
+                        StatsOpt.setPlatHidden(MainActivity.this, plat, !on);
+                    }
                     platformDraw.put(plat, Boolean.valueOf(on));
                     /* 拨动的手感：开关轻微弹一下（只放大 2%，大了会显得廉价） */
                     Anim.pulse(sw);
@@ -1709,6 +1720,14 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
+        /* ⚠️ VPN 授权结果必须转发。
+           VpnBinder.onActivityResult 早就写好了，注释也写着"MainActivity 转发"，
+           但这里从来没有调用 —— 用户第一次点「系统全局」，在系统授权页点「允许」，
+           回到 App 什么都不会发生，必须再点一次。 */
+        if (req == VpnBinder.REQ_VPN) {
+            if (vpnBinder != null) vpnBinder.onActivityResult(req, res);
+            return;
+        }
         if (BackupUi.onResult(this, req, res, data)) {
             /* 恢复完成后刷新界面与小组件，让用户立刻看到数据回来 */
             if (req == BackupUi.REQ_RESTORE) {
@@ -2349,7 +2368,13 @@ public class MainActivity extends Activity {
            反而让数字看着不干净。真正的估算说明放在网关卡片自己身上。 */
         /* 总额变化时做一次交叉淡入 —— 数字没变就不动（避免每次自动刷新都闪）。
            这是"数据更新了"最直接的视觉确认。 */
-        final String newTotal = "¥" + String.format("%.2f", r.totalCny);
+        /* 一个平台都没取到就别报 ¥0.00 —— 那是假的，而且 Anim.countTo 还会
+           把"从 ¥100 归零"演一遍，看起来像余额真的被清零了。
+           桌面小组件早就这么做了（WidgetRenderer），App 这边原来没有。 */
+        int okNow = 0;
+        for (int i = 0; i < r.items.size(); i++) if (r.items.get(i).ok) okNow++;
+        final String newTotal = (okNow == 0 && r.failed > 0)
+                ? "——" : "¥" + String.format(java.util.Locale.US, "%.2f", r.totalCny);
         String oldTotal = tTotal.getText() == null ? "" : tTotal.getText().toString();
         /* 数字滚动而不是淡入换值：金额变化时用户能直接看出涨/跌和差值。
            首次填充（没有旧值）不滚，直接落 —— 否则开屏就在那儿数数。 */

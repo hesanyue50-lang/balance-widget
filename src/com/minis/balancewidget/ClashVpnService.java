@@ -60,7 +60,10 @@ public class ClashVpnService extends VpnService {
     private static final int TUN_MTU = 8500;      // 对接回环，不需要受物理 MTU 限制
 
     /** 当前持有的 tun fd（-1 = 没有）。停止时负责关闭。 */
-    private static int tunFd = -1;
+    /* volatile：启动线程写（detachFd），主线程 stopVpn 读。
+       没有可见性保证的话，停止时可能还看到 -1 → 跳过关闭 → tun 设备不释放，
+       之后每次 establish 都失败，只能杀进程。 */
+    private static volatile int tunFd = -1;
     /** 工作线程写、UI 线程读，必须 volatile（同类里 starting 加了，这个是漏改） */
     private static volatile boolean running;
     /**

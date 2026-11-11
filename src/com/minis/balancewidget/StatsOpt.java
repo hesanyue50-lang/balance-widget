@@ -66,6 +66,30 @@ public class StatsOpt {
      * 跟 inStats 是两件事：inStats 管"算不算钱"（进总资产），
      * inChart 管"画不画图"。想只画图不算钱、或只算钱不画图，都能单独调。
      */
+    /**
+     * 平台级"在统计页画不画线"。
+     *
+     * <p>为什么需要它：开关的开关位本来挂在每一行 Key 上（`ApiKey.draw`），
+     * 但有些平台根本不会有 Key 行 —— 小米 MiMo 的凭据是会话串，
+     * 百炼/魔搭有免 Key 的展示型入口。它们 `ks` 为空时：
+     * 写回循环体一次都不执行（开关拨了立刻回弹），
+     * `anyDraw` 恒 false → 图上的线、明细行、连"登录过期/未登录/数据积累中"
+     * 三种提示全被 `if (anyDraw)` 挡掉，用户看到的是一行永远空的开关。
+     */
+    public static boolean platHidden(Context c, String platform) {
+        try {
+            return sp(c).getBoolean("hide_plat_" + platform, false);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    public static void setPlatHidden(Context c, String platform, boolean hidden) {
+        try {
+            sp(c).edit().putBoolean("hide_plat_" + platform, hidden).commit();
+        } catch (Throwable ignored) { }
+    }
+
     public static boolean inChart(Context c, String platform) {
         if (isMoneyPlatform(platform)) return true;
         return sp(c).getBoolean("chart_" + platform, false);

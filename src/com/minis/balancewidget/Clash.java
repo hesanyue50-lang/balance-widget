@@ -310,7 +310,13 @@ public final class Clash {
      *
      * @param cfgText 完整的 Clash 配置文本（由 {@link #buildConfig} 生成）
      */
-    public static synchronized String start(Context c, String cfgText) {
+    /* ⚠️ 这里**不能是 synchronized**。
+       startInternal 内部已经拆成"持锁起进程 + 锁外等端口"，
+       但方法级 synchronized 会在进入时就拿走类锁，一直持到 waitForApi 的
+       8 秒轮询结束 —— 拆分被外层抵消，用户点「停止」时主线程照样冻 8 秒。
+       真正需要互斥的只有 startLocked（proc 的创建），锁在它身上。 */
+    public static String start(Context c, String cfgText) {
+        synchronized (Clash.class) {   // 只保护 proc 的读写，几十毫秒
         /* 先把上次遗留的内核清掉 —— 它占着 7890，不清的话这次必然启动失败 */
         killStaleCore(c);
             /* 强制下一次 isRunning() 真探一次：killStaleCore 之后端口状态刚变过，
@@ -319,6 +325,7 @@ public final class Clash {
                调用方还 setEnabled(true) 并提示"加速已启动"。 */
             lastProbeAt = 0L;
             lastProbeOk = false;
+        }
         return startInternal(c, cfgText, -1);
     }
 
@@ -419,11 +426,19 @@ public final class Clash {
         }
     }
 
-    public static synchronized void stop(Context c) {
-        /* 先举手：还在锁外轮询等端口的 startInternal 看到它就会立刻收手，
-           不必把剩下的几秒 sleep 走完。不设它的话，用户点「停止」之后
-           启动流程还会继续跑完并可能把 proc 又启回来。 */
+    public static void stop(Context c) {
+        /* ⚠️ 置位必须在**锁外**、在最前面。
+           它原来写在 synchronized 方法的第一个语句里 —— 看着是"第一行"，
+           实际要先拿到类锁才能执行。而类锁正被另一条线程的 8 秒轮询持有，
+           于是"停止信号"根本发不出去，只能干等轮询自然结束。
+           这是本轮审查发现的：上一轮我拆了 startInternal 的锁，
+           却被外层这两个 synchronized 抵消了。 */
         coreStopRequested = true;
+        stopLocked(c);
+    }
+
+    /** 真正的停止动作；只在这一小段里持锁。 */
+    private static synchronized void stopLocked(Context c) {
         try {
             if (proc != null) {
                 proc.destroy();
@@ -622,20 +637,23 @@ public final class Clash {
      * 以及环境变量 CLASH_TUN_FD —— 不同版本的内核认的不一样，
      * 两条都写上最稳。
      */
-    public static synchronized String startWithFd(Context c, String cfgText, int fd) {
+    /* 同上：方法级 synchronized 会把 8 秒轮询套进锁里，见 start() 的说明。 */
+    public static String startWithFd(Context c, String cfgText, int fd) {
         /* tun fd 只对"为它而起的那个进程"有效，绝不可复用已有内核。
            不清掉的话：startInternal 开头 isRunning() 返回 true → 直接返回 null（成功），
            而 VpnService 那边已经把 running 置 true 并通知「已接管全部应用流量」——
            整机流量进了 tun，却没有任何进程在读这个 fd，结果是**全面断网**。
            常见触发：先在「应用内全局」开过内核，再切「系统全局」；
            或服务被 START_STICKY 重启时上个内核还活着。 */
-        killStaleCore(c);
-        if (proc != null) {
-            try { proc.destroy(); } catch (Throwable ig) { }
-            proc = null;
+        synchronized (Clash.class) {   // 同上：只保护 proc
+            killStaleCore(c);
+            if (proc != null) {
+                try { proc.destroy(); } catch (Throwable ig) { }
+                proc = null;
+            }
+            lastProbeAt = 0L;
+            lastProbeOk = false;
         }
-        lastProbeAt = 0L;
-        lastProbeOk = false;
         return startInternal(c, cfgText, fd);
     }
 
