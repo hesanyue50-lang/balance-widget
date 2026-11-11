@@ -256,7 +256,10 @@ public class BalanceFetcher {
      * - 高级自定义平台：web:<i>
      */
     public static boolean platformUsable(Context c, String platform) {
-        if ("mimo".equals(platform)) return mimoSession(c).length() > 0;
+        /* 与 mimoNeedsRelogin 同一口径：会话过期（服务端 401）也算"不可用"，
+           否则统计页会给一个已经过期的会话画一条"无数据·查看控制台"的空线，
+           用户看不出真正该做的是重新登录。 */
+        if ("mimo".equals(platform)) return !mimoNeedsRelogin(c);
         if (platform == null) return false;
 
         /* 普通自定义平台：配置完备就算可用 */
@@ -451,13 +454,18 @@ public class BalanceFetcher {
                            + "　 电脑登录 platform.openai.com → F12 → Network → 任意请求 → 复制 Cookie\n"
                            + "· Admin Key（sk-admin- 开头，只能查本月已用）",
                    "https://platform.openai.com/usage",
-                   "https://platform.openai.com/settings/organization/billing/overview"),
+                   /* ⚠️ 必须标 foreign（第 10 个参数）。9 参构造默认 false = 境内平台，
+                      而 Clash.platformViaProxy() 的默认返回值就是 foreign ——
+                      不标的话默认分流模式下走直连，api.openai.com 在国内直连拿不到数据，
+                      用户会看到"域名解析失败/连接超时"，必须手动给单个平台开分流才正常。 */
+                   "https://platform.openai.com/settings/organization/billing/overview", true),
         new Preset("gemini", "Google Gemini", "https://generativelanguage.googleapis.com/v1beta/models",
                    "", "USD", "balance",
                    "Google 没给个人开发者余额接口：AI Studio 是免费配额制（看的是每分钟/每天限额，不是余额），\n"
                            + "付费走 Google Cloud 结算中心，要 OAuth 不是 Cookie。这张卡只做跳转。",
                    "https://aistudio.google.com/app/apikey",
-                   "https://aistudio.google.com/"),
+                   // 同上：Google 全系境外，不标 foreign 就走直连（哪怕是静态卡，预算也不翻倍）
+                   "https://aistudio.google.com/", true),
         /* PPIO 派欧云：端点实测存在（无效 key 返回 {"code":403,"reason":"INVALID_API_KEY"}），
            成功时余额在 data.balance。2026-10-18 验证。 */
         new Preset("ppio", "PPIO 派欧云", "https://api.ppio.com/v3/account/balance",
@@ -512,7 +520,11 @@ public class BalanceFetcher {
     public static final int[] COLORS;
 
     /** 显示顺序：余额 → 订阅 → 免费额度 → 后付费账单 */
-    public static final String[] KIND_ORDER = { "balance", "sub", "free", "usage" };
+    /* ⚠️ 必须包含 "asset"。少了它，kindOf("asset") 找不到 → 返回 "balance"
+       → 用户的积分卡/静态卡在编辑弹窗里显示成「余额制」，保存时写回 "balance"
+       → 进总资产、按汇率折算、参与低余额预警，而且制式按钮在 4 个值之间循环，
+       用户再也切不回 asset。 */
+    public static final String[] KIND_ORDER = { "balance", "asset", "sub", "free", "usage" };
 
     static {
         int n = PRESETS.length;
@@ -716,10 +728,26 @@ public class BalanceFetcher {
             if (at >= 0) arr.put(at, nv); else arr.put(nv);
             sp.edit().putString("custom_json", arr.toString()).commit();
         } catch (Exception e) {
-            /* 存档坏到连 JSONArray 都解析不出来：退回整表写，至少这次编辑不丢 */
-            List<Custom> list = loadCustom(ctx);
-            list.add(c);
-            saveCustom(ctx, list);
+            /* ⚠️ 存档坏到连 JSONArray 都解析不出来。
+               原来的"退回整表写"是这样写的：
+                   List<Custom> list = loadCustom(ctx);   // ← 解析失败，返回的是**空表**
+                   list.add(c);
+                   saveCustom(ctx, list);                 // ← 整表覆盖
+               保住了这次编辑，赔上了其余**全部**平台（连同它们的 Key）。
+               而且 loadCustom 解析失败时本来就不报错，用户会以为"我没配过"，
+               随手新建一条就把存档清了。
+
+               正确做法：坏档先原样留一份（用户还能手工救），再只写这一条。 */
+            try {
+                String bad = sp.getString("custom_json", "");
+                if (bad != null && bad.length() > 0) {
+                    sp.edit().putString("custom_json_bad_" + System.currentTimeMillis(), bad).apply();
+                }
+            } catch (Throwable ig) { }
+            diag(ctx, "自定义平台存档损坏，已留档并从单条重建：" + e);
+            JSONArray one = new JSONArray();
+            one.put(nv);
+            sp.edit().putString("custom_json", one.toString()).commit();
         }
     }
 
@@ -957,6 +985,13 @@ public class BalanceFetcher {
             o.mergeCount = mergeCount; o.usageTokens = usageTokens; o.keyIds = keyIds;
             o.debug = debug; o.noData = noData; o.foreign = foreign;
             o.viaProxy = viaProxy;
+            /* 这几个也得带：WidgetCache 已经把相同的一组一并落盘，
+               说明设计意图是它们要跟着条目走（超时替换的 dead 条目就靠 copy() 保留）。 */
+            o.daysLeft = daysLeft;
+            o.forecastHint = forecastHint;
+            o.pctLeft = pctLeft;
+            o.hasQuota = hasQuota;
+            o.estimated = estimated;
             return o;
         }
     }
@@ -1477,6 +1512,38 @@ public class BalanceFetcher {
      * 表现是"Unable to resolve host" —— 但同一时刻DoH 查询是通的（HTTPS 443 很难被拦）。
      * 兜底成功后整个请求就能继续走直连，不用非开代理不可。
      */
+    /**
+     * 握手前必须打开主机名校验。
+     *
+     * <p>裸 {@code SSLSocket}（由 {@code createSocket(sock, host, port, true)} 建立）
+     * 只做**证书链**校验，<b>不校验证书里的域名是否等于我们要连的域名</b> ——
+     * 这是 JSSE 的默认行为，很多人不知道。后果很严重：
+     *
+     * <p>本应用的 {@code getViaIp} 存在的理由就是"系统 DNS 被污染，直接连 IP"。
+     * 而一旦 DNS 被投毒到攻击者的 IP，攻击者拿**任意一张他能申请到的 DV 证书**
+     * （哪怕是他自己域名下的）就能通过证书链校验，中间人握手成功，
+     * 于是 {@code Authorization: Bearer <API Key>}、{@code Cookie}（MiMo 会话）
+     * 和余额响应全部明文经过对方。用户界面上一切正常，只可能看到"余额变了"。
+     *
+     * <p>打开端点标识后，JSSE 会校验证书 SAN 里是否包含 {@code host}，
+     * 攻击者必须有该域名的合法证书才能冒充 —— 这就把攻击面收回到"证书签发体系"本身。
+     *
+     * <p>注意：DoH 的 IP 兜底源（写死的 223.5.5.5 / 1.1.1.1）证书只签给域名、
+     * 没有域名可校，那里是显式放行校验的，不走这个方法。
+     */
+    private static void requireHostname(javax.net.ssl.SSLSocket ssl, String host) {
+        try {
+            javax.net.ssl.SSLParameters prm = ssl.getSSLParameters();
+            prm.setEndpointIdentificationAlgorithm("HTTPS");
+            ssl.setSSLParameters(prm);
+        } catch (Throwable t) {
+            /* 老版本 Android 或自定义 provider 可能不支持；宁可连不上也不能静默降级 ——
+               抛出去让上层走"连接失败"分支（可回退到代理/DNS 换地址），
+               绝不带着"主机名可能对不上"的连接继续发 token。 */
+            throw new RuntimeException("无法开启 TLS 主机名校验：" + t, t);
+        }
+    }
+
     private static void resolve(String host, List<InetAddress> v4, List<InetAddress> v6) {
         /* 刚换网 → 系统 DNS 缓存里还是旧网络的 IP，直接用它只会连到不可达地址。
            这 60 秒内跳过系统解析、直接走 DoH（DoH 缓存也刚被清空，是干净的）。 */
@@ -1761,6 +1828,7 @@ public class BalanceFetcher {
                 }
                 SSLSocketFactory sf = (SSLSocketFactory) SSLSocketFactory.getDefault();
                 SSLSocket ssl = (SSLSocket) sf.createSocket(sock, host, port, true);
+                requireHostname(ssl, host);
                 ssl.startHandshake();
                 io = ssl;
             }
@@ -1842,6 +1910,7 @@ public class BalanceFetcher {
             if (https) {
                 SSLSocketFactory sf = (SSLSocketFactory) SSLSocketFactory.getDefault();
                 SSLSocket ssl = (SSLSocket) sf.createSocket(sock, host, port, true);   // host 决定 SNI
+                requireHostname(ssl, host);
                 ssl.startHandshake();
                 io = ssl;
             }
@@ -2730,7 +2799,7 @@ public class BalanceFetcher {
                         int budget = it.foreign ? per * 2 : per;
                         if (w != null)            fillWeb(ctx, it, w, rate, budget, viaProxy);
                         else if (c == null)       fill(ctx, it, ak, rate, budget);
-                        else                      fillCustom(ctx, it, c, rate, per);
+                        else                      fillCustom(ctx, it, c, rate, per, ak);
                         /* 不能无条件置 true：fill() 内部有些分支已经明确判定失败
                            （网关地址没填、网关没运行、百炼查询失败），它们置 ok=false 后 return。
                            这里一覆盖，界面就走成功分支 —— 卡片只剩一个「—」，
@@ -2757,7 +2826,10 @@ public class BalanceFetcher {
                         AuthFail.record(ctx, it.platform, false,
                                 AuthFail.httpCodeOf(e.getMessage()), null, e.getMessage());
                     } finally {
-                        if (it.ok) AuthFail.record(ctx, it.platform, true, 0, null, null);
+                        /* 只有**真拿到数**才算凭证有效。noData 的条目里既有"这个服务
+                           本来就没有余额接口"，也有"登录态过期"——后者若记成成功，
+                           设置页的凭据会一直显示正常，用户看不出该重新登录。 */
+                        if (it.ok && !it.noData) AuthFail.record(ctx, it.platform, true, 0, null, null);
                         if (viaProxy) VIA_PROXY.remove();   // 线程即将结束，顺手清掉
                         latch.countDown();                  // 无论成败都算「这一项已结束」
                     }
@@ -2874,7 +2946,13 @@ public class BalanceFetcher {
         for (int i = 0; i < res.items.size(); i++) {
             Item it = res.items.get(i);
             it.id = it.platform;           // 卡片/刷新/预警统一用平台标识
-            it.alertKey = it.platform;
+            /* ⚠️ alertKey 不能跟着改成下标。它是预警的幂等键（"这个平台已经提醒过了"），
+               而 custom:N / web:N 的下标会随增删整体前移 ——
+               覆盖成下标之后，新平台会继承旧平台的"已告警"状态（该报不报），
+               或者同一平台反复推。上游刻意给了名称式稳定键，这里别覆盖。 */
+            if (!it.platform.startsWith("custom:") && !it.platform.startsWith("web:")) {
+                it.alertKey = it.platform;
+            }
             java.util.ArrayList<String> kl = platKeys.get(it.platform);
             it.keyIds = kl == null ? null : kl.toArray(new String[kl.size()]);
             if (it.ok) {
@@ -2970,13 +3048,25 @@ public class BalanceFetcher {
                     rateC = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                             .getFloat("last_rate", 7.1f);
                 } catch (Throwable ig) { }
+                /* 与批量路径一致：墙外的自定义平台必须能走代理，
+                   否则"全量刷新正常、点刷新这一项必失败"。 */
+                boolean vpc = false;
                 try {
-                    fillCustom(ctx, it, c, rateC, timeoutMs);
+                    vpc = Clash.enabled(ctx) && Clash.isRunning()
+                            && Clash.shouldProxy(ctx, it.platform, false);
+                } catch (Throwable ignored) { }
+                if (vpc) VIA_PROXY.set(Boolean.TRUE);
+                try {
+                    fillCustom(ctx, it, c, rateC, timeoutMs, ak);
                     if (!it.noData) it.ok = true;
                 } catch (Exception e) {
                     it.ok = false;
                     it.error = friendlyError(e);
                     it.amount = "\u2014";
+                } finally {
+                    /* ThreadLocal 必须清：这条线程会被线程池复用，
+                       残留的 true 会让下一个平台的请求莫名走代理。 */
+                    if (vpc) VIA_PROXY.remove();
                 }
                 return it;
             }
@@ -2996,7 +3086,11 @@ public class BalanceFetcher {
                     return it;
                 }
                 WebCustom w = webs.get(widx);
-                it.id = "web" + widx;
+                /* ⚠️ 必须是 "web:0" 这种带冒号的写法。卡片 id 在合并阶段
+                   已被统一成 it.platform；调用方（MainActivity.refreshOne）
+                   用 id.equals() 精确匹配来替换卡片。少个冒号 → 匹配不上，
+                   结果被静默丢弃：toast 显示"刷新成功 + 新余额"，卡片数字一动不动。 */
+                it.id = "web:" + widx;
                 it.platform = "web:" + widx;
                 it.threshold = w.threshold;
                 it.label = w.name.length() > 0 ? w.name : "网页平台";
@@ -3013,22 +3107,37 @@ public class BalanceFetcher {
                     rate2 = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                             .getFloat("last_rate", 7.1f);
                 } catch (Throwable ig) { }
-                boolean vpx = Clash.enabled(ctx) && Clash.isRunning()
-                        && Clash.shouldProxy(ctx, it.platform, w.foreign);
+                /* ⚠️ 这个求值必须包 try：Clash.enabled/ shouldProxy 读 prefs、解析配置，
+                   内部抛 RuntimeException 时，异常会一路逸出 fetchOne（它没有 throws，
+                   调用方 MainActivity.refreshOne 又是裸 new Thread）→ 整个进程被杀。
+                   批量路径早就为同一个原因加了兜底，这里漏了。 */
+                boolean vpx = false;
+                try {
+                    vpx = Clash.enabled(ctx) && Clash.isRunning()
+                            && Clash.shouldProxy(ctx, it.platform, w.foreign);
+                } catch (Throwable ignored) { }
                 try {
                     fillWeb(ctx, it, w, rate2, w.foreign ? timeoutMs * 2 : timeoutMs, vpx);
                     if (!it.noData) it.ok = true;
                 } catch (Exception e) {
                     it.ok = false;
                     /* 服务器错误页 / 长 JSON 片段会原样进卡片，一段红字铺满整屏 */
-                    it.error = (e.getMessage() == null) ? "查询失败" : clip(e.getMessage(), 120);
+                    /* 与全量刷新同一口径：翻译成中文建议并截断，
+                       否则卡片上是一段 200+ 字符的英文异常串（"代理与直连均失败（…）"）。 */
+                    it.error = clip(friendlyError(e), 120);
                     it.amount = "\u2014";
                 }
                 return it;
             }
             /* 展示型平台（百炼 / 魔搭）可以没有 Key 记录 */
             Preset p0 = presetOf(it.id);
-            if (p0 != null && ("dashscope".equals(p0.id) || "modelscope".equals(p0.id))) {
+            /* ⚠️ mimo 必须在这个白名单里：它的凭据是 cookie（KeyStore 里那条记录
+               key 恒为空，isConfigured() 返回 false），上面的 ak 查找必然为 null。
+               漏了它就会落到下面的 else → "已删除"，用户在卡片上点「刷新这一项」，
+               卡片当场变成「已删除 / 这条 Key 记录已经不在了」，
+               还会连带把小组件缓存也写成"已删除"。 */
+            if (p0 != null && ("dashscope".equals(p0.id) || "modelscope".equals(p0.id)
+                    || "mimo".equals(p0.id))) {
                 it.platform = p0.id;
                 it.label = p0.name;
                 it.tag = p0.unit;
@@ -3103,7 +3212,7 @@ public class BalanceFetcher {
                 it.tag = "USD".equals(c.unit) ? "USD" : "CNY";
                 it.kind = c.kind;
                 it.subEndMs = c.renewAt;   // 自定义平台也参与订阅到期提醒
-                fillCustom(ctx, it, c, rate, timeoutMs);
+                fillCustom(ctx, it, c, rate, timeoutMs, null);
                 if (!it.noData) it.ok = true;
             } else {
                 Preset p = presetOf(ak.platform);
@@ -3218,7 +3327,14 @@ public class BalanceFetcher {
         it.debug = r.display;
     }
 
-    private static void fillCustom(Context ctx0, Item it, Custom c, double rate, int t) throws Exception {
+    /**
+     * @param ak 本次要用的那把 Key（多密钥时由调用方逐个传入）。
+     *           以前这里硬编码 {@code KeyStore.get(platform).get(0)}，
+     *           于是挂了 3 把 Key 时三个线程都在查第一把 ——
+     *           所谓「多密钥取最大」是同一个数复制三份，第二把有钱也显示不出来。
+     */
+    private static void fillCustom(Context ctx0, Item it, Custom c, double rate, int t,
+                                   KeyStore.ApiKey ak) throws Exception {
         /* 没填 URL：这个服务没有可查的额度（免费的魔搭），只作展示，一个请求都不发 */
         if (c.url == null || c.url.length() == 0) {
             /* 没填接口地址 = 静态卡：不发请求，直接显示 text（空则显示"免费"）。
@@ -3230,7 +3346,12 @@ public class BalanceFetcher {
             it.amount = hasText ? c.text : "免费";
             it.cny = 0;
             it.bal = 0;
-            it.low = false;                 // 余额 0 不等于"余额低"，别标红
+            /* ⚠️ noData 才是关键。设 low=false 没用 —— Alert.mark 每轮重算：
+                   it.low = it.ok && !it.noData && thr > 0 && it.bal < thr
+               少了 noData，用户给这类"余额见控制台"的卡设过阈值，
+               每轮都会收到"余额不足 ¥0.00"的推送；账本还会落一条 0 基线，
+               等它真取到数时被算成「充值 +N」，日均消耗判错。 */
+            it.noData = true;
             it.rows = hasText
                     ? "点卡片 → 控制台 查看\n（该平台没有公开的余额接口）"
                     : "";
@@ -3242,9 +3363,14 @@ public class BalanceFetcher {
            Custom.key / Custom.threshold 只是旧数据留下的兼容字段。 */
         String key = c.key;
         try {
-            List<KeyStore.ApiKey> ks = KeyStore.get(ctx0, it.platform);
-            if (ks != null && !ks.isEmpty()) {
-                KeyStore.ApiKey ak0 = ks.get(0);
+            /* 用调用方传进来的那把（多密钥时每条 Key 一个线程）；传 null 才退回第一把
+               （单卡刷新/测试按钮这类"只要能查通"的场景）。 */
+            KeyStore.ApiKey ak0 = ak;
+            if (ak0 == null) {
+                List<KeyStore.ApiKey> ks = KeyStore.get(ctx0, it.platform);
+                if (ks != null && !ks.isEmpty()) ak0 = ks.get(0);
+            }
+            if (ak0 != null) {
                 if (ak0.key != null && ak0.key.length() > 0) key = ak0.key;
                 if (ak0.threshold > 0) it.threshold = ak0.threshold;
             }
@@ -3368,13 +3494,29 @@ public class BalanceFetcher {
                             + "\n（Admin Key 只能查到用量，余额请去控制台）";
                     return;
                 }
+                /* 查失败要**表态**。原来直接往下落到通用静态卡，正文写
+                   "填浏览器 Cookie 可读余额（普通 API Key 查不到）"——
+                   用户明明填的就是 Admin Key，被提示成"普通 Key"；
+                   而且外层 finally 还会把凭证状态记成成功。 */
+                it.ok = false;
+                it.noData = true;
+                it.amount = "—";
+                it.rows = "Admin Key 查询失败\n"
+                        + "· 检查 Key 是否有 usage 权限\n"
+                        + "· 或改用浏览器 Cookie（能直接读剩余额度）";
+                it.error = "Admin Key 查询失败";
+                return;
             } else if (looksLikeCookie(k)) {
                 String body;
                 try {
                     body = get(OPENAI_CREDITS_URL, null, openaiCookie(k), Math.max(Math.min(t, 12000), 3000));
                 } catch (StatusException se) {
                     /* 401/403 多半是会话过期或 Cloudflare 拦了 */
-                    it.ok = true;
+                    /* ok=false：这是一次**失败**（登录态过期）。
+                       置 true 会让 AuthFail 记成成功、设置页的凭据显示"正常"，
+                       而卡片上明明写着"需重新登录"——同一个东西两个说法。
+                       对照 MiMo 的过期分支就没置 true。 */
+                    it.ok = false;
                     it.noData = true;
                     it.bal = 0;
                     it.cny = 0;

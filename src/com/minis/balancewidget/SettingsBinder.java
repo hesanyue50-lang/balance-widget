@@ -975,7 +975,13 @@ public class SettingsBinder {
 
     private static String mask(String k) {
         if (k == null || k.length() == 0) return "（未填）";
-        if (k.length() <= 10) return k;
+        /* ⚠️ 短 Key 也必须打码。原来 <=10 位直接原样显示，
+           于是自建网关的 6~10 位 token、以及"误把密码填进密钥"的情况，
+           在列表里就是明文；而同一行长按"查看完整密钥"却要过查看密码 ——
+           同一个界面两套规则，等于密码闸门形同虚设。 */
+        /* 太短的 Key 打码后没有信息量，而且 substring(0,4)+substring(len-4)
+           在 len<=8 时会重叠 —— 等于把整串又拼了出来。直接只给一个省略号。 */
+        if (k.length() <= 8) return "…";
         return k.substring(0, 4) + "…" + k.substring(k.length() - 4);
     }
 
@@ -2112,9 +2118,16 @@ public class SettingsBinder {
                 String kv = eKey.getText().toString().trim();
                 /* 换了网站就别把旧凭据带过去 —— A 站的 Cookie / Bearer 发给 B 站，
                    既抓不对，也是把登录态泄露给了别人。 */
-                if (isEdit && !hostOf(w0.url).equals(hostOf(w.url))) {
+                boolean hostChanged = isEdit && !hostOf(w0.url).equals(hostOf(w.url));
+                if (hostChanged) {
                     hdrs = stripHeader(stripHeader(hdrs, "Cookie"), "Authorization");
-                    Toast.makeText(act, "网址换了，已清空旧的登录态与 Authorization",
+                    /* ⚠️ Key 也必须清。原来只清了 headers 里的 Authorization，
+                       而下面还有一句「Key 有值时自动拼 Bearer」——
+                       旧站点的 Key 立刻又被拼回去发给新域名，正是这段注释要避免的事。
+                       Toast 说的"已清空"必须是真的。 */
+                    kv = "";
+                    w.key = "";
+                    Toast.makeText(act, "网址换了，已清空旧的登录态与 Key，请重新填写",
                             Toast.LENGTH_SHORT).show();
                 }
                 w.headers = hdrs;
@@ -2195,8 +2208,14 @@ public class SettingsBinder {
                         return;
                     }
                 }
-                /* Key 有值时自动拼 Bearer（和界面文案一致） */
-                if (kv.length() > 0) w.headers = WebCustom.mergeHeader(w.headers, "Authorization", "Bearer " + kv);
+                /* Key 有值时自动拼 Bearer（和界面文案一致）；
+                   清空 Key 时要把残留的 Authorization 去掉 —— 否则输入框是空的，
+                   请求里还在发旧 token，用户完全找不到"哪还在发 Key"。 */
+                if (kv.length() > 0) {
+                    w.headers = WebCustom.mergeHeader(w.headers, "Authorization", "Bearer " + kv);
+                } else if (w0 != null && w0.key != null && w0.key.length() > 0) {
+                    w.headers = stripHeader(w.headers, "Authorization");
+                }
 
                 /* 以**原始存档**为基准替换这一条。
                    别用 loadAll()+saveAll()：loadAll 会丢掉 ready() 不过的项，
@@ -3102,6 +3121,17 @@ public class SettingsBinder {
                 if (c.url.length() > 0 && c.url.length() <= "https://".length()) {
                     Toast.makeText(act, "URL 不完整，请填完整地址", Toast.LENGTH_SHORT).show();
                     return;
+                }
+
+                /* ⚠️ 必须继承原始密文与扣费日 —— 新建的 Custom 里这两项都是空/0：
+                   - rawKey 为空时序列化会落到 enc("")，把磁盘上的密文真正写成空串。
+                     换机/重装后 Keystore 解不开，"改个显示文字再保存"就把 Key 永久废掉，
+                     换回原设备也救不回来。
+                   - renewAt 为 0 会让「还有 N 天」和到期提醒静默消失。 */
+                if (isEdit) {
+                    c.rawKey = c0.rawKey;
+                    c.renewAt = c0.renewAt;
+                    c.console = c0.console;
                 }
 
                 /* 以**原始存档**为基准替换这一条（按内容认出目标，不认下标），

@@ -1186,14 +1186,27 @@ public class SettingsActivity extends Activity {
                 } catch (Exception ignored) { c.threshold = 0; }
 
                 List<BalanceFetcher.Custom> list = BalanceFetcher.loadCustom(SettingsActivity.this);
-                /* 本界面没有控制台输入框，但编辑时必须把原值带过来 ——
-                   否则模板填好的「控制台」地址被清空，卡片点进去跳不了。 */
-                if (editing && index < list.size()) {
-                    c.console = list.get(index).console;
+                /* 本界面没有控制台/扣费日输入框，编辑时必须把原值带过来：
+                   - console：否则模板填好的「控制台」地址被清空，卡片点进去跳不了
+                   - renewAt：否则「还有 N 天」和到期提醒永久消失，而且界面上
+                     根本看不到这个字段，用户无从判断是被清了
+                   - rawKey：**最关键**。换机/重装后 KeyVault 解不开，c.key 是空串；
+                     不带原密文的话序列化会写 enc("") = 空，磁盘上的密文被真正抹掉，
+                     换回原设备也救不回来。 */
+                BalanceFetcher.Custom old = (editing && index >= 0 && index < list.size())
+                        ? list.get(index) : null;
+                if (old != null) {
+                    c.console = old.console;
+                    c.renewAt = old.renewAt;
+                    c.rawKey = old.rawKey;
                 }
-                if (editing && index < list.size()) list.set(index, c);
-                else list.add(c);
-                BalanceFetcher.saveCustom(SettingsActivity.this, list);
+                /* ⚠️ 不能 list.set + saveCustom 整表写回：loadCustom 已经滤掉了
+                   ready() 不过的条目，整表覆盖会把它们永久删掉。用 putCustom
+                   按内容替换，找不到就追加，其余条目原样不动。 */
+                BalanceFetcher.putCustom(SettingsActivity.this, c,
+                        old == null ? null : old.name,
+                        old == null ? null : old.url,
+                        old == null ? null : old.text);
                 renderCustomList();
                 refreshWidget();
                 dlg.dismiss();
