@@ -403,8 +403,18 @@ public class MainActivity extends Activity {
     /** 设置面板：直接绑定与设置页相同的设置主体（同层，无跳转） */
     private void buildSettingsPanel() {
         if (settingsPanelBuilt) return;
-        settingsPanelBuilt = true;
-        settingsBinder = new SettingsBinder(this, findViewById(R.id.settings_container),
+        /* ⚠️ 先判空再置标志。
+           原来无条件 `settingsPanelBuilt = true;` 然后拿 findViewById 的结果去 new，
+           而 onCreate 里的判空（sc0）只挡住了"预热"这一条路径。
+           某些设备（id 重映射）上 settings_container 取不到时：
+           要么 bind 内 NPE 闪退，要么异常被吞但标志已置 true →
+           此后每次切设置页都直接 return，设置页永久空白且没有任何提示。 */
+        View settingsRoot = findViewById(R.id.settings_container);
+        if (settingsRoot == null) {
+            BalanceFetcher.diag(this, "⚠️ 找不到 settings_container，设置页无法构建");
+            return;
+        }
+        settingsBinder = new SettingsBinder(this, settingsRoot,
                 new Runnable() {
                     public void run() { applyHideLocally(); refresh(false); }
                 });
@@ -420,8 +430,15 @@ public class MainActivity extends Activity {
                 showPanel(Math.max(0, idx));
             }
         };
-        settingsBinder.bind();
-        Theme.skin(this, findViewById(R.id.settings_container));
+        try {
+            settingsBinder.bind();
+            settingsPanelBuilt = true;      // bind 成功才算建好
+            Theme.skin(this, findViewById(R.id.settings_container));
+        } catch (Throwable t) {
+            /* 失败了就别把标志置 true —— 下次切进来还能重试 */
+            BalanceFetcher.diag(this, "设置面板构建失败：" + t);
+            settingsBinder = null;
+        }
     }
 
     /** 当前页在**可见页**里的下标。具体对应哪一页由用户设置的顺序决定，
@@ -599,6 +616,14 @@ public class MainActivity extends Activity {
 
     /** 当前可见页第 i 个对应的 key（越界返回空串） */
     private String keyOfIndex(int i) {
+        /* ⚠️ 必须和 indexOfPage() 用同一份数据源。
+           indexOfPage 早就改成优先用 navKeys（某页 view 取不到时它比 visibleOrder 少一项），
+           但反向的 keyOfIndex 没跟着改 —— 于是从缺项那一位起，
+           所有页面对应到错误的 key：点「设置」按加速页处理（切页即崩），
+           或统计页停稳后 buildStats() 不被调用（曲线区一片空白）。 */
+        if (!navKeys.isEmpty()) {
+            return (i < 0 || i >= navKeys.size()) ? "" : navKeys.get(i);
+        }
         List<String> vis = PageStore.visibleOrder(this);
         return (i < 0 || i >= vis.size()) ? "" : vis.get(i);
     }
@@ -734,9 +759,14 @@ public class MainActivity extends Activity {
                     vpnBinder = new VpnBinder(this, vpnRoot);
                 }
             }
-            vpnBinder.bind();
-            /* 首次进入这页才播进场 —— 每次切页都播会显得页面在"跳" */
-            if (firstVpn) Anim.enterPage(findViewById(R.id.scroll_vpn));
+            /* ⚠️ 必须判空：上面 vpnRoot 取不到时 vpnBinder 仍是 null，
+               原来直接 `vpnBinder.bind()` —— 日志先打"跳过加速页绑定"，
+               紧接着就 NPE 闪退，防护代码自己把结论推翻了。 */
+            if (vpnBinder != null) {
+                vpnBinder.bind();
+                /* 首次进入这页才播进场 —— 每次切页都播会显得页面在"跳" */
+                if (firstVpn) Anim.enterPage(findViewById(R.id.scroll_vpn));
+            }
             /* 导入订阅时立刻刷新加速页（否则要切走再切回才看得到新订阅） */
             ClashImport.onPending = new Runnable() {
                 public void run() {
