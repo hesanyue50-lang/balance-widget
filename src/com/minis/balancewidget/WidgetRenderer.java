@@ -287,6 +287,16 @@ public final class WidgetRenderer {
                 v.setTextColor(DOT[s], color);
             } catch (Throwable ignored) { }
 
+            /* ⚠️ noData 在前，ok 在后。
+               "这个平台本来就没有余额接口"（MiMo 未登录/过期、百炼见控制台、
+               魔搭免费、纯展示型自定义卡）走的都是 noData + ok=false，
+               原来一律渲染成红字「查询失败」—— 明明不是网络故障，
+               用户看到的却是错误态；只配这类平台时总额还是「——」+「全部 N 项失败」。 */
+            if (it.noData) {
+                v.setTextViewText(VAL[s], it.amount == null || it.amount.length() == 0 ? "—" : it.amount);
+                v.setTextColor(VAL[s], cTx2);
+                continue;
+            }
             if (!it.ok) {
                 v.setTextViewText(VAL[s], "查询失败");
                 v.setTextColor(VAL[s], WallpaperTint.danger(dark));

@@ -18,11 +18,23 @@ import android.appwidget.AppWidgetManager;
  */
 public final class WidgetStyle {
 
-    /** 高度模型：面板高 = 21(内边距) + 100(标题+总额+副行) + N*12.6 + (N-1)*6 */
-    private static final float PAD_DP = 21f;
-    private static final float HEAD_DP = 100f;
-    private static final float ROW_DP = 12.6f;
-    private static final float GAP_DP = 6f;
+    /**
+     * 高度模型：面板高 = 16(根内边距×2) + 84(标题+总额+副行) + N×30 + (N-1)×1
+     *
+     * <p>⚠️ 原来按 ROW_DP = 12.6dp 建模，而每一行实际是
+     * {@code 6dp padding×2 + 15sp 文本 ≈ 30dp} —— 差了 2.4 倍。
+     * 后果：200dp 的默认 3 格组件被算成"能放 4 行 = 8 项"，
+     * 而实际只有 3 行 = 6 项放得下：第 5~8 项既**看不见**、也**翻不到**
+     * （第 2 页从第 9 个槽位开始）。实测账单：
+     * 16×2 + 22(标题) + 6 + 41(34sp 总额) + 2 + 12(副行) + 8(margin) + 4×30 = 243dp > 200dp。
+     *
+     * <p>改成与布局一致的实测值后，默认 3 格正好 3 行 = 6 项，
+     * 与 widget_info.xml 里 targetCellHeight=3 的注释一致。
+     */
+    private static final float PAD_DP = 16f;
+    private static final float HEAD_DP = 84f;
+    private static final float ROW_DP = 30f;
+    private static final float GAP_DP = 1f;
 
     /** 单列 / 双列的分界宽度：最长项加列距约 150dp，取 260dp 留余量 */
     private static final int TWO_COL_MIN_WIDTH_DP = 260;

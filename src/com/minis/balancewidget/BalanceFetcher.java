@@ -2880,7 +2880,9 @@ public class BalanceFetcher {
                     res.totalCny += add;
                     if (it.estimated) res.totalEstimated = true;
                 }
-            } else {
+            } else if (!it.noData) {
+                /* noData 不是失败：它有自己的正文（需登录 / 见控制台 / 免费）。
+                   算成 failed 会让「全失败保留缓存」「N 项失败」两条逻辑都被带偏。 */
                 res.failed++;
                 if (it.amount == null || it.amount.length() == 0) it.amount = "—";
             }
@@ -2974,8 +2976,8 @@ public class BalanceFetcher {
                         it.rows = it.rows + "\n（同平台 " + it.mergeCount + " 个密钥，取最大）";
                     }
                 }
-            } else {
-                res.failed++;
+            } else if (!it.noData) {
+                res.failed++;      // 同上：noData 不算失败
             }
         }
         diag(ctx, "fetch 结束：成功 " + (res.configured - res.failed) + "/" + res.configured

@@ -108,7 +108,11 @@ public final class WidgetCache {
         if (r == null) return 0;
         int c = 0;
         for (int i = 0; i < r.items.size(); i++) {
-            if (r.items.get(i).ok) c++;
+            /* noData 也算"这条有结论"：它有自己的正文（需登录/见控制台/免费）。
+               不把它算进来，只配了这类平台时会被判成"全部失败"，
+               总额显示「——」、副标题「全部 N 项查询失败」—— 与事实相反。 */
+            BalanceFetcher.Item it = r.items.get(i);
+            if (it.ok || it.noData) c++;
         }
         return c;
     }
