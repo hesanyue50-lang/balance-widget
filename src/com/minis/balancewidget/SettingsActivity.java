@@ -276,7 +276,32 @@ public class SettingsActivity extends Activity {
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
+    /**
+     * ⚠️ 这一整个 Activity 原来**没有 onActivityResult**。
+     *
+     * <p>而设置页的「备份 / 恢复 / 导入平台包 / 崩溃日志目录」四个按钮都在这里
+     * （`BackupUi.backup()` 用的是 `act.startActivityForResult`，act 就是本 Activity）——
+     * 结果：文件选择器正常弹出、正常选完，回来**什么都不发生**，
+     * 也没有任何提示。用户以为"点了没生效"，反复点。
+     *
+     * <p>三个结果处理器只被 MainActivity 调用过。
+     */
     @Override
+    protected void onActivityResult(int req, int res, android.content.Intent data) {
+        try {
+            if (BackupUi.onResult(this, req, res, data)) {
+                if (req == BackupUi.REQ_RESTORE) SettingsBinder.refreshAllLists();
+                return;
+            }
+            if (PlatformPack.onResult(this, req, res, data)) {
+                SettingsBinder.refreshAllLists();
+                return;
+            }
+            if (SettingsBinder.onCrashDirResult(this, req, res, data)) return;
+        } catch (Throwable ignored) { }
+        super.onActivityResult(req, res, data);
+    }
+
     protected void onDestroy() {
         /* 清全部而不是只清一个：分片构建的 buildChunk 也挂在同一个 Handler 上，
            只移除 searchFilterTask 的话它仍会继续跑并操作已分离的 View。 */

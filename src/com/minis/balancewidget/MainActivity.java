@@ -1690,7 +1690,13 @@ public class MainActivity extends Activity {
             /* 只刷 Key 列表是不够的：用户可能在 SettingsActivity 里删/加过自定义平台
                或高级平台，回来时这边仍是旧行。旧行捕获的是旧下标，点「删除」会删到
                另一个平台（连带清掉它的 Key、后面整体前移）。 */
-            try { SettingsBinder.refreshAllLists(); } catch (Throwable ignored) { }
+            /* 先把自己重新登记为 active（见 SettingsBinder.activate 的注释：
+               从独立设置页返回后 active 已被 detach 置 null，不重新登记就刷不动），
+               再重建设置页三份列表。 */
+            try {
+                settingsBinder.activate();
+                SettingsBinder.refreshAllLists();
+            } catch (Throwable ignored) { }
         }
         /* 回到前台就全量重抓 19 家平台，以前是无条件的 —— 频繁切前后台
            （看一眼通知再回来）就是反复 19 轮请求 + 一轮汇率。
@@ -1891,7 +1897,13 @@ public class MainActivity extends Activity {
                         }
                         if (isFinishing() || isDestroyed()) return;
                         render(r);
-                        if (statsRebuildAfterRefresh && PageStore.K_STATS.equals(curKey)) {
+                        /* 只要当前停在统计页就重算。
+                           原来只在 `statsRebuildAfterRefresh` 那轮才重建 —— 而它唯一的置位点在
+                           `refresh()` 开头，且写在 `if (loading) return;` **之后**：
+                           用户停在统计页等自动刷新（autoTask 每 2 分钟）、
+                           或下拉时正好撞上在跑的一轮，图都不会动，
+                           看起来像"刷新了但统计没更新"。 */
+                        if (PageStore.K_STATS.equals(curKey)) {
                             statsRebuildAfterRefresh = false;
                             buildStats();
                         }
@@ -1911,6 +1923,28 @@ public class MainActivity extends Activity {
                         public void run() {
                             loading = false;
                             hidePullRefresh();
+                            /* 副标题在刷新开始时被设成「正在查询…」，异常路径没人复位 ——
+                               用户看到的就是转圈结束后一直卡在这行字，
+                               既没有错误提示也没有上次成功时间，只能以为"软件不更新了"。 */
+                            try {
+                                if (tSub != null) {
+                                    if (lastResult != null) {
+                                        tSub.setText("刷新失败 · 上次成功 "
+                                                + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+                                                .format(new java.util.Date(lastRefreshAt)));
+                                        tSub.setTextColor(Theme.c(MainActivity.this, R.attr.c_danger));
+                                    } else {
+                                        tSub.setText("刷新失败，请检查网络后重试");
+                                        tSub.setTextColor(Theme.c(MainActivity.this, R.attr.c_danger));
+                                    }
+                                }
+                                String why = t.getMessage() == null
+                                        ? t.getClass().getSimpleName() : t.getMessage();
+                                if (why.length() > 60) why = why.substring(0, 60) + "…";
+                                android.widget.Toast.makeText(MainActivity.this,
+                                        "刷新失败：" + why,
+                                        android.widget.Toast.LENGTH_SHORT).show();
+                            } catch (Throwable ig) { }
                         }
                     });
                 }

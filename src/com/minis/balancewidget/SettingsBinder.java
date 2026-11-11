@@ -61,9 +61,24 @@ public class SettingsBinder {
      * 点某行「删除」时按旧下标去新列表里删 —— **删掉的是另一个平台**，
      * 连带它的 Key 被清、后面的平台整体前移。
      */
+    /**
+     * 宿主回到前台时重新登记自己。
+     *
+     * <p>为什么需要：`active` 是单例，两个宿主（主界面内联面板 / 独立设置页）
+     * 各持一个 binder。用户进设置页后 `active` 被设置页的 binder 拿走，
+     * 返回时设置页 `detach()` 把 `active` 置 null —— 主界面的 binder
+     * **再也不会重新登记**（`settingsPanelBuilt` 闸门只放行一次）。
+     * 此后在主界面恢复备份 / 导入平台包，`refreshAllLists()` 什么也不做，
+     * 列表停在旧行、旧下标 → 点「删除」删到别的平台、连带清掉它的 Key。
+     */
+    public void activate() {
+        if (act != null && !act.isFinishing()) active = this;
+    }
+
     public static void refreshAllLists() {
         SettingsBinder b = active;
         if (b == null || b.act == null || b.act.isFinishing()) return;
+        if (android.os.Build.VERSION.SDK_INT >= 17 && b.act.isDestroyed()) return;
         try {
             b.act.runOnUiThread(new Runnable() {
                 public void run() {
