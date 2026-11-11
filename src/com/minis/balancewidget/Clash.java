@@ -400,6 +400,11 @@ public final class Clash {
                 if (coreStopRequested) {
                     /* 用户已经点了停止：别再把剩下的秒数睡完，也别下"启动失败"的结论 */
                     BalanceFetcher.diag(c, "启动过程中收到停止请求，放弃等待");
+                    /* ⚠️ 必须自己收拾：走到这里时进程可能已经被 startLocked 起起来了，
+                       而用户的 stop() 那一刻 proc 还是 null（什么都没做）。
+                       不 kill 的话：toast 说"已停止"、开关关着，但 17890 在听，
+                       2 秒后状态刷新又变「运行中」，用户再点一次反而把它关掉。 */
+                    stop(c);
                     return "启动已取消";
                 }
                 if (!isRunning()) {
@@ -441,8 +446,20 @@ public final class Clash {
     private static synchronized void stopLocked(Context c) {
         try {
             if (proc != null) {
-                proc.destroy();
+                Process dying = proc;
                 proc = null;
+                try { dying.destroy(); } catch (Throwable ig) { }
+                /* ⚠️ SIGTERM 之后要等一下。原来 destroy() 立刻返回、proc 已置空，
+                   而内核可能还要几百毫秒才真的退出（大配置、正在关连接）——
+                   紧接着调用方 render() 里的 isRunning() 真探一次 17890，
+                   还在听 → 界面又画成「运行中」→ 用户再点一次开关反而把它关掉
+                   （toggleRun 是 toggle 语义），表现为"开关坏了"。
+                   等不到就强杀，别把半死的进程留给下一轮。 */
+                try {
+                    if (!dying.waitFor(350, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        try { dying.destroyForcibly(); } catch (Throwable ig) { }
+                    }
+                } catch (Throwable ig) { }
                 BalanceFetcher.diag(c, "clash 已停止");
             } else if (portAlive()) {
                 /* proc 为 null 但 7890 有人在听 = 上一会话遗留的孤儿内核。
@@ -538,6 +555,7 @@ public final class Clash {
 
         if (subYaml != null && subYaml.length() > 0) {
             String[] lines = subYaml.split("\n");
+            boolean skipBlock = false;
             for (int i = 0; i < lines.length; i++) {
                 String l = lines[i];
                 String t = l.trim();
@@ -549,7 +567,16 @@ public final class Clash {
                    ★ 只跳过**顶层**的：dns 段里的 ipv6 前面有缩进，是另一个层级的键，
                      必须原样保留。判断办法就是看这一行有没有前导空白。 */
                 boolean topLevel = l.equals(t);
-                if (topLevel && isOwnedTopKey(t)) continue;
+                if (topLevel) skipBlock = false;
+                if (topLevel && isOwnedTopKey(t)) { skipBlock = true; continue; }
+                /* ⚠️ 被丢弃的顶层块，它的**缩进子行也必须一起丢**。
+                   只丢 `tun:` 那一行的话，下面 2 空格缩进的
+                   `enable: / stack: / auto-route:` 会被挂到上一个块
+                   （通常是 rules: 序列）里，内核直接报
+                   "while parsing a block collection / expected <block end>"。
+                   更糟的是：错误文本里带 yaml:，startWithRollback 会判定为配置解析错
+                   并把刚下载的新订阅回滚成上一版 —— 用户以为订阅坏了。 */
+                if (skipBlock && !topLevel) continue;
                 sb.append(l).append('\n');
             }
         }
@@ -594,7 +621,15 @@ public final class Clash {
     private static final String[] OWNED_TOP_KEYS = {
         "mixed-port:", "port:", "socks-port:", "external-controller:",
         "allow-lan:", "bind-address:", "mode:", "log-level:",
-        "ipv6:", "unified-delay:", "tcp-concurrent:", "tun:", "tun-file-descriptor", };
+        "ipv6:", "unified-delay:", "tcp-concurrent:", "tun:", "tun-file-descriptor",
+        /* ⚠️ secret: 必须丢。订阅里带 `secret: xxxxx` 时它原样进配置，
+           而本应用所有控制 API 调用都**不发 Authorization** →
+           apiAlive() 恒 false → waitForApi 40 轮超时 →
+           把其实完全健康的内核当成"启动失败"杀掉。
+           用户看到「内核启动超时」，而 core.log 里一行错都没有 —— 排查方向完全被带偏。
+           控制口已 bind-address: 127.0.0.1，去掉它没有外泄风险。
+           顺带丢 external-ui / external-controller-cors，同属"归本应用管"的项。 */
+        "secret:", "external-ui:", "external-controller-cors:", "external-ui-name:", };
 
     private static boolean isOwnedTopKey(String trimmedLine) {
         for (int i = 0; i < OWNED_TOP_KEYS.length; i++) {
