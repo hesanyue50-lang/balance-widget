@@ -213,7 +213,7 @@ public final class KeyStore {
         }
     }
 
-    public static void remove(Context c, String id) {
+    public static synchronized void remove(Context c, String id) {
         dataVersion++; invalidate();
         List<ApiKey> all = load(c);
         for (int i = all.size() - 1; i >= 0; i--) {
@@ -229,7 +229,7 @@ public final class KeyStore {
      * 平台没了、Key 还在 KeyStore 里，统计页遍历 KeyStore 时照常给它分组，
      * 图例上就挂着一个解析不出名字的 "custom:0"（用户看到会以为见鬼了）。
      */
-    public static int removeAllForPlatform(Context c, String platform) {
+    public static synchronized int removeAllForPlatform(Context c, String platform) {
         dataVersion++; invalidate();
         List<ApiKey> all = load(c);
         List<ApiKey> keep = new ArrayList<ApiKey>();
@@ -275,6 +275,7 @@ public final class KeyStore {
 
     private static List<ApiKey> parseAll(Context c) {
         List<ApiKey> out = new ArrayList<ApiKey>();
+        boolean parsedOk = true;
         SharedPreferences p = sp(c);
         String json = p.getString(K_KEYS, "");
 
@@ -310,12 +311,61 @@ public final class KeyStore {
                 if (k.planMode == null || k.planMode.length() == 0) k.planMode = "balance";
                 out.add(k);
             }
-        } catch (Throwable ignored) { }
+            parsedOk = true;
+        } catch (Throwable t) {
+            /* ⚠️ 存档坏了（写盘中断 / 外部改写 / 跨版本恢复）绝不能静默返回空表。
+               空表的下游是：设置页所有平台显示"未配置"、hasAnyConfigured() 返回 false、
+               用户以为数据丢了但还能重填 → 随手加一把 Key 点保存 →
+               整表覆盖，**全部平台的密钥一次性永久消失**。
+
+               这里：① 原串另存一份（用户还能手工抢救）；② 打日志。 */
+            try {
+                String bad = p.getString(K_KEYS, "");
+                if (bad != null && bad.length() > 0) {
+                    p.edit().putString(K_KEYS + "_bad_" + System.currentTimeMillis(), bad).apply();
+                }
+            } catch (Throwable ig) { }
+            BalanceFetcher.diag(c, "密钥存档解析失败，已留档：" + t);
+        }
+        if (!parsedOk && out.isEmpty()) badArchive = true;
         return out;
+    }
+
+    /**
+     * 磁盘上**原始**条目数（不过滤、不解密）。
+     *
+     * <p>用于"要写空表、但磁盘上明明还有内容"的闸门。解析不了时返回 -1 ——
+     * 调用方应该把 -1 也当成"有内容"（宁可不写，也不能清空）。
+     */
+    public static int rawCount(Context c) {
+        try {
+            String json = sp(c).getString(K_KEYS, "");
+            if (json == null || json.length() == 0) return 0;
+            return new JSONArray(json).length();
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /** 上一次 parseAll 是不是"存档坏了"（区别于"本来就没配"）。 */
+    private static volatile boolean badArchive = false;
+
+    public static boolean archiveBroken() {
+        return badArchive;
     }
 
     /** 保存全部（包内整理用：删除自定义平台后的 Key 重排要走这里） */
     public static void save(Context c, List<ApiKey> list) {
+        /* ⚠️ 最后一道闸：要把整表写成空，而磁盘上明明还有数据 —— 拒绝。
+           正常的"清空"都有明确入口（逐条删 / 清空全部），不会走到"传一个空列表"。
+           而存档损坏时 load 返回空表，任何 read-modify-write 都会把这个空表写回去。
+           宁可这次改动不生效，也不能让用户的密钥凭空消失。 */
+        int onDisk = rawCount(c);
+        if ((list == null || list.isEmpty()) && onDisk != 0) {
+            BalanceFetcher.diag(c, "阻止了一次清空密钥存档的写入（磁盘上还有 "
+                    + (onDisk < 0 ? "无法解析的存档" : onDisk + " 条") + "）");
+            return;
+        }
         /* 这里不再自增 dataVersion：自增会让刚写好的缓存立刻失效，
            下一次读又得把所有 Key 重新解密一遍。版本号由调用方（add/update/remove）负责推。 */
         try {
@@ -359,7 +409,12 @@ public final class KeyStore {
             }
             cache = new ArrayList<ApiKey>(list);   // 回填缓存，省掉下一次重解密
             cacheVer = dataVersion;
-        } catch (Throwable ignored) { }
+        } catch (Throwable t) {
+            /* 最常见的原因：KeyVault.enc 抛了（Keystore 不可用）。
+               那时**没有**写入任何东西 —— 包括明文。缓存也不更新，
+               所以界面会如实显示"没保存成功"。 */
+            BalanceFetcher.diag(c, "密钥保存失败（未写入，也未落明文）：" + t);
+        }
     }
 
     /** 把老格式（platform → key 字符串）搬进新结构，只做一次 */

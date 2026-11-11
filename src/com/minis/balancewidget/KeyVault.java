@@ -41,23 +41,41 @@ public final class KeyVault {
         return s != null && s.startsWith(PREFIX);
     }
 
-    /** 加密。任何异常都退化返回原值 —— 宁可暂时明文，也绝不能把用户的 Key 弄丢 */
+    /**
+     * 加密。
+     *
+     * <p>⚠️ 失败时**绝不返回明文**。原来这里是 {@code catch { return plain; }}，
+     * 注释写"宁可暂时明文，也绝不能把用户的 Key 弄丢"—— 但代价是：
+     * 密钥以明文落进 shared_prefs，**备份文件里也是明文**，
+     * 而界面和文档一直宣称"加密存储、拷走也解不开"。而且事后完全无法分辨哪条是明文。
+     *
+     * <p>失败只说明 Keystore 这一刻不可用（开机初期 keymaster 未就绪、别名被占用），
+     * 重试一次通常就好；仍失败就抛出去让上层放弃这次保存并提示用户 ——
+     * 少存一次，比悄悄降级成明文好。
+     */
     public static String enc(String plain) {
         if (plain == null || plain.length() == 0) return "";
         if (isEncrypted(plain)) return plain;
-        try {
-            Cipher c = Cipher.getInstance(TRANSFORM);
-            c.init(Cipher.ENCRYPT_MODE, secretKey());
-            byte[] iv = c.getIV();
-            byte[] ct = c.doFinal(plain.getBytes("UTF-8"));
-            byte[] out = new byte[1 + iv.length + ct.length];
-            out[0] = (byte) iv.length;
-            System.arraycopy(iv, 0, out, 1, iv.length);
-            System.arraycopy(ct, 0, out, 1 + iv.length, ct.length);
-            return PREFIX + Base64.encodeToString(out, Base64.NO_WRAP);
-        } catch (Throwable t) {
-            return plain;
+        Throwable last = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                Cipher c = Cipher.getInstance(TRANSFORM);
+                c.init(Cipher.ENCRYPT_MODE, secretKey());
+                byte[] iv = c.getIV();
+                byte[] ct = c.doFinal(plain.getBytes("UTF-8"));
+                byte[] out = new byte[1 + iv.length + ct.length];
+                out[0] = (byte) iv.length;
+                System.arraycopy(iv, 0, out, 1, iv.length);
+                System.arraycopy(ct, 0, out, 1 + iv.length, ct.length);
+                String enc = PREFIX + Base64.encodeToString(out, Base64.NO_WRAP);
+                if (!isEncrypted(enc)) throw new IllegalStateException("加密结果格式异常");
+                return enc;
+            } catch (Throwable t) {
+                last = t;
+                try { Thread.sleep(120); } catch (InterruptedException ig) { }
+            }
         }
+        throw new IllegalStateException("密钥加密失败，已阻止明文落盘", last);
     }
 
     /** 解密。兼容未加密的老数据（原样返回） */
