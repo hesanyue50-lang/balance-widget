@@ -2233,7 +2233,11 @@ public class MainActivity extends Activity {
                             }
                             int failed = 0;
                             for (int i = 0; i < base.items.size(); i++) {
-                                if (!base.items.get(i).ok) failed++;
+                                /* noData 不算失败（与 fetchInner / WidgetCache.okCount 同一口径）：
+                                   否则只要配了一个 MiMo 未登录或免费静态卡，
+                                   点任意卡片「刷新这一项」后副标题就变红写「N 项失败」。 */
+                                BalanceFetcher.Item x = base.items.get(i);
+                                if (!x.ok && !x.noData) failed++;
                             }
                             base.failed = failed;
                             /* 总额走统一口径（countsInTotal + 积分类按当前折算率补算）：
@@ -2445,7 +2449,14 @@ public class MainActivity extends Activity {
         /* 数字滚动而不是淡入换值：金额变化时用户能直接看出涨/跌和差值。
            首次填充（没有旧值）不滚，直接落 —— 否则开屏就在那儿数数。 */
         double oldVal = parseMoney(oldTotal);
-        if (!firstFill && !Double.isNaN(oldVal)
+        /* ⚠️ 全失败必须**跳过动画**。
+           上面虽然定义了 newTotal = "——"，但 countTo 用的是格式串 "¥%.2f"，
+           根本不管 newTotal —— 于是用户看到的还是"从 ¥100 滚到 ¥0.00"，
+           正是这段注释说要避免的现象。 */
+        boolean allFailedNow = (okNow == 0 && r.failed > 0);
+        if (allFailedNow) {
+            tTotal.setText("——");
+        } else if (!firstFill && !Double.isNaN(oldVal)
                 && Math.abs(oldVal - r.totalCny) > 0.005) {
             Anim.countTo(tTotal, oldVal, r.totalCny, "¥%.2f");
         } else {

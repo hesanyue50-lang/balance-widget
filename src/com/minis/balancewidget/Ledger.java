@@ -367,7 +367,24 @@ public final class Ledger extends SQLiteOpenHelper {
             cv.put("delta", amount);
             cv.put("matched", amount);
             cv.put("amount", amount);
-            int n = db.update(T_RECH, cv, "key_id=?", new String[] { keyId });
+            /* ⚠️ 必须先查出**最近那一条**的 id 再改。
+               `UPDATE ... WHERE key_id=?` 会命中该 Key 的**所有**充实行 ——
+               历史 50/100/30 被一条条改成 100，Σcharged 从 180 变 300，
+               该区间消耗凭空多 120，"约剩 N 天"跟着骤减。
+               SQLite 的 UPDATE 默认不支持 LIMIT，只能先 SELECT 再按 id 改。 */
+            int n = 0;
+            long rowId = -1;
+            android.database.Cursor cu = null;
+            try {
+                cu = db.rawQuery("SELECT id FROM " + T_RECH
+                        + " WHERE key_id=? ORDER BY ts DESC LIMIT 1", new String[] { keyId });
+                if (cu.moveToFirst()) rowId = cu.getLong(0);
+            } finally {
+                if (cu != null) try { cu.close(); } catch (Throwable ig) { }
+            }
+            if (rowId >= 0) {
+                n = db.update(T_RECH, cv, "id=?", new String[] { String.valueOf(rowId) });
+            }
             if (n == 0) {
                 /* 这个 Key 还没有任何自动记录（比如刚加就手动补一笔）：那就插一条 */
                 cv.put("key_id", keyId);

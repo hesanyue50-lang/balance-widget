@@ -363,7 +363,9 @@ public class UsageChartView extends View {
                 for (Series ss : series) {
                     if (ss.fill) continue;
                     double vv = (ss.vals != null && touchIdx < ss.vals.length) ? ss.vals[touchIdx] : Double.NaN;
-                    String rowTxt = ss.label + "  余额 \u00a5" + (Double.isNaN(vv) ? "--" : String.format("%.2f", vv));
+                    String rowTxt = ss.label + (yPrefix.length() == 0 ? "  " : "  余额 ") + yPrefix
+                            + (Double.isNaN(vv) ? "--"
+                            : (yPrefix.length() == 0 ? fmt(vv) : String.format("%.2f", vv)));
                     maxW = Math.max(maxW, pLegend.measureText(rowTxt));
                 }
                 float boxW = maxW + 60;   // 左色点留白 + 右内边距，宽度随文字自适应
@@ -396,7 +398,9 @@ public class UsageChartView extends View {
                     pDot.setColor(ss.color);
                     cv.drawCircle(bx + 24, ry, 9, pDot);
                     pLegend.setColor(Theme.c(getContext(), R.attr.c_tx_detail));
-                    cv.drawText(ss.label + "  余额 \u00a5" + (Double.isNaN(v) ? "--" : String.format("%.2f", v)),
+                    cv.drawText(ss.label + (yPrefix.length() == 0 ? "  " : "  余额 ") + yPrefix
+                                    + (Double.isNaN(v) ? "--"
+                                    : (yPrefix.length() == 0 ? fmt(v) : String.format("%.2f", v))),
                             bx + 40, ry + 11, pLegend);
                     ry += rowH;
                 }

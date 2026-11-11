@@ -3319,6 +3319,8 @@ public class BalanceFetcher {
             it.cny = 0;
             it.bal = 0;
             it.threshold = 0;
+            /* 文本模式没有数值，不能进账本（会落一条 0 基线，还被三点规则误判） */
+            it.noData = true;
             it.rows = "文本  " + clip(r.display, 120);
             return;
         }
@@ -3573,6 +3575,11 @@ public class BalanceFetcher {
             it.amount = "见控制台";
             it.kind = "balance";
             it.low = false;          // 不是"余额低"，别标红
+            /* ⚠️ 必须 noData：没有真实数值。
+               少了它 alert.mark 会判 low = ok(true) && thr>0 && bal(0)<thr → true，
+               每轮推「余额不足 ¥0.00」；账本还会落一条 0 基线，
+               之后真配上 Cookie 拿到 $20 时被判成「充值 $20」。 */
+            it.noData = true;
             it.rows = "填浏览器 Cookie 可读余额\n"
                     + "（普通 API Key 查不到）\n"
                     + "点卡片 → 控制台 查看";
