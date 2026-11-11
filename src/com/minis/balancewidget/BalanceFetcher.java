@@ -1780,11 +1780,20 @@ public class BalanceFetcher {
     /** 带代理的 GET：直接暴露给 Clash 的连通性自检用 */
     public static String getViaProxy(String url, String bearer, String cookie,
                                      int timeoutMs) throws Exception {
+        /* ⚠️ 保存-恢复，不能无条件 remove。
+           这个方法会被**已经在走代理的线程**间接调用：
+           平台线程先 VIA_PROXY.set(TRUE) → get() 里 fake-ip 全被剔除 →
+           调 Clash.proxyAlive() → 缓存过期 → proxyAliveReal → 本方法 →
+           finally 的 remove() 把**外层的 TRUE 一并清掉**。
+           本次请求不受影响，但该平台这一轮后续所有请求会静默变直连 ——
+           表现是"第一下通、后面全失败"，时好时坏（取决于 5 秒缓存窗口）。 */
+        Boolean prev = VIA_PROXY.get();
         VIA_PROXY.set(Boolean.TRUE);
         try {
             return get(url, bearer, cookie, timeoutMs);
         } finally {
-            VIA_PROXY.remove();
+            if (prev != null) VIA_PROXY.set(prev);
+            else VIA_PROXY.remove();
         }
     }
 

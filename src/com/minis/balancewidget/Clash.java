@@ -317,6 +317,9 @@ public final class Clash {
        真正需要互斥的只有 startLocked（proc 的创建），锁在它身上。 */
     public static String start(Context c, String cfgText) {
         synchronized (Clash.class) {   // 只保护 proc 的读写，几十毫秒
+        /* 清零放在这里（锁内），紧挨着 "确认当前状态" 的 killStaleCore。
+           放在锁外的话会吃掉并发的 stop 请求，见 startInternal 里的说明。 */
+        coreStopRequested = false;
         /* 先把上次遗留的内核清掉 —— 它占着 7890，不清的话这次必然启动失败 */
         killStaleCore(c);
             /* 强制下一次 isRunning() 真探一次：killStaleCore 之后端口状态刚变过，
@@ -343,7 +346,12 @@ public final class Clash {
         if (!available(c)) {
             return "内核不可用（此设备架构没有内置内核，仅支持 arm64）";
         }
-        coreStopRequested = false;
+        /* ⚠️ 清零**不能**放在这里（锁外）。
+           时序：A 线程在 start() 的 synchronized 块里跑 killStaleCore →
+           B 线程 stop() 锁外置 coreStopRequested=true → A 释放锁、走到这里清零，
+           **把 B 刚发的停止请求吃掉** → B 的 stopLocked 拿锁时 proc 还是 null、
+           什么都不杀 → A 起进程 → 用户看到"已停止"但内核在跑。
+           清零已挪进 start() 的锁内（与 killStaleCore 同一段）。 */
         String err = startLocked(c, cfgText, tunFd);
         if (err != null) return err;
         return waitForApi(c);
@@ -681,10 +689,19 @@ public final class Clash {
            常见触发：先在「应用内全局」开过内核，再切「系统全局」；
            或服务被 START_STICKY 重启时上个内核还活着。 */
         synchronized (Clash.class) {   // 同上：只保护 proc
+            coreStopRequested = false;   // 同 start()：清零必须在锁内
             killStaleCore(c);
             if (proc != null) {
-                try { proc.destroy(); } catch (Throwable ig) { }
+                Process dying = proc;
                 proc = null;
+                try { dying.destroy(); } catch (Throwable ig) { }
+                /* 等它真的退出：不等的话新内核立刻起，会抢不到 7890/17890，
+                   表现为"内核启动超时"，实际是端口还被上一个占着。 */
+                try {
+                    if (!dying.waitFor(350, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        try { dying.destroyForcibly(); } catch (Throwable ig) { }
+                    }
+                } catch (Throwable ig) { }
             }
             lastProbeAt = 0L;
             lastProbeOk = false;

@@ -105,14 +105,28 @@ public class ClashVpnService extends VpnService {
      * 第一个 fd 永久泄漏（下次 establish 失败），最终出现两个 tun 一个内核。
      */
     private static volatile boolean starting = false;
+    /**
+     * 启动代次。用于作废"上一轮还没跑完的启动"。
+     *
+     * <p>为什么需要：只用布尔 `starting` 表达"有一个启动在跑"，
+     * 停止时把它置 false 就等于说"现在没有启动在跑了" —— 可旧线程其实还在
+     * `establish()`/`startWithFd()` 里。用户「停止 → 立刻再开启」时：
+     * 新一轮把 `stopRequested` 也清零，旧线程于是**复活**，
+     * 两代同时建 tun → 前一代的 fd 被后一代覆盖、再没人关闭（永久泄漏），
+     * 之后所有 establish 都失败，必须杀进程。
+     */
+    private static volatile int vpnGen = 0;
 
     private void startVpn() {
+        final int myGen;
         synchronized (ClashVpnService.class) {
             if (running || starting) {
                 BalanceFetcher.diag(this, "VPN 已在运行/正在启动，忽略重复请求");
                 return;
             }
             starting = true;
+            stopRequested = false;          // 与代次一起，在锁内一次性定下来
+            myGen = ++vpnGen;
         }
         boolean handedOff = false;
         try {
@@ -136,7 +150,6 @@ public class ClashVpnService extends VpnService {
             return;
         }
 
-        stopRequested = false;
         /* 前台通知建不起来就别继续了。
            ⚠️ 早先是 catch 掉异常继续跑：服务没有前台身份，系统 5 秒后以
            "没有调用 startForeground" 把整个进程杀掉（用户看到的是闪退），
@@ -156,7 +169,7 @@ public class ClashVpnService extends VpnService {
            以前直接在主线程做，用户点「开启系统全局」就是明显的卡一下
            （界面完全没响应）。现在主线程只负责启动线程，立刻返回。 */
         new Thread(new Runnable() {
-            public void run() { establishAndStart(); }
+            public void run() { establishAndStart(myGen); }
         }, "clash-vpn-start").start();
         handedOff = true;      // 已交给后台线程，由它负责清 starting
         } finally {
@@ -165,7 +178,7 @@ public class ClashVpnService extends VpnService {
     }
 
     /** 真正耗时的部分：建 tun + 拉起内核。全程在后台线程。 */
-    private void establishAndStart() {
+    private void establishAndStart(final int myGen) {
         try {
             final SubStore.Sub sub = SubStore.active(this);
             /* ⚠️ 这两行必须在 try 里：starting 的复位在 finally。
@@ -193,16 +206,16 @@ public class ClashVpnService extends VpnService {
             /* 排除自己：本应用仍旧走本地 HTTP 代理那条通路，避免自我循环 */
             try { b.addDisallowedApplication(getPackageName()); } catch (Throwable ig) { }
 
-            if (stopRequested) {
-                BalanceFetcher.diag(this, "启动过程中已被要求停止，放弃建 tun");
+            if (stale(myGen)) {
+                BalanceFetcher.diag(this, "启动过程已被作废（停止或被新一轮顶掉），放弃建 tun");
                 return;
             }
             tunPfd = b.establish();
-            if (stopRequested) {
-                /* 建到一半用户点了停止：这个 fd 没人要了，必须自己关掉，
+            if (stale(myGen)) {
+                /* 建到一半被作废：这个 fd 没人要了，必须自己关掉，
                    否则系统 VPN 会一直挂着一个没有主人的 tun。 */
                 try { tunPfd.close(); } catch (Throwable ig) { }
-                BalanceFetcher.diag(this, "tun 建立完成但已被要求停止，已关闭");
+                BalanceFetcher.diag(this, "tun 建立完成但启动已被作废，已关闭");
                 return;
             }
             if (tunPfd == null) {
@@ -216,8 +229,14 @@ public class ClashVpnService extends VpnService {
 
             /* ③ 生成带 tun 段的配置并启动内核 */
             String cfg = Clash.buildTunConfig(sub.yaml, tunFd);
-            if (stopRequested) {
-                BalanceFetcher.diag(this, "启动过程中已被要求停止，放弃拉起内核");
+            if (stale(myGen)) {
+                BalanceFetcher.diag(this, "启动过程已被作废，放弃拉起内核");
+                try {
+                    if (tunFd >= 0) {
+                        android.os.ParcelFileDescriptor.adoptFd(tunFd).close();
+                        tunFd = -1;
+                    }
+                } catch (Throwable ig) { }
                 return;
             }
             String err = Clash.startWithFd(this, cfg, tunFd);
@@ -243,8 +262,8 @@ public class ClashVpnService extends VpnService {
                 return;
             }
 
-            if (stopRequested) {
-                BalanceFetcher.diag(this, "内核已起来但用户已要求停止，立刻收掉");
+            if (stale(myGen)) {
+                BalanceFetcher.diag(this, "内核已起来但启动已被作废，立刻收掉");
                 Clash.stop(this);
                 return;
             }
@@ -256,7 +275,10 @@ public class ClashVpnService extends VpnService {
             stopVpn();
             stopSelf();
         } finally {
-            starting = false;   // 无论成功失败都要放开，否则再也启动不了
+            /* 只有自己这一代还"生效"时才放开占位。
+               无条件清的话：A 代退出时会替 B 代清掉 starting，
+               第三次启动又能进 —— 状态机彻底乱。 */
+            if (myGen == vpnGen) starting = false;
         }
     }
 
@@ -271,17 +293,27 @@ public class ClashVpnService extends VpnService {
 
     // ---------------- 停止 ----------------
 
+    /**
+     * 这一代启动是否已经作废（用户点了停止，或新一轮启动顶掉了它）。
+     *
+     * <p>用代次而不是只看 {@code stopRequested}：后者是个布尔，
+     * 新一轮启动会把它清零 —— 于是"旧线程"的标志被抹掉，它就复活了。
+     */
+    private boolean stale(int gen) {
+        return stopRequested || gen != vpnGen;
+    }
+
     private void stopVpn() {
-        /* 先告诉正在启动的那条线程"别继续了" —— 它在 establish()/startWithFd()
-           里可能还要跑好几秒，不打招呼的话它会把 tun 重新建起来。 */
-        stopRequested = true;
-        running = false;
-        /* ⚠️ starting 必须一起复位。
-           它原来只在启动线程的 finally 里清 —— 于是「启动还在跑（最多 8 秒）时点停止、
-           然后马上再点开启」会命中下面的 if (running || starting) 直接 return：
-           用户点了没反应，也不会重试，看起来就是"开关坏了"。
-           停止是用户的明确意图，旧代次的启动一律作废。 */
-        starting = false;
+        /* ⚠️ 全部在锁内改，并且**递增 vpnGen** —— 这是作废旧代次的唯一手段。
+           只把 starting 清成 false 的话，旧线程仍会跑完并建第二个 tun；
+           只把 stopRequested 置 true 的话，新一轮启动会把它清零、旧线程复活。
+           两者都必须配合代次。 */
+        synchronized (ClashVpnService.class) {
+            vpnGen++;
+            stopRequested = true;
+            running = false;
+            starting = false;
+        }
         try {
             Clash.stop(this);
         } catch (Throwable ignored) { }

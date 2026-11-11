@@ -355,15 +355,18 @@ public final class KeyStore {
     }
 
     /** 保存全部（包内整理用：删除自定义平台后的 Key 重排要走这里） */
-    public static void save(Context c, List<ApiKey> list) {
-        /* ⚠️ 最后一道闸：要把整表写成空，而磁盘上明明还有数据 —— 拒绝。
-           正常的"清空"都有明确入口（逐条删 / 清空全部），不会走到"传一个空列表"。
-           而存档损坏时 load 返回空表，任何 read-modify-write 都会把这个空表写回去。
-           宁可这次改动不生效，也不能让用户的密钥凭空消失。 */
+    public static synchronized void save(Context c, List<ApiKey> list) {
+        /* ⚠️ 最后一道闸：只在**存档本身坏了**（rawCount 返回 -1）时才拒绝写空表。
+           那种情况下 load() 返回的是空表，任何 read-modify-write 都会把空表写回去 ——
+           用户随手加一把 Key 点保存，全部密钥就没了。
+
+           ⚠️ 但不能对所有"空列表"都拒绝：**删掉最后一条 Key 时列表就是空的**，
+           那是用户的明确意图。上一版写成 `onDisk != 0` 就拒，结果是：
+           删除"成功"、界面消失、dataVersion 已推（缓存失效），
+           下次 load() 从磁盘读回旧列表 → **Key 复活**，重启后必然复现。 */
         int onDisk = rawCount(c);
-        if ((list == null || list.isEmpty()) && onDisk != 0) {
-            BalanceFetcher.diag(c, "阻止了一次清空密钥存档的写入（磁盘上还有 "
-                    + (onDisk < 0 ? "无法解析的存档" : onDisk + " 条") + "）");
+        if ((list == null || list.isEmpty()) && onDisk < 0) {
+            BalanceFetcher.diag(c, "阻止了一次写入：密钥存档无法解析，已留档待人工处理");
             return;
         }
         /* 这里不再自增 dataVersion：自增会让刚写好的缓存立刻失效，
